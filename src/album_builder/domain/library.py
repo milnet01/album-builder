@@ -33,8 +33,13 @@ class Library:
         folder = Path(folder).resolve()
         if not folder.exists():
             return cls(folder=folder, tracks=[])
+        try:
+            entries = sorted(folder.iterdir())
+        except OSError:
+            # folder unreadable (permissions, transient mount loss): empty library
+            return cls(folder=folder, tracks=[])
         tracks: list[Track] = []
-        for entry in sorted(folder.iterdir()):
+        for entry in entries:
             if entry.is_file() and entry.suffix.lower() in SUPPORTED_EXTENSIONS:
                 try:
                     tracks.append(Track.from_path(entry))

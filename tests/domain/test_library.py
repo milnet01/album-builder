@@ -62,3 +62,13 @@ def test_library_skips_unsupported_files(tmp_path: Path, tagged_track) -> None:
     (tmp_path / "image.png").write_bytes(b"\x89PNG")
     lib = Library.scan(tmp_path)
     assert len(lib.tracks) == 1
+
+
+def test_library_scan_unreadable_dir_returns_empty(tmp_path: Path) -> None:
+    target = tmp_path / "locked"
+    target.mkdir(mode=0o000)
+    try:
+        lib = Library.scan(target)
+        assert lib.tracks == []
+    finally:
+        target.chmod(0o755)
