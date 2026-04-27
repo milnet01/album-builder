@@ -15,3 +15,4 @@ select = ["E", "F", "W", "I", "B", "UP", "RUF"]
 testpaths = ["tests"]
 addopts = "-ra -q"
 qt_api = "pyqt6"
+pythonpath = ["src"]
