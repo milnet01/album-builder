@@ -24,7 +24,10 @@ def test_library_search_by_title(tracks_dir: Path) -> None:
 def test_library_search_case_insensitive(tracks_dir: Path) -> None:
     lib = Library.scan(tracks_dir)
     assert len(lib.search("INTRO")) == 1
-    assert len(lib.search("18 down")) == 2  # default artist; drift overrides
+    # all 3 fixture tracks share album_artist "18 Down" (drift overrides artist only)
+    assert len(lib.search("18 down")) == 3
+    # but searching artist (TPE1) directly distinguishes them
+    assert len(lib.search("Other Artist")) == 1
 
 
 def test_library_search_empty_query_returns_all(tracks_dir: Path) -> None:

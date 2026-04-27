@@ -58,6 +58,7 @@ class Library:
             t for t in self.tracks
             if q in t.title.lower()
             or q in t.artist.lower()
+            or q in t.album_artist.lower()
             or q in t.composer.lower()
             or q in t.album.lower()
         ]
