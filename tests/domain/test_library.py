@@ -1,0 +1,61 @@
+from pathlib import Path
+
+from album_builder.domain.library import Library, SortKey
+
+
+def test_library_scan_empty_dir(tmp_path: Path) -> None:
+    lib = Library.scan(tmp_path)
+    assert lib.tracks == []
+
+
+def test_library_scan_finds_three_tracks(tracks_dir: Path) -> None:
+    lib = Library.scan(tracks_dir)
+    titles = sorted(t.title for t in lib.tracks)
+    assert titles == ["drift", "memoirs intro", "something more (calm)"]
+
+
+def test_library_search_by_title(tracks_dir: Path) -> None:
+    lib = Library.scan(tracks_dir)
+    results = lib.search("intro")
+    assert len(results) == 1
+    assert results[0].title == "memoirs intro"
+
+
+def test_library_search_case_insensitive(tracks_dir: Path) -> None:
+    lib = Library.scan(tracks_dir)
+    assert len(lib.search("INTRO")) == 1
+    assert len(lib.search("18 down")) == 2  # default artist; drift overrides
+
+
+def test_library_search_empty_query_returns_all(tracks_dir: Path) -> None:
+    lib = Library.scan(tracks_dir)
+    assert len(lib.search("")) == 3
+
+
+def test_library_sort_by_title_ascending(tracks_dir: Path) -> None:
+    lib = Library.scan(tracks_dir)
+    sorted_tracks = lib.sorted(SortKey.TITLE, ascending=True)
+    titles = [t.title for t in sorted_tracks]
+    assert titles == sorted(titles)
+
+
+def test_library_sort_by_title_descending(tracks_dir: Path) -> None:
+    lib = Library.scan(tracks_dir)
+    sorted_tracks = lib.sorted(SortKey.TITLE, ascending=False)
+    titles = [t.title for t in sorted_tracks]
+    assert titles == sorted(titles, reverse=True)
+
+
+def test_library_find_by_path(tracks_dir: Path) -> None:
+    lib = Library.scan(tracks_dir)
+    one = lib.tracks[0]
+    assert lib.find(one.path) is one
+    assert lib.find(tracks_dir / "nonexistent.mp3") is None
+
+
+def test_library_skips_unsupported_files(tmp_path: Path, tagged_track) -> None:
+    tagged_track("song.mp3")
+    (tmp_path / "readme.txt").write_text("not audio")
+    (tmp_path / "image.png").write_bytes(b"\x89PNG")
+    lib = Library.scan(tmp_path)
+    assert len(lib.tracks) == 1
