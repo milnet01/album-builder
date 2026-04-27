@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 from mutagen.id3 import APIC, COMM, ID3, TALB, TCOM, TIT2, TPE1, TPE2, USLT
 
-
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 SILENT_MP3 = FIXTURES_DIR / "silent_1s.mp3"
 
@@ -23,7 +22,7 @@ DEFAULT_TAGS = {
 }
 
 
-def _write_tags(path: Path, **tags: str) -> None:
+def _write_tags(path: Path, **tags) -> None:
     audio = ID3(path)
     audio.delete()
     audio = ID3()

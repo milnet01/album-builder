@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from album_builder.domain.track import Track
+from tests.conftest import _write_tags
 
 
 def test_track_from_path_parses_tags(tagged_track) -> None:
@@ -18,10 +19,8 @@ def test_track_from_path_parses_tags(tagged_track) -> None:
 
 
 def test_track_from_path_with_minimal_tags(tagged_track) -> None:
-    path = tagged_track(title="only title")
-    # Re-tag stripping everything but title (override tagged_track defaults)
-    from tests.conftest import _write_tags
-    _write_tags(path, title="only title")
+    path = tagged_track()
+    _write_tags(path, title="only title")  # strips everything but title
     track = Track.from_path(path)
     assert track.title == "only title"
     assert track.artist == "Unknown artist"
@@ -37,7 +36,6 @@ def test_track_from_path_missing_file(tmp_path: Path) -> None:
 
 def test_track_album_artist_falls_back_to_artist(tagged_track) -> None:
     path = tagged_track()
-    from tests.conftest import _write_tags
     _write_tags(path, title="x", artist="Solo Artist")
     track = Track.from_path(path)
     assert track.artist == "Solo Artist"

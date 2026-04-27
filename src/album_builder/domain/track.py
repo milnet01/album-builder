@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import mutagen
 from mutagen import File as MutagenFile
-from mutagen.id3 import APIC, COMM, ID3, ID3NoHeaderError, USLT
+from mutagen.id3 import APIC, COMM, ID3, USLT
 
 
 @dataclass(frozen=True)
@@ -25,7 +26,7 @@ class Track:
     is_missing: bool
 
     @classmethod
-    def from_path(cls, path: Path, *, allow_missing: bool = False) -> "Track":
+    def from_path(cls, path: Path, *, allow_missing: bool = False) -> Track:
         path = Path(path).resolve()
         if not path.exists():
             if not allow_missing:
@@ -35,16 +36,14 @@ class Track:
         size = path.stat().st_size
         try:
             mf = MutagenFile(path)
-        except Exception:
+        except mutagen.MutagenError:
             mf = None
 
         duration = float(mf.info.length) if mf and mf.info else 0.0
 
         try:
             id3 = ID3(path)
-        except ID3NoHeaderError:
-            id3 = None
-        except Exception:
+        except mutagen.MutagenError:
             id3 = None
 
         title = _text(id3, "TIT2") or path.name
@@ -72,7 +71,7 @@ class Track:
         )
 
     @classmethod
-    def _missing(cls, path: Path) -> "Track":
+    def _missing(cls, path: Path) -> Track:
         return cls(
             path=path,
             title=path.name,
@@ -93,8 +92,7 @@ def _text(id3: ID3 | None, key: str) -> str:
     if id3 is None or key not in id3:
         return ""
     frame = id3[key]
-    text = " / ".join(str(t) for t in frame.text) if hasattr(frame, "text") else str(frame)
-    return text.strip()
+    return " / ".join(str(t) for t in frame.text).strip()
 
 
 def _comment_text(id3: ID3 | None) -> str:
@@ -115,7 +113,7 @@ def _lyrics_text(id3: ID3 | None) -> str | None:
         if key.startswith("USLT"):
             frame = id3[key]
             if isinstance(frame, USLT):
-                value = " / ".join(str(t) for t in frame.text) if isinstance(frame.text, list) else str(frame.text)
+                value = str(frame.text)
                 return value if value.strip() else None
     return None
 
@@ -126,6 +124,6 @@ def _first_apic_png(id3: ID3 | None) -> bytes | None:
     for key in id3.keys():
         if key.startswith("APIC"):
             frame = id3[key]
-            if isinstance(frame, APIC):
+            if isinstance(frame, APIC) and frame.mime.lower() == "image/png":
                 return frame.data
     return None
