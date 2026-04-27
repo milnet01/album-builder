@@ -38,3 +38,4 @@ def test_atomic_write_text_failure_keeps_original(tmp_path: Path, monkeypatch) -
         atomic_write_text(target, "new")
 
     assert target.read_text(encoding="utf-8") == "original"
+    assert not (tmp_path / "config.json.tmp").exists()
