@@ -1,0 +1,29 @@
+# Brainstorming companion artefacts (per-session, regeneratable)
+.superpowers/
+
+# App-private project state
+.album-builder/
+
+# User data — not source
+Tracks/
+Albums/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
