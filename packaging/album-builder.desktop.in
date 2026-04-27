@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Album Builder
+GenericName=Music Album Curator
+Comment=Curate albums from a folder of recordings
+Exec=@@LAUNCHER@@ %F
+Icon=album-builder
+Terminal=false
+Categories=AudioVideo;Audio;Music;Qt;
+StartupWMClass=album-builder
+StartupNotify=true
+SingleMainWindow=true
+Keywords=album;music;curate;tracks;
