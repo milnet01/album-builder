@@ -206,6 +206,14 @@ class MainWindow(QMainWindow):
             return
         self._store.schedule_save(album.id)
 
+    def resizeEvent(self, e) -> None:
+        super().resizeEvent(e)
+        self._state_save_timer.start()
+
+    def moveEvent(self, e) -> None:
+        super().moveEvent(e)
+        self._state_save_timer.start()
+
     def closeEvent(self, e) -> None:
         # Flush all debounced writes before exit (Spec 10).
         self._store.flush()
