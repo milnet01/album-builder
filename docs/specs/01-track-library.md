@@ -27,7 +27,7 @@ Discover the audio files in `Tracks/`, parse their metadata, and present a live,
   - `TCOM` → composer
   - `COMM` → comment
   - `USLT::eng` (or any USLT) → lyrics_text
-  - `APIC` → cover_png (bytes)
+  - `APIC` (any `image/*` mime) → cover_data (bytes), cover_mime (str)
 
 ## Outputs
 
@@ -50,13 +50,14 @@ class Track:
     album: str                          # "" if missing
     comment: str                        # "" if missing
     lyrics_text: str | None             # None if no USLT frame
-    cover_png: bytes | None             # None if no APIC frame
+    cover_data: bytes | None            # None if no APIC frame or non-image mime
+    cover_mime: str | None              # e.g. "image/png", "image/jpeg"; None mirrors cover_data
     duration_seconds: float
     file_size_bytes: int
     is_missing: bool                    # True if path no longer exists
 ```
 
-`cover_png` is held in memory because covers are typically <500 KB and the library is bounded (~tens to low-hundreds of tracks). At higher scales we'd cache to disk; not v1.
+`cover_data` is held in memory because covers are typically <500 KB and the library is bounded (~tens to low-hundreds of tracks). At higher scales we'd cache to disk; not v1. Bytes are passed through to the now-playing pane untouched — Qt's `QPixmap.loadFromData()` handles format detection from `cover_mime`.
 
 ## Persistence
 
@@ -73,7 +74,7 @@ What *is* persisted: the `lrc_path` sibling files (see Spec 07) and album JSON f
 | Audio file with no readable tags | Use placeholder strings (`"Unknown title"`, etc.); the file is still playable. |
 | Duplicate file paths | Cannot happen (filesystem invariant). |
 | Two files with identical title+artist | Both shown. Album Builder treats `path` as identity, never `(title, artist)`. |
-| Cover image of unsupported format inside APIC frame | `cover_png` is set to `None`; the now-playing pane shows the default cover placeholder. |
+| Cover image of non-image mime inside APIC frame (e.g. `application/octet-stream`) | `cover_data` and `cover_mime` are both `None`; the now-playing pane shows the default cover placeholder. Common image mimes (PNG, JPEG, WebP, GIF) all pass through. |
 | File replaced (same name, different content) | `QFileSystemWatcher` emits the change; library re-parses that single file. |
 | File renamed | Treated as remove + add. Albums referencing the old path mark it missing. (Improvement: detect renames by `(file_size, duration, title)` hash — deferred to roadmap.) |
 | Very large library (>500 files) | Acceptable degradation: scan time ~2 s, search remains responsive (in-memory list). Beyond 5000 files we'd need indexing — not v1. |

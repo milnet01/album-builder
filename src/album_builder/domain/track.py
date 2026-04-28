@@ -20,7 +20,8 @@ class Track:
     album: str
     comment: str
     lyrics_text: str | None
-    cover_png: bytes | None
+    cover_data: bytes | None
+    cover_mime: str | None
     duration_seconds: float
     file_size_bytes: int
     is_missing: bool
@@ -45,7 +46,7 @@ class Track:
         composer = _text(id3, "TCOM") or ""
         comment = _comment_text(id3)
         lyrics_text = _lyrics_text(id3)
-        cover_png = _first_apic_png(id3)
+        cover_data, cover_mime = _first_apic_image(id3)
 
         return cls(
             path=path,
@@ -56,7 +57,8 @@ class Track:
             album=album,
             comment=comment,
             lyrics_text=lyrics_text,
-            cover_png=cover_png,
+            cover_data=cover_data,
+            cover_mime=cover_mime,
             duration_seconds=duration,
             file_size_bytes=size,
             is_missing=False,
@@ -73,7 +75,8 @@ class Track:
             album="",
             comment="",
             lyrics_text=None,
-            cover_png=None,
+            cover_data=None,
+            cover_mime=None,
             duration_seconds=0.0,
             file_size_bytes=0,
             is_missing=True,
@@ -108,34 +111,58 @@ def _text(id3: ID3 | None, key: str) -> str:
 
 
 def _comment_text(id3: ID3 | None) -> str:
-    if id3 is None:
-        return ""
-    for key in id3.keys():
-        if key.startswith("COMM"):
-            frame = id3[key]
-            if isinstance(frame, COMM):
-                return " / ".join(str(t) for t in frame.text).strip()
-    return ""
+    text = _pick_localised(id3, "COMM", COMM, lambda f: " / ".join(str(t) for t in f.text))
+    return text or ""
 
 
 def _lyrics_text(id3: ID3 | None) -> str | None:
-    if id3 is None:
-        return None
-    for key in id3.keys():
-        if key.startswith("USLT"):
-            frame = id3[key]
-            if isinstance(frame, USLT):
-                value = str(frame.text)
-                return value if value.strip() else None
-    return None
+    return _pick_localised(id3, "USLT", USLT, lambda f: str(f.text))
 
 
-def _first_apic_png(id3: ID3 | None) -> bytes | None:
+def _pick_localised(id3, prefix, frame_class, extract):
+    """Return the English-language frame's text, falling back to the first
+    non-empty frame in any other language. ID3 dict order is not stable across
+    files, so we can't just take the first match — we have to look at every
+    matching frame and pick deterministically by `lang`.
+    """
     if id3 is None:
         return None
+    fallback: str | None = None
     for key in id3.keys():
-        if key.startswith("APIC"):
-            frame = id3[key]
-            if isinstance(frame, APIC) and frame.mime.lower() == "image/png":
-                return frame.data
-    return None
+        if not key.startswith(prefix):
+            continue
+        frame = id3[key]
+        if not isinstance(frame, frame_class):
+            continue
+        text = extract(frame).strip()
+        if not text:
+            continue
+        lang = (getattr(frame, "lang", "") or "").lower()
+        if lang == "eng":
+            return text
+        if fallback is None:
+            fallback = text
+    return fallback
+
+
+def _first_apic_image(id3: ID3 | None) -> tuple[bytes | None, str | None]:
+    """Return (data, mime) for the first ``image/*`` APIC frame, else (None, None).
+
+    Spec 01: cover bytes are passed through as-is for the now-playing pane to
+    render via QPixmap. PNG and JPEG are the common cases (WhatsApp/iTunes
+    output), but any ``image/*`` mime is accepted — QImageReader handles
+    further format detection. Non-image MIME types (e.g. application/octet-stream)
+    are dropped because they confuse the consumer.
+    """
+    if id3 is None:
+        return None, None
+    for key in id3.keys():
+        if not key.startswith("APIC"):
+            continue
+        frame = id3[key]
+        if not isinstance(frame, APIC):
+            continue
+        mime = (frame.mime or "").lower()
+        if mime.startswith("image/"):
+            return frame.data, mime
+    return None, None

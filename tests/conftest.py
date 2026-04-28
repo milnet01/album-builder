@@ -40,9 +40,14 @@ def _write_tags(path: Path, **tags) -> None:
         audio.add(COMM(encoding=3, lang="eng", desc="", text=tags["comment"]))
     if "lyrics" in tags:
         audio.add(USLT(encoding=3, lang="eng", desc="", text=tags["lyrics"]))
-    if "cover_png" in tags:
-        audio.add(APIC(encoding=3, mime="image/png", type=3, desc="cover",
-                       data=tags["cover_png"]))
+    if "cover_data" in tags:
+        audio.add(APIC(
+            encoding=3,
+            mime=tags.get("cover_mime", "image/png"),
+            type=3,
+            desc="cover",
+            data=tags["cover_data"],
+        ))
     audio.save(path, v2_version=3)
 
 

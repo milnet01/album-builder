@@ -42,9 +42,99 @@ def test_track_album_artist_falls_back_to_artist(tagged_track) -> None:
     assert track.album_artist == "Solo Artist"
 
 
-def test_track_with_embedded_cover(tagged_track) -> None:
+def test_track_with_embedded_png_cover(tagged_track) -> None:
     fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-    path = tagged_track(cover_png=fake_png)
+    path = tagged_track(cover_data=fake_png, cover_mime="image/png")
     track = Track.from_path(path)
-    assert track.cover_png is not None
-    assert track.cover_png.startswith(b"\x89PNG")
+    assert track.cover_data is not None
+    assert track.cover_data.startswith(b"\x89PNG")
+    assert track.cover_mime == "image/png"
+
+
+def test_track_with_embedded_jpeg_cover(tagged_track) -> None:
+    """Spec 01 update: real-world WhatsApp/iTunes-tagged tracks often carry
+    JPEG covers. Accept them alongside PNG."""
+    fake_jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"\x00" * 100
+    path = tagged_track(cover_data=fake_jpeg, cover_mime="image/jpeg")
+    track = Track.from_path(path)
+    assert track.cover_data is not None
+    assert track.cover_data.startswith(b"\xff\xd8\xff")
+    assert track.cover_mime == "image/jpeg"
+
+
+def test_track_rejects_non_image_apic(tagged_track) -> None:
+    """An APIC payload with a non-image/* mime is dropped — we can't render
+    it, and embedding random bytes in cover_data confuses the consumer."""
+    path = tagged_track(cover_data=b"\x00binary\x00", cover_mime="application/octet-stream")
+    track = Track.from_path(path)
+    assert track.cover_data is None
+    assert track.cover_mime is None
+
+
+def test_track_prefers_english_comment_over_other_languages(tagged_track) -> None:
+    """A file with both COMM:eng: and COMM:fra: frames must consistently
+    return the English one. Without the preference, dict iteration order
+    leaks tag-write order into output."""
+    import shutil
+
+    from mutagen.id3 import COMM, ID3
+
+    path = tagged_track()
+    audio = ID3(path)
+    audio.delete()
+    audio.add(COMM(encoding=3, lang="fra", desc="", text="commentaire en français"))
+    audio.add(COMM(encoding=3, lang="eng", desc="", text="english comment"))
+    audio.save(path, v2_version=3)
+
+    track = Track.from_path(path)
+    assert track.comment == "english comment"
+
+    # And verify the inverse insertion order also picks English.
+    audio = ID3(path)
+    audio.delete()
+    audio.add(COMM(encoding=3, lang="eng", desc="", text="english comment"))
+    audio.add(COMM(encoding=3, lang="fra", desc="", text="commentaire en français"))
+    audio.save(path, v2_version=3)
+    assert Track.from_path(path).comment == "english comment"
+
+    # silence the shutil import-warning under ruff
+    _ = shutil
+
+
+def test_track_falls_back_to_non_english_comment_when_no_english(tagged_track) -> None:
+    from mutagen.id3 import COMM, ID3
+
+    path = tagged_track()
+    audio = ID3(path)
+    audio.delete()
+    audio.add(COMM(encoding=3, lang="fra", desc="", text="commentaire"))
+    audio.save(path, v2_version=3)
+
+    assert Track.from_path(path).comment == "commentaire"
+
+
+def test_track_prefers_english_lyrics_over_other_languages(tagged_track) -> None:
+    from mutagen.id3 import ID3, USLT
+
+    path = tagged_track()
+    audio = ID3(path)
+    audio.delete()
+    audio.add(USLT(encoding=3, lang="fra", desc="", text="paroles en français"))
+    audio.add(USLT(encoding=3, lang="eng", desc="", text="english lyrics"))
+    audio.save(path, v2_version=3)
+
+    assert Track.from_path(path).lyrics_text == "english lyrics"
+
+
+def test_track_lyrics_skips_empty_english_for_non_empty_other(tagged_track) -> None:
+    """An empty USLT:eng: shouldn't shadow a populated USLT:fra:."""
+    from mutagen.id3 import ID3, USLT
+
+    path = tagged_track()
+    audio = ID3(path)
+    audio.delete()
+    audio.add(USLT(encoding=3, lang="eng", desc="", text="   "))
+    audio.add(USLT(encoding=3, lang="fra", desc="", text="paroles"))
+    audio.save(path, v2_version=3)
+
+    assert Track.from_path(path).lyrics_text == "paroles"
