@@ -219,6 +219,34 @@ def test_approved_album_toggle_has_tooltip(populated_pane) -> None:
     assert "approved" in tip.lower()
 
 
+# Spec: TC-06-15 — preview-play column emits Path on click.
+def test_library_pane_emits_preview_play_request(populated_pane) -> None:
+    pane, lib = populated_pane
+    captured = []
+    pane.preview_play_requested.connect(captured.append)
+    from album_builder.ui.library_pane import COLUMNS
+    play_col = next(i for i, c in enumerate(COLUMNS) if c[1] == "_play")
+    # Map source-row 0 to a proxy index (the proxy is sorted by title).
+    src = pane._model.index(0, play_col)
+    proxy_idx = pane._proxy.mapFromSource(src)
+    pane._on_table_clicked(proxy_idx)
+    track_at_row_0 = lib.tracks[0]
+    assert captured == [track_at_row_0.path]
+
+
+# Spec 06: preview-play does NOT toggle selection.
+def test_library_pane_preview_play_does_not_toggle_selection(populated_pane) -> None:
+    pane, _lib = populated_pane
+    selections = []
+    pane.selection_toggled.connect(lambda *a: selections.append(a))
+    from album_builder.ui.library_pane import COLUMNS
+    play_col = next(i for i, c in enumerate(COLUMNS) if c[1] == "_play")
+    src = pane._model.index(0, play_col)
+    proxy_idx = pane._proxy.mapFromSource(src)
+    pane._on_table_clicked(proxy_idx)
+    assert selections == []
+
+
 # Tier 3: classic half-up rounding, NOT Python's banker's. A 1.5s file and a
 # 2.5s file should both round AWAY from the same midpoint, not collapse onto
 # the same even integer.

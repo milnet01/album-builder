@@ -37,6 +37,40 @@ def _track(stem: str) -> Track:
     )
 
 
+# Spec: TC-06-15 — middle-pane row has a preview-play button.
+def test_album_order_pane_emits_preview_play(pane: AlbumOrderPane) -> None:
+    a = Album.create(name="x", target_count=5)
+    a.track_paths = [Path("/abs/a.mp3"), Path("/abs/b.mp3")]
+    pane.set_album(a, [_track("a"), _track("b")])
+    captured = []
+    pane.preview_play_requested.connect(captured.append)
+    btn = pane.play_button_at(0)
+    assert btn is not None
+    btn.click()
+    assert captured == [Path("/abs/a.mp3")]
+
+
+def test_album_order_pane_preview_button_persists_path_on_reorder(
+    pane: AlbumOrderPane,
+) -> None:
+    """The preview-play button captures the path at construction; after a
+    drag-reorder, clicking the same row must still emit the row's path
+    (not the path that was at this row before the move)."""
+    a = Album.create(name="x", target_count=5)
+    a.track_paths = [Path("/abs/a.mp3"), Path("/abs/b.mp3"), Path("/abs/c.mp3")]
+    pane.set_album(a, [_track("a"), _track("b"), _track("c")])
+    pane.reorder(2, 0)  # c first, a second, b third
+    captured = []
+    pane.preview_play_requested.connect(captured.append)
+    pane.play_button_at(0).click()
+    # After reorder + re-render-set_album cycle, the path captured by the
+    # row-0 widget reflects the new ordering.
+    pane.set_album(a, [_track("a"), _track("b"), _track("c")])
+    captured.clear()
+    pane.play_button_at(0).click()
+    assert captured == [Path("/abs/c.mp3")]
+
+
 # Spec: TC-05-07 (reorder side - drag-completed)
 def test_reorder_calls_album_and_schedules_save(pane: AlbumOrderPane) -> None:
     a = Album.create(name="x", target_count=5)

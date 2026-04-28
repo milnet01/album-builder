@@ -10,14 +10,16 @@ from PyQt6.QtWidgets import QFrame, QHeaderView, QLabel, QLineEdit, QTableView, 
 from album_builder.domain.album import Album, AlbumStatus
 from album_builder.domain.library import Library
 from album_builder.domain.track import Track
+from album_builder.ui.theme import Glyphs
 
 COLUMNS: list[tuple[str, str]] = [
+    ("▶", "_play"),   # PLAY glyph - Spec 06 per-row preview-play
     ("Title", "title"),
     ("Artist", "artist"),
     ("Album", "album"),
     ("Composer", "composer"),
     ("Duration", "duration_seconds"),
-    ("✓", "_toggle"),  # check mark glyph
+    ("✓", "_toggle"),
 ]
 
 # Spec 01: search filters across title, artist, album_artist, composer, album.
@@ -92,6 +94,21 @@ class TrackTableModel(QAbstractTableModel):
         track = self._tracks[index.row()]
         attr = COLUMNS[index.column()][1]
         is_approved = self._album_status == AlbumStatus.APPROVED
+
+        if attr == "_play":
+            # Spec 06 per-row preview-play.
+            if role == Qt.ItemDataRole.DisplayRole:
+                return Glyphs.PLAY
+            if role == Qt.ItemDataRole.AccessibleTextRole:
+                return f"Preview-play {track.title}"
+            if role == Qt.ItemDataRole.ToolTipRole:
+                return "Preview-play this track"
+            if role == Qt.ItemDataRole.UserRole:
+                # Sortable but uninformative; group by title casefold so a
+                # header click on this column doesn't crash. Spec 06 doesn't
+                # define a useful sort for this column.
+                return track.title.casefold()
+            return None
 
         if attr == "_toggle":
             selected = track.path in self._selected_paths
@@ -169,8 +186,15 @@ class TrackFilterProxy(QSortFilterProxyModel):
         return False
 
 
+def _column_index(name: str) -> int:
+    """Lookup column index by its `_attr` name. Lets call-sites avoid
+    hard-coding integers that drift when the column list changes."""
+    return next(i for i, c in enumerate(COLUMNS) if c[1] == name)
+
+
 class LibraryPane(QFrame):
-    selection_toggled = pyqtSignal(object, bool)  # Path, new_state
+    selection_toggled = pyqtSignal(object, bool)        # Type: Path, new_state
+    preview_play_requested = pyqtSignal(object)         # Type: Path
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -195,6 +219,10 @@ class LibraryPane(QFrame):
         self._proxy.setSortRole(Qt.ItemDataRole.UserRole)
         self._current_album: Album | None = None
 
+        title_col = _column_index("title")
+        play_col = _column_index("_play")
+        toggle_col = _column_index("_toggle")
+
         self.table = QTableView()
         self.table.setModel(self._proxy)
         self.table.setSortingEnabled(True)
@@ -203,35 +231,31 @@ class LibraryPane(QFrame):
         self.table.setShowGrid(False)
         self.table.verticalHeader().setVisible(False)
         # Title gets the leftover space; metadata columns size to content.
-        # Stretching everything equally truncated long titles in a narrow pane
-        # while wasting horizontal space on the 7-character Duration column.
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for col in range(1, len(COLUMNS)):
-            header.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
-        # Sensible default widths so the table is usable before the user
-        # touches any column gripper.
-        self.table.setColumnWidth(1, 140)  # Artist
-        self.table.setColumnWidth(2, 160)  # Album
-        self.table.setColumnWidth(3, 140)  # Composer
-        self.table.setColumnWidth(4, 70)   # Duration
-        self.table.setColumnWidth(5, 30)   # Toggle
-        self.table.setMinimumWidth(420)
-        # Spec 01: default sort is Title ascending. Applied here so the user
-        # sees a deterministic order on first launch -- without this, rows
-        # appear in filesystem-walk order.
-        self.table.sortByColumn(0, Qt.SortOrder.AscendingOrder)
+        for col in range(len(COLUMNS)):
+            if col == title_col:
+                header.setSectionResizeMode(col, QHeaderView.ResizeMode.Stretch)
+            else:
+                header.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
+        # Default widths by name (resilient to column reorder).
+        self.table.setColumnWidth(play_col, 30)
+        self.table.setColumnWidth(_column_index("artist"), 140)
+        self.table.setColumnWidth(_column_index("album"), 160)
+        self.table.setColumnWidth(_column_index("composer"), 140)
+        self.table.setColumnWidth(_column_index("duration_seconds"), 70)
+        self.table.setColumnWidth(toggle_col, 30)
+        self.table.setMinimumWidth(450)
+        # Spec 01: default sort is Title ascending.
+        self.table.sortByColumn(title_col, Qt.SortOrder.AscendingOrder)
         self.table.clicked.connect(self._on_table_clicked)
         # Keyboard parity with mouse: Enter / Return on a focused toggle cell
         # toggles the selection. Without this, a keyboard-only user (WCAG
         # 2.2 §2.1.1) cannot operate the column.
         self.table.activated.connect(self._on_table_clicked)
-        # Accessible labels (WCAG 2.2 §4.1.2) so screen readers announce
-        # the table by purpose, not by class name.
         self.table.setAccessibleName("Track library")
         self.table.setAccessibleDescription(
-            "Searchable list of tracks. Last column toggles inclusion in the "
-            "current album.",
+            "Searchable list of tracks. First column previews playback; "
+            "last column toggles inclusion in the current album.",
         )
         layout.addWidget(self.table)
 
@@ -260,7 +284,10 @@ class LibraryPane(QFrame):
 
     def row_accent_at(self, source_row: int) -> str | None:
         # Operates on source-model rows (independent of the proxy's sort).
-        src = self._model.index(source_row, 0)
+        # Use the title column for the lookup — the play column has its own
+        # role table that doesn't include UserRole+2, so column 0 (play)
+        # would always return None.
+        src = self._model.index(source_row, _column_index("title"))
         if not src.isValid():
             return None
         return self._model.data(src, Qt.ItemDataRole.UserRole + 2)
@@ -268,10 +295,17 @@ class LibraryPane(QFrame):
     def _on_table_clicked(self, view_index: QModelIndex) -> None:
         if not view_index.isValid():
             return
-        if COLUMNS[view_index.column()][1] != "_toggle":
-            return
+        col_attr = COLUMNS[view_index.column()][1]
         src = self._proxy.mapToSource(view_index)
         row = src.row()
+        if row >= len(self._model._tracks):
+            return
+        if col_attr == "_play":
+            track = self._model.track_at(row)
+            self.preview_play_requested.emit(track.path)
+            return
+        if col_attr != "_toggle":
+            return
         if row >= len(self._model._toggle_enabled) or not self._model._toggle_enabled[row]:
             return
         track = self._model.track_at(row)
@@ -282,7 +316,7 @@ class LibraryPane(QFrame):
         return self._proxy.rowCount()
 
     def title_at(self, view_row: int) -> str:
-        idx = self._proxy.index(view_row, 0)
+        idx = self._proxy.index(view_row, _column_index("title"))
         return self._proxy.data(idx, Qt.ItemDataRole.DisplayRole)
 
     def _on_search_changed(self, text: str) -> None:
