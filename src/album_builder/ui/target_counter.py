@@ -89,7 +89,18 @@ class TargetCounter(QFrame):
 
     def _on_text_committed(self) -> None:
         text = self.field.text().strip()
-        if not text.isdigit():
-            self.field.setText(str(self._target))  # revert
+        # TC-04-12: empty -> snap to MIN_TARGET. (Spec 04: "typing 0 or empty
+        # into the target field snaps to 1 on blur".)
+        if text == "":
+            self._emit(MIN_TARGET)
             return
-        self._emit(int(text))
+        try:
+            n = int(text)
+        except ValueError:
+            # TC-04-13: non-integer -> revert to previous valid value. Using
+            # try/except instead of isdigit() handles negative signs, leading
+            # whitespace, and Unicode digit forms (Arabic-Indic, fullwidth)
+            # consistently with the int() spec.
+            self.field.setText(str(self._target))
+            return
+        self._emit(n)

@@ -36,7 +36,11 @@ class TopBar(QFrame):
 
         self.name_edit = QLineEdit()
         self.name_edit.setObjectName("AlbumNameEdit")
-        self.name_edit.setMaxLength(80)
+        # NOTE: no setMaxLength here. QLineEdit measures in QChar (UTF-16
+        # code units), but the domain validates in code points (`len(name)`).
+        # Emoji like 💿 are 2 QChars but 1 code point; setMaxLength(80) would
+        # truncate a 40-codepoint emoji-rich name that the domain would
+        # accept. Validation happens at commit time in _on_name_committed.
         self.name_edit.editingFinished.connect(self._on_name_committed)
         layout.addWidget(self.name_edit, stretch=1)
 
@@ -81,10 +85,22 @@ class TopBar(QFrame):
             self.btn_reopen.setVisible(False)
 
     def _on_name_committed(self) -> None:
-        if self._current_id is not None:
-            new = self.name_edit.text().strip()
-            if new:
-                self.rename_committed.emit(self._current_id, new)
+        if self._current_id is None:
+            return
+        new = self.name_edit.text().strip()
+        if not new:
+            return
+        # Domain enforces 1-80 code points. Without an explicit cap the user
+        # could paste a long string; revert and bail rather than emitting a
+        # rename the domain will reject. Using len() (code points) NOT
+        # QString-length-in-QChars matches the domain.
+        if len(new) > 80:
+            current = self._store.get(self._current_id)
+            self.name_edit.blockSignals(True)
+            self.name_edit.setText(current.name if current else "")
+            self.name_edit.blockSignals(False)
+            return
+        self.rename_committed.emit(self._current_id, new)
 
     def _on_target_changed(self, n: int) -> None:
         if self._current_id is not None:

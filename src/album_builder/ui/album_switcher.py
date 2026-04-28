@@ -71,6 +71,16 @@ class AlbumSwitcher(QFrame):
         return self._labels.get(album_id, "")
 
     def set_current(self, album_id: UUID | None) -> None:
+        """Set the current album and emit `current_album_changed` on change.
+
+        Contract for callers: the constructor leaves `_current_id` as `None`
+        but does NOT emit. If a caller wires `current_album_changed` after
+        construction and wants to seed downstream state, call
+        `set_current(album_id)` explicitly with the desired starting value
+        (typically the persisted state.current_album_id, or first
+        alphabetical for a fresh install). MainWindow does this in its
+        constructor's restoration block.
+        """
         if album_id == self._current_id:
             return
         self._current_id = album_id
@@ -88,7 +98,9 @@ class AlbumSwitcher(QFrame):
             for a in albums
         }
         if not albums:
-            self.pill.setText(f"{Glyphs.CARET} No albums + New album")
+            # Spec 03 §user-visible behaviour line 21: middle dot (U+00B7) as
+            # the visual separator between "No albums" and the inline action.
+            self.pill.setText(f"{Glyphs.CARET} No albums · + New album")
             return
         current = self._store.get(self._current_id) if self._current_id else None
         self.pill.setText(f"{Glyphs.CARET} {current.name if current else albums[0].name}")
