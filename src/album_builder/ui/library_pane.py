@@ -84,7 +84,7 @@ class TrackFilterProxy(QSortFilterProxyModel):
         self._needle = text.strip().lower()
         self.invalidateFilter()
 
-    def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:  # noqa: N802
+    def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
         if not self._needle:
             return True
         model = self.sourceModel()

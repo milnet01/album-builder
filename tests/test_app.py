@@ -1,11 +1,15 @@
-"""Tests for app.py module-level helpers (no QApplication needed)."""
+"""Tests for app.py module-level helpers."""
 
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
+from PyQt6.QtCore import QSharedMemory
+from PyQt6.QtNetwork import QLocalServer, QLocalSocket
+from PyQt6.QtWidgets import QMainWindow
 
 from album_builder import app
 
@@ -66,3 +70,99 @@ def test_resolve_tracks_dir_settings_wins_over_dev_path(
     )
     assert app._resolve_tracks_dir() == user_tracks
     assert "falling back to dev path" not in capsys.readouterr().err
+
+
+# --- Single-instance lock + raise handshake ---------------------------------
+
+@pytest.fixture
+def isolated_key(monkeypatch: pytest.MonkeyPatch) -> str:
+    """Per-test SHM/socket key so concurrent runs don't collide and an
+    abnormally-exited prior test can't lock us out."""
+    key = f"album-builder-test-{os.getpid()}-{id(object())}"
+    monkeypatch.setattr(app, "SHARED_KEY", key)
+    # Make sure no stale socket lingers from a previous failed run.
+    QLocalServer.removeServer(key)
+    yield key
+    QLocalServer.removeServer(key)
+
+
+def test_acquire_single_instance_lock_succeeds_when_unheld(
+    qtbot, isolated_key: str
+) -> None:
+    lock = app.acquire_single_instance_lock()
+    try:
+        assert lock is not None
+        assert lock.isAttached()
+    finally:
+        if lock is not None:
+            lock.detach()
+
+
+def test_acquire_single_instance_lock_fails_when_held(
+    qtbot, isolated_key: str
+) -> None:
+    first = app.acquire_single_instance_lock()
+    try:
+        assert first is not None
+        # A second acquisition from the same process must fail — the first
+        # call still owns the segment. This is the invariant that prevents
+        # a second `album-builder` process from also opening a window.
+        second = app.acquire_single_instance_lock()
+        assert second is None
+    finally:
+        if first is not None:
+            first.detach()
+
+
+def test_acquire_single_instance_lock_recovers_from_orphaned_segment(
+    qtbot, isolated_key: str
+) -> None:
+    """Stale-segment recovery: simulate a previous process that created the
+    SHM segment and exited without detaching cleanly. The next acquire()
+    must reclaim it, not lock the user out forever."""
+    orphan = QSharedMemory(isolated_key)
+    assert orphan.create(1)
+    # Drop our last reference WITHOUT calling detach() the way a clean shutdown
+    # would — the way SIGKILL/OOM/power-loss would leave it. Note: in the same
+    # Python process Qt does track this object, so this is a best-effort
+    # simulation of the kernel-level orphan condition.
+    del orphan
+
+    lock = app.acquire_single_instance_lock()
+    try:
+        assert lock is not None, "stale-segment recovery failed; user is locked out"
+    finally:
+        if lock is not None:
+            lock.detach()
+
+
+def test_raise_server_brings_window_to_front(qtbot, isolated_key: str) -> None:
+    window = QMainWindow()
+    qtbot.addWidget(window)
+    window.hide()
+    server = app.start_raise_server(window)
+    try:
+        # Connect a client socket and send the raise message, mimicking what
+        # signal_raise_existing_instance() does from a second process.
+        client = QLocalSocket()
+        client.connectToServer(isolated_key)
+        assert client.waitForConnected(1000)
+        client.write(app.RAISE_MESSAGE)
+        client.flush()
+        client.waitForBytesWritten(1000)
+
+        # Poll until the server has handled the connection and shown the window.
+        qtbot.waitUntil(window.isVisible, timeout=2000)
+        assert window.isVisible()
+        client.disconnectFromServer()
+    finally:
+        server.close()
+
+
+def test_signal_raise_existing_instance_is_silent_when_no_server(
+    qtbot, isolated_key: str
+) -> None:
+    """If no instance is listening (e.g. the user typed `album-builder` on a
+    fresh boot), the signal helper must return cleanly — not crash, not hang."""
+    # No server has been started — the call should time out quietly.
+    app.signal_raise_existing_instance()
