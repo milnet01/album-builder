@@ -111,12 +111,12 @@ how reviewers confirm coverage validates the spec, not the implementation.
 
 ### Phase 2 clauses
 
-Implemented via `LibraryWatcher` service (Spec 11).
+The watcher mechanism (TC-01-P2-01, TC-01-P2-02) ships in Phase 2 via the `LibraryWatcher` service (Spec 11). The `is_missing` tracking and search-filtering clauses (TC-01-P2-03, TC-01-P2-04) remain deferred — they require diffing successive scans and a filter parameter on `Library.search()`, neither of which the v1 watcher implements.
 
-- **TC-01-P2-01** — `Library` exposes `signal tracks_changed` emitted when the watched folder content changes.
-- **TC-01-P2-02** — A new file added to `Tracks/` appears in `Library.tracks` within ~2 s without restart.
-- **TC-01-P2-03** — A file removed from `Tracks/` is marked `is_missing=True`; not removed from any album that already referenced it.
-- **TC-01-P2-04** — `Library.search()` excludes `is_missing` tracks by default; opt-in via `include_missing=True`.
+- **TC-01-P2-01** — `LibraryWatcher` exposes `signal tracks_changed` emitted when the watched folder content changes. *(Phase 2)*
+- **TC-01-P2-02** — A new file added to `Tracks/` appears in `LibraryWatcher.library().tracks` within ~2 s without restart. *(Phase 2)*
+- **TC-01-P2-03** — A file removed from `Tracks/` is marked `is_missing=True`; not removed from any album that already referenced it. *(deferred — requires scan-diffing; tracked for a later phase)*
+- **TC-01-P2-04** — `Library.search()` excludes `is_missing` tracks by default; opt-in via `include_missing=True`. *(deferred — requires search-filter parameter; tracked for a later phase)*
 
 ### Coverage map (Phase 1)
 

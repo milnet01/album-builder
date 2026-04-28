@@ -1,4 +1,16 @@
-"""Tests for album_builder.services.library_watcher - Spec 01 Phase-2 deferrals."""
+"""Tests for album_builder.services.library_watcher - Spec 01 Phase-2.
+
+Coverage map:
+- TC-01-P2-01 (signal exists)               -> test_initial_scan_populates_library
+- TC-01-P2-02 (file added picked up)        -> test_tracks_changed_fires_on_file_added
+- File-removed signal (extra coverage of P2-02-style refresh)
+                                            -> test_tracks_changed_fires_on_file_removed
+- Folder deletion + recreation resilience   -> test_watcher_survives_folder_deletion_and_recreation
+
+TC-01-P2-03 and TC-01-P2-04 (Track.is_missing tracking and Library.search filtering)
+remain deferred per Spec 01 - they require diffing successive scans and a filter
+parameter on Library.search(), neither of which the v1 watcher implements.
+"""
 
 from __future__ import annotations
 
@@ -22,7 +34,9 @@ def test_tracks_changed_fires_on_file_added(qapp, tracks_dir: Path, tagged_track
     assert any(t.title == "freshly added" for t in watcher.library().tracks)
 
 
-# Spec: TC-01-P2-03
+# Extra coverage: signal also fires when a file is removed (mirror of TC-01-P2-02).
+# Note: this asserts the file disappears from `library().tracks` rather than being
+# marked is_missing - that semantics (TC-01-P2-03) is deferred to a later phase.
 def test_tracks_changed_fires_on_file_removed(qapp, tracks_dir: Path, qtbot) -> None:
     watcher = LibraryWatcher(tracks_dir)
     target = next(tracks_dir.iterdir())
@@ -31,7 +45,8 @@ def test_tracks_changed_fires_on_file_removed(qapp, tracks_dir: Path, qtbot) -> 
     assert len(watcher.library().tracks) == 2
 
 
-# Spec: TC-01-P2-04
+# Extra coverage: watcher survives folder deletion + recreation (resilience,
+# not a TC-01-P2-NN item; exercises the manual `refresh()` escape hatch).
 def test_watcher_survives_folder_deletion_and_recreation(
     qapp, tmp_path: Path, tagged_track, qtbot,
 ) -> None:
