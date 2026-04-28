@@ -48,3 +48,7 @@ python3.11 -m venv .venv
 - `packaging/` — `.desktop` template
 - `assets/` — icon
 - `install.sh` / `uninstall.sh` — per-user installer
+
+## License
+
+MIT — see [LICENSE](LICENSE).
