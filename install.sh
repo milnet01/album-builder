@@ -86,10 +86,15 @@ sed "s|@@LAUNCHER@@|$BIN_DIR/album-builder|g" \
     > "$DESKTOP_DIR/album-builder.desktop"
 chmod 0644 "$DESKTOP_DIR/album-builder.desktop"
 
-# 8. Refresh caches
-update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
-gtk-update-icon-cache -t "$INSTALL_PREFIX/share/icons/hicolor" 2>/dev/null || true
-if command -v kbuildsycoca6 >/dev/null; then kbuildsycoca6 2>/dev/null || true; fi
+# 8. Refresh caches.
+# stderr is intentionally NOT suppressed: a real failure here (permissions
+# trouble on ~/.local/share, corrupted hicolor index) needs to reach the
+# user. `|| true` keeps the script going on benign cases like "tool not
+# installed" — which is fine, since the missing tool is what produced the
+# warning we want to see anyway.
+update-desktop-database "$DESKTOP_DIR" || true
+gtk-update-icon-cache -t "$INSTALL_PREFIX/share/icons/hicolor" || true
+if command -v kbuildsycoca6 >/dev/null; then kbuildsycoca6 || true; fi
 
 echo
 echo "Installed."

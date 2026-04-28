@@ -166,3 +166,30 @@ def test_signal_raise_existing_instance_is_silent_when_no_server(
     fresh boot), the signal helper must return cleanly — not crash, not hang."""
     # No server has been started — the call should time out quietly.
     app.signal_raise_existing_instance()
+
+
+# --- Icon single-source ----------------------------------------------------
+
+def test_resolve_app_icon_returns_none_when_no_theme_no_dev_svg(
+    qtbot, tmp_path: Path
+) -> None:
+    """When neither the icon theme nor the dev SVG is present, resolution
+    must return None (not an empty QIcon) so the caller can skip
+    setWindowIcon entirely."""
+    nonexistent_theme = "album-builder-test-no-such-icon-zzz"
+    fake_svg_path = tmp_path / "missing.svg"  # does NOT exist
+    assert app.resolve_app_icon(nonexistent_theme, fake_svg_path) is None
+
+
+def test_resolve_app_icon_falls_back_to_dev_svg(qtbot, tmp_path: Path) -> None:
+    """When no icon theme matches, resolution falls back to the explicit
+    dev path. This is the path used when running from source pre-install."""
+    nonexistent_theme = "album-builder-test-no-such-icon-zzz"
+    svg = tmp_path / "fake.svg"
+    svg.write_text(
+        '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" '
+        'width="16" height="16"><rect width="16" height="16" fill="red"/></svg>'
+    )
+    icon = app.resolve_app_icon(nonexistent_theme, svg)
+    assert icon is not None
+    assert not icon.isNull()

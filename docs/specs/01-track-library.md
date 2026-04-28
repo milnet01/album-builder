@@ -12,8 +12,7 @@ Discover the audio files in `Tracks/`, parse their metadata, and present a live,
 - Each row shows: title, artist, album, composer, duration. Cover thumbnail is loaded lazily for the now-playing pane (not the library row, to keep the list compact).
 - A search box at the top of the library pane filters rows by case-insensitive substring match against title, artist, album_artist, composer, and album.
 - Column headers are click-to-sort (Title, Artist, Album, Composer, Duration). Default sort: Title ascending. Clicking the same header toggles direction.
-- New files dropped into `Tracks/` appear within ~2 seconds without restarting.
-- Files removed from `Tracks/` are marked **missing** in the library: greyed out, excluded from the search results by default, and unselectable for new albums. Albums that already reference a missing file show the gap and warn at approve time.
+- *(Phase 2 — deferred)* New files dropped into `Tracks/` appear within ~2 seconds without restarting; files removed from `Tracks/` are marked **missing** in the library (greyed out, excluded from search by default, unselectable for new albums). Albums that already reference a missing file show the gap and warn at approve time. Phase 1 rescans only at app start.
 - Duration is shown as `m:ss` for under an hour, `h:mm:ss` otherwise.
 
 ## Inputs
@@ -33,9 +32,9 @@ Discover the audio files in `Tracks/`, parse their metadata, and present a live,
 
 - An in-memory `Library` object exposing:
   - `tracks: list[Track]`
-  - `signal tracks_changed` — emitted when the watched folder content changes
   - `find(path) -> Track | None`
   - `search(query: str) -> list[Track]`
+  - *(Phase 2 — deferred)* `signal tracks_changed` — emitted when the watched folder content changes; bound to a `QFileSystemWatcher`.
 
 ## Data shape
 

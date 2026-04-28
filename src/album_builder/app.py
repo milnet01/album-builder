@@ -37,6 +37,8 @@ DEFAULT_TRACKS_DIR = Path("/mnt/Storage/Scripts/Linux/Music_Production/Tracks")
 SHARED_KEY = "album-builder-single-instance-v1"
 RAISE_MESSAGE = b"raise\n"
 RAISE_TIMEOUT_MS = 500
+ICON_NAME = "album-builder"
+DEV_ASSET_DIR = Path(__file__).parent.parent.parent / "assets"
 
 
 def run() -> int:
@@ -45,9 +47,9 @@ def run() -> int:
     app.setApplicationVersion(__version__)
     app.setDesktopFileName("album-builder")
 
-    icon_path = Path.home() / ".local/share/icons/hicolor/scalable/apps/album-builder.svg"
-    if icon_path.exists():
-        app.setWindowIcon(QIcon(str(icon_path)))
+    icon = resolve_app_icon()
+    if icon is not None:
+        app.setWindowIcon(icon)
 
     lock = acquire_single_instance_lock()
     if lock is None:
@@ -64,6 +66,28 @@ def run() -> int:
     server.close()
     lock.detach()
     return rc
+
+
+def resolve_app_icon(theme_name: str = ICON_NAME, dev_svg: Path | None = None) -> QIcon | None:
+    """Pick the application icon from a single source of truth.
+
+    Primary: ``QIcon.fromTheme(theme_name)`` — the same theme name the
+    ``.desktop`` file's ``Icon=`` field uses, resolved through the freedesktop
+    icon spec (which honours ``XDG_DATA_DIRS``). Post-install.sh this finds
+    ``~/.local/share/icons/hicolor/scalable/apps/album-builder.svg``.
+
+    Fallback: a path under :data:`DEV_ASSET_DIR` for running from the source
+    tree before ``install.sh`` has copied the icon into the hicolor tree.
+    Returns ``None`` (not an empty QIcon) when nothing matches, so the caller
+    can decide whether to set anything at all.
+    """
+    icon = QIcon.fromTheme(theme_name)
+    if not icon.isNull():
+        return icon
+    fallback = dev_svg if dev_svg is not None else DEV_ASSET_DIR / f"{theme_name}.svg"
+    if fallback.exists():
+        return QIcon(str(fallback))
+    return None
 
 
 def acquire_single_instance_lock() -> QSharedMemory | None:

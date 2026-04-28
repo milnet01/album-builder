@@ -32,13 +32,13 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 
 ## 🔥 Cross-cutting findings from `/indie-review` (2026-04-27)
 
-3-lane multi-agent independent review. Same-mental-model blind spots caught by ≥2 reviewers:
+3-lane multi-agent independent review. Same-mental-model blind spots caught by ≥2 reviewers.
 
-- **Theme 1 — Spec drift.** Code follows the plan, but the plan baked in shortcuts the spec didn't authorize: hardcoded dev `Tracks` path, `album_artist` missing from filter scope, no default sort, PermissionError swallowed instead of propagated, `cover_png` excluded JPEG. Affects 3 of 3 lanes.
-- **Theme 2 — Defensive-handler breadth.** Broad `except`-clauses masking real errors. `Library.scan` swallows `PermissionError`; install.sh swallows `update-desktop-database` stderr.
-- **Theme 3 — Single source of truth violations.** Version string hardcoded in 3 places; icon path resolved both as theme name (.desktop) and explicit path (app.py).
+- ✅ **Theme 1 — Spec drift.** All 5 instances closed by Tier 1 + Tier 2 fixes (hardcoded Tracks path, `album_artist` filter scope, default sort, PermissionError propagation, JPEG covers).
+- ✅ **Theme 2 — Defensive-handler breadth.** `Library.scan` `OSError` catch narrowed (Tier 1.3); `install.sh` / `uninstall.sh` `2>/dev/null` removed from cache-refresh tools — real failures now surface to the user.
+- ✅ **Theme 3 — Single source of truth violations.** Version string consolidated to `version.py:__version__` (Tier 1.2 fold-in); icon path now resolves through `QIcon.fromTheme("album-builder")` — same theme name the `.desktop` file uses — with a dev-tree SVG fallback for running pre-install.
 
-**Methodology gap to address in Phase 2+:** add a "Test contract" section to per-feature specs naming the clauses each test must validate. The implementation pipeline `spec → plan → code → tests` currently lets tests encode the plan's interpretation rather than the spec's contract.
+**Methodology gap (deferred to Phase 2 prep):** add a "Test contract" section to per-feature specs naming the clauses each test must validate. The implementation pipeline `spec → plan → code → tests` currently lets tests encode the plan's interpretation rather than the spec's contract. Tracked as a Phase 2 prep task; not blocking Phase 2 implementation work.
 
 ---
 
@@ -67,7 +67,7 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 
 - 📋 **MEDIUM — `pgrep -f "python.* -m album_builder"` regex unescaped dot.** `install.sh:32`, `uninstall.sh:17`. Escape: `python\.* -m album_builder`.
 - 📋 **MEDIUM — `.desktop` Exec= has dead `%F` field.** `packaging/album-builder.desktop.in:7`. App doesn't parse argv files; remove `%F` or wire it up.
-- 📋 **MEDIUM — install.sh swallows cache-refresh errors.** `install.sh:87-88`. Drop `2>/dev/null` on `update-desktop-database` and `gtk-update-icon-cache` so real failures surface.
+- ✅ **MEDIUM — install.sh swallows cache-refresh errors.** `2>/dev/null` removed from both `install.sh` and `uninstall.sh`; `|| true` is preserved so missing tools don't abort the script. Folded into the cross-cutting Theme 2 sweep.
 - 📋 **MEDIUM — Focus ring missing 2 px outline.** Spec 11 prescribes a 2 px outline at `accent_primary_1`; current QSS only changes border colour on focus. Add `QPushButton:focus`, `QTableView:focus` rules.
 - 📋 **MEDIUM — Library pane columns all stretch equally.** `src/album_builder/ui/library_pane.py:98`. Narrow pane truncates titles; Duration column needs only ~55px. Set Title column to Stretch, others to Interactive with sane defaults; add a min width.
 - 📋 **MEDIUM — `Library.tracks` is mutable list inside a frozen dataclass.** `src/album_builder/domain/library.py:29`. False immutability and unhashable. Convert to `tuple[Track, ...]` via `__post_init__`.
@@ -87,6 +87,11 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 ### 🚧 v0.2.0 — Phase 2: Albums (planned)
 
 Album CRUD, switcher dropdown, selection toggles, target counter, drag-to-reorder, live JSON save. Specs: 02, 03, 04, 05; persistence layer per Spec 10 (full schema versioning, file-watcher signals).
+
+Carried over from Spec 01 (deferred from Phase 1):
+
+- 📋 **`Library.tracks_changed` signal + `QFileSystemWatcher`.** Spec 01 promises new files in `Tracks/` appear within ~2 s without restarting and removed files are marked `is_missing`. Phase 1 ships start-time scan only; the watcher belongs alongside album persistence in Phase 2 because both depend on the same change-notification plumbing.
+- 📋 **`Library.search()` filters `is_missing` by default.** Listed in Tier 3 LOW; lift into Phase 2 once `is_missing` is reachable (only meaningful once we re-scan post-startup).
 
 Plan: `docs/plans/2026-04-27-phase-2-albums.md` *(to be written after Phase 1 fixes land)*.
 

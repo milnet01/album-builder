@@ -121,6 +121,31 @@ def test_track_prefers_english_lyrics_over_other_languages(tagged_track) -> None
     assert Track.from_path(path).lyrics_text == "english lyrics"
 
 
+def test_track_with_unparseable_tags_uses_placeholders(tmp_path: Path) -> None:
+    """Spec 01 errors-table row 3: 'Audio file with no readable tags →
+    use placeholder strings; the file is still playable.' This forces the
+    branch where mutagen raises a true MutagenError on tag parsing
+    (not OS-level). The file must surface with placeholder fields rather
+    than disappearing or crashing."""
+    # mutagen.File() probes file headers; this byte sequence is enough of an
+    # MP3 frame to be recognised as MPEG audio but carries no parseable ID3,
+    # so MutagenFile/ID3 both raise MutagenError without an OSError context.
+    bogus = tmp_path / "no_tags.mp3"
+    bogus.write_bytes(b"\xff\xfb\x90\x00" + b"\x00" * 256)
+
+    track = Track.from_path(bogus)
+    assert track.title == "no_tags.mp3"  # falls back to filename
+    assert track.artist == "Unknown artist"
+    assert track.album_artist == "Unknown artist"  # cascades from artist
+    assert track.album == ""
+    assert track.composer == ""
+    assert track.comment == ""
+    assert track.lyrics_text is None
+    assert track.cover_data is None
+    assert track.cover_mime is None
+    assert not track.is_missing
+
+
 def test_track_lyrics_skips_empty_english_for_non_empty_other(tagged_track) -> None:
     """An empty USLT:eng: shouldn't shadow a populated USLT:fra:."""
     from mutagen.id3 import ID3, USLT

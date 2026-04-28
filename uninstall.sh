@@ -27,9 +27,10 @@ if [[ $PURGE -eq 1 ]]; then
     echo "Removed user settings and cache (--purge)."
 fi
 
-update-desktop-database "$(dirname "$DESKTOP_FILE")" 2>/dev/null || true
-gtk-update-icon-cache -t "$INSTALL_PREFIX/share/icons/hicolor" 2>/dev/null || true
-if command -v kbuildsycoca6 >/dev/null; then kbuildsycoca6 2>/dev/null || true; fi
+# stderr surfaces deliberately — see install.sh for the reasoning.
+update-desktop-database "$(dirname "$DESKTOP_FILE")" || true
+gtk-update-icon-cache -t "$INSTALL_PREFIX/share/icons/hicolor" || true
+if command -v kbuildsycoca6 >/dev/null; then kbuildsycoca6 || true; fi
 
 echo "Uninstalled."
 [[ $PURGE -eq 0 ]] && echo "User settings preserved at ~/.config/album-builder (use --purge to remove)."
