@@ -162,3 +162,25 @@ def test_set_current_rejects_unknown_uuid(store: AlbumStore) -> None:
     store.set_current(a.id)
     store.set_current(None)
     assert store.current_album_id is None
+
+
+# Spec: TC-02-14
+def test_approve_then_unapprove_round_trip(
+    store: AlbumStore, tagged_track,
+) -> None:
+    """Happy path: approve flips status + writes marker; unapprove reverts
+    both, leaving the album back in the draft state."""
+    from album_builder.domain.album import AlbumStatus
+
+    a = store.create(name="cycle", target_count=3)
+    a.select(tagged_track("first.mp3"))
+    folder = store.folder_for(a.id)
+
+    store.approve(a.id)
+    assert a.status == AlbumStatus.APPROVED
+    assert (folder / ".approved").exists()
+
+    store.unapprove(a.id)
+    assert a.status == AlbumStatus.DRAFT
+    assert a.approved_at is None
+    assert not (folder / ".approved").exists()
