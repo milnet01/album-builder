@@ -64,3 +64,17 @@ def test_read_tracks_folder_top_level_array_returns_none(xdg_config: Path) -> No
     xdg_config.mkdir(parents=True)
     (xdg_config / "settings.json").write_text(json.dumps(["not", "a", "dict"]))
     assert settings.read_tracks_folder() is None
+
+
+# Indie-review L3-M3: freedesktop Base Dir Spec mandates XDG_CONFIG_HOME be
+# absolute; relative values must be ignored and the default used.
+def test_relative_xdg_config_home_falls_back_to_home_config(monkeypatch) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", "relative/path")
+    expected = Path.home() / ".config" / "album-builder"
+    assert settings.settings_dir() == expected
+
+
+def test_empty_xdg_config_home_falls_back_to_home_config(monkeypatch) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", "")
+    expected = Path.home() / ".config" / "album-builder"
+    assert settings.settings_dir() == expected

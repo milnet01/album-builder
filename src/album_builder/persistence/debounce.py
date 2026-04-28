@@ -8,9 +8,12 @@ literal string `"state"` for the global `state.json`.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Hashable
 
 from PyQt6.QtCore import QObject, QTimer
+
+logger = logging.getLogger(__name__)
 
 
 class DebouncedWriter(QObject):
@@ -32,8 +35,16 @@ class DebouncedWriter(QObject):
 
     def _fire(self, key: Hashable) -> None:
         fn = self._pending.pop(key, None)
-        if fn is not None:
+        if fn is None:
+            return
+        try:
             fn()
+        except Exception:
+            # Spec 10 §Errors: "Disk full -> toast and retry on next mutation."
+            # We log here; the consumer wires user-facing surfacing on top.
+            # Without this guard, exceptions escape into Qt's slot dispatcher
+            # and silently drop the write.
+            logger.exception("DebouncedWriter callback failed for key=%r", key)
 
     def flush_all(self) -> None:
         for key, timer in list(self._timers.items()):

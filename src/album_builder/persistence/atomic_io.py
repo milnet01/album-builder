@@ -19,6 +19,29 @@ def _unique_tmp_path(path: Path) -> Path:
     return path.with_suffix(path.suffix + suffix)
 
 
+def _fsync_dir(directory: Path) -> None:
+    """Best-effort fsync of a directory so the rename hits stable storage.
+
+    POSIX rename(2) is atomic at process-time but the directory entry is
+    metadata; durability requires fsync(parent). Some filesystems (notably
+    network mounts, certain FUSE backends) reject directory-handle fsync
+    with EINVAL or ENOTSUP - swallow those cases since the rename itself
+    already succeeded and the data file was fsynced. Other OSError types
+    are unexpected and propagate."""
+    try:
+        fd = os.open(directory, os.O_DIRECTORY)
+    except OSError:
+        return  # platform doesn't expose a directory fd; skip silently
+    try:
+        os.fsync(fd)
+    except OSError as exc:
+        # EINVAL / ENOTSUP on filesystems that don't support directory fsync.
+        if exc.errno not in (22, 95):  # EINVAL=22, ENOTSUP=95 on Linux
+            raise
+    finally:
+        os.close(fd)
+
+
 def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> None:
     tmp = _unique_tmp_path(path)
     try:
@@ -27,6 +50,9 @@ def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> N
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
+        # Durability: fsync the parent directory so the rename survives
+        # power loss as well as the write itself.
+        _fsync_dir(path.parent)
     except Exception:
         if tmp.exists():
             try:
@@ -44,6 +70,7 @@ def atomic_write_bytes(path: Path, content: bytes) -> None:
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
+        _fsync_dir(path.parent)
     except Exception:
         if tmp.exists():
             try:

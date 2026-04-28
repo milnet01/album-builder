@@ -11,10 +11,14 @@ def settings_dir() -> Path:
     """Return the directory that holds settings.json.
 
     Honours ``XDG_CONFIG_HOME`` per the freedesktop Base Directory Spec; falls
-    back to ``~/.config`` when unset.
+    back to ``~/.config`` when unset, empty, or set to a relative path
+    (the spec mandates absolute values; relative ones must be ignored).
     """
     xdg = os.environ.get("XDG_CONFIG_HOME")
-    base = Path(xdg).expanduser() if xdg else Path.home() / ".config"
+    if xdg and Path(xdg).is_absolute():
+        base = Path(xdg)
+    else:
+        base = Path.home() / ".config"
     return base / "album-builder"
 
 
