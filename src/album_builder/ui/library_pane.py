@@ -114,7 +114,7 @@ class LibraryPane(QFrame):
         title = QLabel("Library", objectName="PaneTitle")
         layout.addWidget(title)
 
-        self.search_box = QLineEdit(placeholderText="🔍  search title / artist / album / composer")
+        self.search_box = QLineEdit(placeholderText="🔍  search title, artist, album, composer…")
         self.search_box.textChanged.connect(self._on_search_changed)
         layout.addWidget(self.search_box)
 

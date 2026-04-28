@@ -110,4 +110,4 @@ M3U + symlink folder per album, hard-lock approval state, PDF + HTML report gene
 
 ---
 
-*Last reviewed: 2026-04-27 — `/audit` (clean) + `/indie-review` (3 lanes, 19 actionable findings, this fold-in).*
+*Last reviewed: 2026-04-28 — Tier 1 + Tier 2 fixes landed; `/audit --quick` clean on the diff; `/debt-sweep` triaged 7 findings (5 trivial fixed inline, 2 behavioural in-progress).*

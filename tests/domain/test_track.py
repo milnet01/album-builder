@@ -75,8 +75,6 @@ def test_track_prefers_english_comment_over_other_languages(tagged_track) -> Non
     """A file with both COMM:eng: and COMM:fra: frames must consistently
     return the English one. Without the preference, dict iteration order
     leaks tag-write order into output."""
-    import shutil
-
     from mutagen.id3 import COMM, ID3
 
     path = tagged_track()
@@ -96,9 +94,6 @@ def test_track_prefers_english_comment_over_other_languages(tagged_track) -> Non
     audio.add(COMM(encoding=3, lang="fra", desc="", text="commentaire en français"))
     audio.save(path, v2_version=3)
     assert Track.from_path(path).comment == "english comment"
-
-    # silence the shutil import-warning under ruff
-    _ = shutil
 
 
 def test_track_falls_back_to_non_english_comment_when_no_english(tagged_track) -> None:

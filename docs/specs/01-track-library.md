@@ -85,7 +85,7 @@ What *is* persisted: the `lrc_path` sibling files (see Spec 07) and album JSON f
 
 ## Tests
 
-- **Unit:** `Track.from_file(fixture.mp3)` returns expected fields; missing tags fall back; cover is bytes; duration matches `mutagen` reading.
+- **Unit:** `Track.from_path(fixture.mp3)` returns expected fields; missing tags fall back; cover is bytes; duration matches `mutagen` reading.
 - **Unit:** `Library.search("sinner")` returns tracks whose title/artist/etc. contain "sinner" case-insensitively.
 - **Unit:** Sort ordering for each column, both directions.
 - **Integration:** start with 3 fixture tracks; add a 4th → `tracks_changed` fires and the library now has 4. Remove one → marked missing.
