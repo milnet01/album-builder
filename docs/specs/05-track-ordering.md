@@ -1,6 +1,6 @@
 # 05 — Track Ordering (Drag-to-Reorder)
 
-**Status:** Draft · **Last updated:** 2026-04-27 · **Depends on:** 00, 02, 04
+**Status:** Draft · **Last updated:** 2026-04-28 · **Depends on:** 00, 02, 04, 10, 11
 
 ## Purpose
 
@@ -11,12 +11,12 @@ Allow the user to set the order of tracks within an album. The order matters —
 - The **middle pane** ("Album order") of the three-pane layout shows only the tracks selected for the current album, in their current order.
 - Each row in the middle pane displays:
   - Track number prefix: `1.`, `2.`, …
-  - Drag handle (`⋮⋮` six-dot grip icon) on the left
+  - Drag handle (`⋮⋮` six-dot grip glyph) on the left — anchored in Spec 11 §Glyphs.
   - Title, duration, on/off toggle (the toggle here mirrors the library toggle — toggling off in the middle pane is identical to deselecting in the library)
 - The user picks up a row by the drag handle and drops it elsewhere in the list. Numbers re-index automatically.
-- Visual feedback during drag:
-  - The grabbed row goes semi-transparent.
-  - A 2 px theme-accent line shows the drop position.
+- Visual feedback during drag (anchored in Spec 11 palette tokens):
+  - The grabbed row goes semi-transparent (50% opacity).
+  - A 2 px `accent-primary-1` line shows the drop position.
   - Other rows shift to make room.
 - Dropping outside the list (anywhere outside the middle pane) cancels the drag — the row returns to its original position.
 - Selecting a new track in the library appends it to the **end** of the current album order.
@@ -41,7 +41,7 @@ Allow the user to set the order of tracks within an album. The order matters —
 
 ## Persistence
 
-Same as Spec 04. Drop-completed → debounced atomic write to `album.json` → re-export of M3U + symlinks per Spec 08.
+Same 250 ms debounce window as Spec 04 — see Spec 10 §Debounce. Drop-completed → debounced atomic write to `album.json` → re-export of M3U + symlinks per Spec 08.
 
 ## Errors & edge cases
 
@@ -55,6 +55,10 @@ Same as Spec 04. Drop-completed → debounced atomic write to `album.json` → r
 | User selects a new track while drag is in flight | Drag completes first; new track appends after. |
 
 ## Test contract
+
+Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-05-NN` marker.
+
+**Phase status — every TC below is Phase 2.** Drag-reorder code lands in Phase 2 (see `docs/plans/2026-04-28-phase-2-albums.md`); until that plan executes, no `tests/` file will match these IDs on `grep`. The plan's "Test contract crosswalk" section maps every TC here to its target test file.
 
 - **TC-05-01** — `Album.reorder(from_idx, to_idx)` produces the expected permutation of `track_paths` (e.g. `reorder(2, 0)` on `[A,B,C,D]` yields `[C,A,B,D]`).
 - **TC-05-02** — `Album.reorder` with `from_idx` or `to_idx` outside `[0, len(track_paths))` raises `IndexError`.

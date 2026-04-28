@@ -1,5 +1,11 @@
 # Album Builder — Phase 1: Foundation Implementation Plan
 
+> **Historical note (2026-04-28):** This is a frozen-in-time plan, retained for reference. Two field renames happened during Phase 1 hardening that are not back-ported into the steps below:
+> - `cover_png` field → `cover_data` + `cover_mime` (Tier 2.D, commit `cd829d4`). Wherever you see `cover_png` in the steps below, the shipped code uses `cover_data` (bytes) + `cover_mime` (string). Spec 01 §Data shape is the source of truth.
+> - The Phase-2-deferred items (`tracks_changed` signal + `QFileSystemWatcher`) carry stable IDs `TC-01-P2-01..04` and ship in Phase 2, not Phase 1.
+>
+> Refer to `docs/plans/2026-04-28-phase-2-albums.md` for the next-phase plan.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A runnable, installable PyQt6 desktop app that opens to a themed three-pane main window, scans `Tracks/` and displays the library list with full metadata (title, artist, composer, album, duration), is launchable from the KDE app menu via a `.desktop` entry, and has a clean uninstall path. No albums functionality yet — that's Phase 2.

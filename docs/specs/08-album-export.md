@@ -1,6 +1,6 @@
 # 08 — Album Export (M3U + Symlink Folder)
 
-**Status:** Draft · **Last updated:** 2026-04-27 · **Depends on:** 00, 02, 04, 05
+**Status:** Draft · **Last updated:** 2026-04-28 · **Depends on:** 00, 01, 02, 04, 05, 10, 11
 
 ## Purpose
 
@@ -72,40 +72,60 @@ Why rename `.mpeg → .mp3`: many players (notably some firmware-level music pla
 
 ## Behavior rules
 
-### Generation algorithm
+### Generation algorithm — staging-folder transactional
+
+The naive sequence (wipe symlinks → write new symlinks → write M3U) is **not crash-safe**: a kill between steps 1 and 2 leaves an album folder with no symlinks; a kill between steps 2 and 3 leaves out-of-date symlinks paired with a stale M3U. The transactional version writes everything to a staging sibling, then promotes atomically:
 
 ```
 def regenerate_album_exports(album, library):
     folder = Albums / album.slug
+    staging = folder / ".export.new"
     folder.mkdir(parents=True, exist_ok=True)
 
-    # 1. Wipe existing symlinks (only symlinks, never real files)
-    for entry in folder.iterdir():
-        if entry.is_symlink():
-            entry.unlink()
+    # 1. Tear down any prior staging from a crashed previous run
+    if staging.exists():
+        shutil.rmtree(staging)
+    staging.mkdir()
 
-    # 2. Write each symlink
+    # 2. Build the new symlink set inside staging
+    used_names: set[str] = set()
     for i, track_path in enumerate(album.track_paths, start=1):
         track = library.find(track_path)
         if track is None or track.is_missing:
-            # skip with a warning; do not create a dangling symlink
             warn(f"Missing track at position {i}: {track_path}")
             continue
         target_ext = ".mp3" if track_path.suffix.lower() == ".mpeg" else track_path.suffix.lower()
         sane = sanitise_title(track.title)
-        link_name = f"{i:02d} - {sane}{target_ext}"
-        (folder / link_name).symlink_to(track_path)
+        link_name = _dedup(f"{i:02d} - {sane}{target_ext}", used_names)
+        (staging / link_name).symlink_to(track_path)
 
-    # 3. Write playlist.m3u8 atomically (write to .tmp then rename)
-    write_m3u_atomic(folder / "playlist.m3u8", album, library)
+    # 3. Write playlist.m3u8 inside staging (no tmp-rename inside staging — we'll
+    #    move the whole staging dir in one shot below)
+    (staging / "playlist.m3u8").write_text(_render_m3u(album, library), encoding="utf-8")
+
+    # 4. Promote: replace the live folder's symlinks + m3u with staging's
+    #    contents in a single atomic step. Pre-existing real files (album.json,
+    #    .approved, reports/) are kept; only symlinks + playlist.m3u8 are swapped.
+    _commit_export(folder, staging)
+
+    # 5. Clean up staging
+    shutil.rmtree(staging, ignore_errors=True)
 ```
+
+`_commit_export(folder, staging)` does, in order:
+1. Wipe existing symlinks in `folder` (`is_symlink()` checks — never real files).
+2. Move every symlink from `staging` into `folder` via `os.replace` (atomic on POSIX).
+3. `os.replace(staging / "playlist.m3u8", folder / "playlist.m3u8")` — atomic.
+
+A crash anywhere before step 2 leaves the live folder untouched. A crash during step 2 leaves the folder in a partial-symlink state but with the *old* `playlist.m3u8` still intact; the next export pass detects the staging dir on startup and either resumes from it (if intact) or wipes + re-runs.
 
 ### Robustness
 
 - **Symlinks-only wipe:** the wipe step `is_symlink()` checks ensure we never delete a regular file even if the user accidentally placed something in the album folder.
-- **Atomic M3U write:** write to `playlist.m3u8.tmp`, fsync, rename. Crash-safe.
-- **Idempotent:** re-running the export with no changes produces a byte-identical M3U and an unchanged symlink set (we detect this and skip the wipe-and-recreate when the desired set matches what's on disk — avoids touching mtimes unnecessarily).
+- **Atomic M3U write:** the staging-then-replace sequence above. There is no `playlist.m3u8.tmp` left over from a crashed run because the staging dir is the unit of crash-recovery.
+- **Idempotent:** re-running the export with the same `track_paths` produces a byte-identical M3U (key: `_render_m3u` is deterministic; UTF-8, LF, no BOM) and a symlink set whose `link_name → target` mapping matches.
 - **Collision:** if two tracks would produce the same sanitised title (`track A.mp3` and `track A!.mp3` both sanitising to `track A`), the second gets `track A (2)` and so on. Track number prefix already disambiguates by position; the de-dup is belt-and-braces.
+- **Stale staging on startup:** if `Albums/<slug>/.export.new/` exists at app launch (from a prior crash), wipe it as the first step of the next export pass.
 
 ### Disk-read checks
 
@@ -124,16 +144,27 @@ Per the user's requirement of "robust disk reading checks and balances":
 | Album folder is on a filesystem that doesn't support symlinks (e.g., FAT32) | First-failure warning, fall back to **hardlinks** (still no copy, still cross-tool playable). If hardlinks also fail (different filesystem), fall back to **copy** with a one-time consent dialog. |
 | Permissions error in album folder | Toast: "Cannot write to <path>: permission denied. Check ownership." Export does not run; previous artefacts are not deleted. |
 | User has the album folder open in a file manager | No conflict — atomic rename is safe. |
-| User opens an old approved album whose source files have moved | Symlinks are dangling; M3U paths are stale. We detect this on app load and offer "Repair album" — re-resolve missing tracks by `(title, duration)` lookup, or mark unresolvable ones for user attention. |
+| User opens an old approved album whose source files have moved | Symlinks are dangling; M3U paths point at gone files. The album loads in its approved state with the missing-track styling on each affected row (per Spec 04). The user can reopen for editing (Spec 02 unapprove) and re-select replacement tracks; there is no automatic "Repair" step in v1 (was considered, dropped — auto-resolve by `(title, duration)` is fragile and out of scope). Listed under §Out of scope below. |
 
-## Tests
+## Test contract
 
-- **Unit:** `sanitise_title("foo/bar:baz")` → `"foo_bar_baz"`. Edge cases: empty, all-illegal, leading dots, very long.
-- **Unit:** `write_m3u(album)` produces the expected exact string (golden file).
-- **Unit:** `regenerate(album)` is idempotent: running twice produces identical files (mtimes may change on recreate; content is identical).
-- **Integration:** Create album with 3 tracks, regenerate, verify 3 symlinks + valid M3U; reorder, regenerate, verify renumbered.
-- **Integration:** Add a non-symlink file to the album folder, run regenerate, assert the file is preserved (only symlinks were touched).
-- **Integration:** Source track moved to a new path; regenerate produces a dangling symlink replacement and a skip-warning entry in the export log.
+Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-08-NN` marker.
+
+**Phase status — every TC below is Phase 4** (export pipeline). Phase 2 lands the `Album` state machine + `AlbumStore.schedule_save` debounce; the export pipeline regeneration only runs from Phase 4 onward. Until then, no `tests/` file matches these IDs on `grep`.
+
+- **TC-08-01** — `sanitise_title("foo/bar:baz")` → `"foo_bar_baz"`. Strips `/`, `\`, `:`, `*`, `?`, `"`, `<`, `>`, `|`. Trims leading/trailing whitespace and dots. Truncates to 100 chars. Empty result → `track-{NN}`.
+- **TC-08-02** — `_render_m3u(album, library)` produces UTF-8, no BOM, LF-only line endings, with `#EXTM3U` header, optional `#PLAYLIST:` and `#EXTART:` headers, and one `#EXTINF:duration,artist - title` + path pair per track.
+- **TC-08-03** — Symlink filenames follow `{NN:02d} - {sanitised_title}{ext}`. Ext rule: `.mpeg` → `.mp3`; everything else passes through.
+- **TC-08-04** — `regenerate_album_exports(album, library)` is idempotent: running twice with no source changes produces a byte-identical `playlist.m3u8` and a symlink set whose `(name, target)` pairs match.
+- **TC-08-05** — Missing track (path not in library or `is_missing`) is skipped with a warning; no symlink created; M3U `#EXTINF` entry omitted; subsequent tracks keep their numbering (gap visible).
+- **TC-08-06** — Sanitised-title collision (two tracks → same sanitised name) appends ` (2)`, ` (3)`, etc. — never overwrites.
+- **TC-08-07** — Wipe step uses `is_symlink()` only; a regular file in the album folder (e.g., `notes.txt`) is preserved across regeneration.
+- **TC-08-08** — Crash injection: kill the process inside `_commit_export` between symlink-replace and m3u-replace. On restart, `.export.new` is detected and wiped; next mutation triggers a clean re-export.
+- **TC-08-09** — Crash injection: kill the process during staging build (before `_commit_export` runs). Live folder symlinks + M3U are unchanged.
+- **TC-08-10** — Filesystem without symlink support → fall back to hardlinks (consent dialog suppressed; warn-once toast). Different filesystem → fall back to copy (consent dialog required, defaults to "no").
+- **TC-08-11** — Stale `.export.new/` from a prior crash is wiped on the first export pass after launch.
+- **TC-08-12** — `playlist.m3u8` parses back via a standard M3U parser after writing — round-trip sanity check.
+- **TC-08-13** — Reorder operation produces correctly renumbered symlink names and a renumbered M3U.
 
 ## Out of scope (v1)
 
@@ -142,3 +173,4 @@ Per the user's requirement of "robust disk reading checks and balances":
 - Per-album subfolder structure (e.g., disc 1 / disc 2).
 - Cue-sheet generation.
 - Lossless transcoding into a target format.
+- **Repair-album feature** — auto-resolve missing tracks by `(title, duration)` lookup. Considered for v1, dropped because the heuristic is fragile (composers reuse titles; durations drift across re-encodings). Users handle missing tracks via reopen-for-editing + re-select. May return as v2 if real-world data shows it would help.

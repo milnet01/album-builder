@@ -1,6 +1,6 @@
 # 04 — Track Selection & Target Counter
 
-**Status:** Draft · **Last updated:** 2026-04-27 · **Depends on:** 00, 01, 02
+**Status:** Draft · **Last updated:** 2026-04-28 · **Depends on:** 00, 01, 02, 10, 11
 
 ## Purpose
 
@@ -10,15 +10,15 @@ The mechanism by which a user picks tracks for the current album. Comprises the 
 
 ### Target counter (top bar)
 
-- A small spinner-like control: `Tracks [ 12 ]` with **▲** (up) and **▼** (down) arrows beside the number.
-- The number is editable inline as well — typing replaces the value (validated on blur).
+- A small spinner-like control: `Tracks [ 12 ]` with **▲** (up) and **▼** (down) arrows beside the number. The `▲▼` glyphs and their pixel size are anchored in Spec 11 §Glyphs.
+- The number is editable inline as well. **Typing immediately updates the displayed value but does NOT commit until blur or Enter** — the live `Selected: N / target` readout follows the *committed* target, not the in-progress text. On blur, the value is validated (snap-to-1 if `≤ 0`, snap-to-99 if `> 99`, revert to previous valid value if non-integer).
 - Range: `1 ≤ target ≤ 99`.
 - The **▼ down arrow becomes disabled** the moment `selected_count == target_count`. (You cannot lower the target below the current selection — by construction, no over-target state can exist.)
 - The **▲ up arrow is always enabled** while `target_count < 99`.
-- Beside the counter: a live readout `Selected: 8 / 12` that updates on every toggle.
-- Colour state of the readout:
-  - `selected < target` → neutral grey
-  - `selected == target` → success green, with a small ✓ icon
+- Beside the counter: a live readout `Selected: 8 / 12` that updates on every toggle (selection mutations are immediate; target-text edits flow through on commit per above).
+- Colour state of the readout, anchored in Spec 11 palette tokens:
+  - `selected < target` → `text-secondary` (neutral grey).
+  - `selected == target` → `success` (green) with a `✓` glyph.
   - `selected > target` → **cannot happen by design** (if the on-disk JSON ever has it, it's a corruption — see Errors).
 
 ### On/off toggle (library row)
@@ -35,12 +35,15 @@ The mechanism by which a user picks tracks for the current album. Comprises the 
 
 ### Visual rules summary
 
+All accent / strip / glyph styling is anchored in Spec 11 §State styling and §Gradients.
+
 | Row state | Toggle | Accent strip | Drag handle (middle pane only) |
 |---|---|---|---|
 | ○ enabled | grey ○ | none | n/a |
 | ○ disabled (album full) | dim ○, line-through hint | none | n/a |
-| ● enabled (selected) | accent ● | coloured strip + gradient | visible |
-| ● in approved album | accent ● (greyed) | coloured strip | hidden (no drag) |
+| ● enabled (selected) | `accent-primary-2` ● | Spec 11 "selected row" strip (2 px `accent-primary-2` border + fade) | visible |
+| ● in approved album | `accent-primary-2` ● (greyed via `text-disabled` overlay) | Spec 11 "selected row" strip | hidden (no drag) |
+| ● selected but track missing on disk | `warning` ● | Spec 11 strip recoloured to `warning` (`#f97316`) | visible |
 
 ## Inputs
 
@@ -87,7 +90,7 @@ The `max(1, len(album.track_paths))` floor on decrement is what enforces the use
 
 ## Persistence
 
-All mutations debounce-write to `album.json` via Spec 10's atomic write. Debounce window: 250 ms (toggling a stream of songs in quick succession produces one write per pause, not per click).
+All mutations debounce-write to `album.json` via Spec 10's atomic write. Debounce window: **250 ms** (the canonical app-wide value — see Spec 10 §Debounce). Toggling a stream of songs in quick succession produces one write per pause, not per click.
 
 ## Errors & edge cases
 
@@ -101,6 +104,10 @@ All mutations debounce-write to `album.json` via Spec 10's atomic write. Debounc
 | User types non-integer | Reverts to previous valid value on blur. |
 
 ## Test contract
+
+Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-04-NN` marker.
+
+**Phase status — every TC below is Phase 2.** Selection / target counter code lands in Phase 2 (see `docs/plans/2026-04-28-phase-2-albums.md`); until that plan executes, no `tests/` file will match these IDs on `grep`. The plan's "Test contract crosswalk" section maps every TC here to its target test file.
 
 - **TC-04-01** — `Album.select(track_path)` appends to `track_paths` if absent; is a no-op if already present.
 - **TC-04-02** — `Album.select` and `Album.deselect` raise (or no-op with a warning) when `album.status == APPROVED`.

@@ -1,6 +1,6 @@
 # 01 — Track Library & Metadata
 
-**Status:** Draft · **Last updated:** 2026-04-27 · **Depends on:** 00 · **Blocks:** 03, 04, 06, 07
+**Status:** Draft · **Last updated:** 2026-04-28 · **Depends on:** 00, 10, 11 · **Blocks:** 03, 04, 06, 07, 08
 
 ## Purpose
 
@@ -77,6 +77,8 @@ What *is* persisted: the `lrc_path` sibling files (see Spec 07) and album JSON f
 | File replaced (same name, different content) | `QFileSystemWatcher` emits the change; library re-parses that single file. |
 | File renamed | Treated as remove + add. Albums referencing the old path mark it missing. (Improvement: detect renames by `(file_size, duration, title)` hash — deferred to roadmap.) |
 | Very large library (>500 files) | Acceptable degradation: scan time ~2 s, search remains responsive (in-memory list). Beyond 5000 files we'd need indexing — not v1. |
+| Symlink loop in `Tracks/` (a symlink that points back at its parent or grandparent) | The flat-scan rule (`folder.iterdir()` + filter by suffix) does not recurse, so cyclic links produce at most one file entry; mutagen reads it once. If `iterdir()` itself raises on a malformed link, the entry is skipped silently with a one-shot warning toast. The library does not crash. |
+| `.txt` file with the same stem next to an audio file | **Ignored in v1.** The library reads lyrics only from the `lyrics-eng` ID3 USLT tag (Spec 07 §lyrics tracker). Sidecar `.txt` lyrics were considered and dropped — the user's tagging pipeline already provides USLT, and sidecar handling adds two failure modes (which file wins, what charset) for a feature with no incremental benefit. |
 
 ## Supported file extensions (v1)
 

@@ -88,14 +88,19 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 
 ### 🚧 v0.2.0 — Phase 2: Albums (planned)
 
-Album CRUD, switcher dropdown, selection toggles, target counter, drag-to-reorder, live JSON save. Specs: 02, 03, 04, 05; persistence layer per Spec 10 (full schema versioning, file-watcher signals).
+Phase 2 lands the entire album state machine + service layer + UI on top of Phase 1's library. Specs: **02** (lifecycle), **03** (switcher), **04** (selection + target counter), **05** (drag-reorder), **10** (full schema-versioning framework + per-key debounce + state.json), **11** (palette tokens + glyph anchors used by the new widgets), and Spec 01 Phase-2-deferred items (`tracks_changed` + `QFileSystemWatcher`).
 
-Carried over from Spec 01 (deferred from Phase 1):
+**Deliverables (mirror of `docs/plans/2026-04-28-phase-2-albums.md` Tasks 1–18):**
 
-- 📋 **`Library.tracks_changed` signal + `QFileSystemWatcher`.** Spec 01 promises new files in `Tracks/` appear within ~2 s without restarting and removed files are marked `is_missing`. Phase 1 ships start-time scan only; the watcher belongs alongside album persistence in Phase 2 because both depend on the same change-notification plumbing.
-- 📋 **`Library.search()` filters `is_missing` by default.** Listed in Tier 3 LOW; lift into Phase 2 once `is_missing` is reachable (only meaningful once we re-scan post-startup).
+- Domain — `Album` dataclass + `AlbumStatus` + state machine (create, rename, select, deselect, set_target, reorder, approve, unapprove); `slug` helper with collision resolver.
+- Persistence — schema-version migration runner (`migrate_forward`); `album.json` (de)serialization with self-heal; `state.json` AppState round-trip; `DebouncedWriter` (250 ms per-key idle); ISO-8601 ms-precision Z-suffix encoding helper.
+- Services — `AlbumStore` (Qt-aware CRUD + signals + `.trash` backup + service-level `approve` / `unapprove`); `LibraryWatcher` (closes TC-01-P2-01..04).
+- UI — `TargetCounter` widget; `AlbumSwitcher` pill dropdown; `AlbumOrderPane` (middle pane drag-reorder); `LibraryPane` extensions (selection toggle column + at-target disable + accent strip); `TopBar` (composes switcher + name editor + counter + approve/reopen); `MainWindow` wire-up + state restore + close-flush.
+- Release — bump 0.1.0 → 0.2.0; ROADMAP close-out.
 
-Plan: `docs/plans/2026-04-27-phase-2-albums.md` *(to be written after Phase 1 fixes land)*.
+Two TCs explicitly Phase-4-deferred: TC-02-13 (export-pipeline regen on approve) and TC-02-19 (export-pipeline crash-injection idempotence). Phase 2's `AlbumStore.approve()` writes the `.approved` marker + flips status only.
+
+Plan: [`docs/plans/2026-04-28-phase-2-albums.md`](docs/plans/2026-04-28-phase-2-albums.md) (~3700 lines, 18 tasks, ready to execute).
 
 ### 📋 v0.3.0 — Phase 3: Playback & Lyrics (planned)
 
@@ -118,3 +123,5 @@ M3U + symlink folder per album, hard-lock approval state, PDF + HTML report gene
 ---
 
 *Last reviewed: 2026-04-28 — Tier 1 + Tier 2 + Tier 3 sweeps landed (cross-cutting Themes 1/2/3 closed); `/debt-sweep` triaged 7 findings (5 trivial fixed inline, 2 behavioural — `tracks_changed` deferred to Phase 2, missing-tags placeholder test added). 2 Tier-3 items intentionally carried forward (README WeasyPrint deps for Phase 4 prep; `track_at()` Phase 2 use confirmed). Phase 1 is feature-complete and hardened.*
+
+*Round-1 spec sweep landed 2026-04-28 (32 issues across all 13 specs: schema-ownership canonicalised to Spec 10, approve-with-missing contradiction resolved, Specs 06–12 received TC-NN-MM IDs at speccing time, global keyboard-shortcuts table added to Spec 00, canonical approve sequence pinned in Spec 09, Spec 11 §Glyphs added to single-source `⋮⋮ ▲▼ ●○ 🔒 ✓ ▶ ⏸` etc.). Round-2 sweep landed 2026-04-28 (28 follow-ups: timestamp-encoding precision pin, atomic-write-tmp-strategy alignment, plan timestamp helper, approve/unapprove side-effect ordering, plan TC crosswalk extended to TC-10/TC-11/TC-01-P2). Round-3 sweep landed 2026-04-28 (15 follow-ups: state-diagram terminology, splitter ratios on save, glyph literals in widgets, approved-album badge, rename self-collision, UTC normalisation, TC-10-09 + TC-10-20 strengthened, delete emit order). Round-4 confirmation pass 2026-04-28 verified all fixes landed cleanly with 0 surviving HIGH issues and 0 new contradictions. **Documentation set is implementation-ready for Phase 2.**

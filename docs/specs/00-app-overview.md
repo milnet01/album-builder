@@ -1,6 +1,6 @@
 # 00 — Album Builder: App Overview
 
-**Status:** Draft · **Last updated:** 2026-04-27 · **Owner:** ants
+**Status:** Draft · **Last updated:** 2026-04-28 · **Owner:** ants
 
 ## Purpose
 
@@ -93,17 +93,52 @@ User-global locations (XDG):
 ~/.local/share/icons/hicolor/scalable/apps/album-builder.svg
 ```
 
-## Glossary
+## Glossary (canonical terminology — all specs must use these exact terms)
 
 - **Track** — a single audio file in `Tracks/`. Identity is its absolute path.
-- **Library** — the in-memory set of all known tracks, scanned from `Tracks/`.
-- **Album** — an ordered selection of tracks under a name with a target song count.
+- **Library** — the in-memory set of all known tracks, scanned from `Tracks/`. (Never "track pool" or "source folder.")
+- **Album** — an ordered selection of tracks under a name with a target count.
 - **Selection** — the on/off state of a track within a specific album. Many-to-many: a track can be selected for multiple albums.
-- **Target count** — the number of songs the user wants for this album. Drives the disable-at-target UX.
-- **Draft** — an album that is editable. Live-saved on every change.
-- **Approved** — an album that is locked. Triggers report generation and is read-only until unapproved.
+- **Target count** — the number of songs the user wants for this album. Drives the disable-at-target UX. (Never "target", "target song count", "goal", "limit". The literal UI label may abbreviate to "Tracks", but spec text says "target count".)
+- **Draft** — an album whose `status` is `"draft"`. Editable. Live-saved on every change.
+- **Approved** — an album whose `status` is `"approved"`. Triggers report generation; edit affordances are disabled until unapproved. **State name is "approved" everywhere; "locked" is reserved for describing the UI affordance ("edits locked"), never the state.**
+- **`playlist.m3u8`** — the file. **M3U** — the format. ("M3U file" should always read "playlist.m3u8" if it refers to *this app's* file.)
 - **LRC** — `[mm:ss.xx] text` per-line synchronized lyrics format, stored as a sibling file next to the audio.
-- **Alignment** — the process of generating an LRC from the audio + plain `lyrics-eng` tag using ML forced alignment (Whisper + wav2vec2).
+- **Alignment** — the process of generating an LRC from the audio + plain `lyrics-eng` ID3 tag using ML forced alignment (Whisper + wav2vec2).
+- **AlbumStore** — the long-lived service that walks `Albums/`, holds the live set of albums, and emits Qt signals on lifecycle events. Definitive data shape in Spec 03 §AlbumStore.
+- **LibraryWatcher** — the long-lived service that wraps the immutable `Library` snapshot with a `QFileSystemWatcher` and emits `tracks_changed` on filesystem change. Lands in Phase 2 (Spec 01 TC-01-P2-01..04).
+
+## Sort order (canonical)
+
+Anywhere "alphabetical" appears across these specs (album list, library default sort, dropdown order), it means **case-insensitive locale-aware** comparison: `str.casefold()` of the field, then Python's default Unicode-aware ordering. This avoids `Z` < `a` (ASCII default) and "Émile" sorting after "Zoë" (raw Unicode).
+
+## Keyboard shortcuts (global table — owned by this spec)
+
+Shortcuts are global to the main window. They are **suppressed when focus is in a `QLineEdit` or `QTextEdit`** so the user can type "L" in the search box without triggering "Loop." This rule prevents Spec 04's target counter (Up/Down arrow buttons + numeric typing) from colliding with Spec 06's playback shortcuts.
+
+| Key | Action | Owner spec | Suppressed in text fields? |
+|---|---|---|---|
+| Space | Play / pause | 06 | Yes |
+| Left | Seek −5 s | 06 | Yes |
+| Right | Seek +5 s | 06 | Yes |
+| Shift+Left | Seek −30 s | 06 | Yes |
+| Shift+Right | Seek +30 s | 06 | Yes |
+| M | Mute / unmute | 06 | Yes |
+| Ctrl+N | New album | 03 | No (modal opens regardless of focus) |
+| Ctrl+Q | Quit (with debounced-save flush per Spec 10) | 12 | No |
+| F1 | About / version | 00 | No |
+
+The Spec 04 target counter does **not** bind Up/Down arrow keys at the *global* level — its `▲` / `▼` are mouse-clickable buttons, and the numeric input field handles its own arrow keys when it has focus. This avoids the seek-vs-target collision entirely.
+
+## Library vs AlbumStore — why their freshness models differ
+
+A reader may notice an asymmetry: `Library` is scanned at launch and refreshed via the Phase-2 `LibraryWatcher` (Spec 01); `AlbumStore.list()` re-walks `Albums/` on demand and emits live signals on every create/delete/rename (Spec 03 TC-03-02 + TC-03-14).
+
+**Reasoning:**
+- `Tracks/` mutations are rare and external to the app (the user adds a WhatsApp memo every few days). Scan-at-launch + watcher is cheap and correct.
+- `Albums/` mutations are frequent and originate inside the app (every create / rename / delete is an in-process action). A signal-based store costs less than re-walking on every read and gives the dropdown live-refresh without a watcher.
+
+The asymmetry is intentional, not historical drift.
 
 ## Spec index
 
@@ -128,7 +163,7 @@ User-global locations (XDG):
 - **Startup time:** under 1 second on a warm cache to a usable window.
 - **Memory:** under 300 MB resident with library loaded, excluding Whisper model.
 - **Responsiveness:** no operation in the UI thread blocks for more than 100 ms; long work runs in QThread workers.
-- **Crash recovery:** the canonical state on disk is always valid. An ungraceful exit may lose the current play position but never the album definition (atomic JSON writes).
+- **Crash recovery:** the canonical state on disk is always valid. An ungraceful exit never loses the album definition (atomic JSON writes per Spec 10). **Play position is not persisted in v1 — at all** (Spec 06): a clean quit and a kill produce the same restart behavior, namely the last-played track loaded paused at zero. (`last_position_seconds` is on the v2 roadmap.)
 - **Data integrity:** Album Builder never writes to source audio files. The app's writes are confined to `Albums/`, `*.lrc` sidecars next to audio, and `.album-builder/`.
 - **Offline:** the app starts and runs offline. The only network use is the one-time Whisper model download (with explicit user prompt before triggering).
 

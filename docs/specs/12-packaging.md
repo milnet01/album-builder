@@ -1,6 +1,6 @@
 # 12 — Packaging & Launcher
 
-**Status:** Draft · **Last updated:** 2026-04-27 · **Depends on:** 00, 11
+**Status:** Draft · **Last updated:** 2026-04-28 · **Depends on:** 00, 11
 
 ## Purpose
 
@@ -168,16 +168,28 @@ For now, "update" = "git pull && ./install.sh" — the installer's `rsync --dele
 | Condition | Behavior |
 |---|---|
 | Python <3.11 on the system | Installer aborts with a clear message: "Python 3.11 or newer required. openSUSE Tumbleweed: zypper install python311." |
-| `pip install` of a heavy dep fails (compile error) | Installer captures stderr and points to a wiki page with troubleshooting (e.g., torch wheels for the platform). |
+| `pip install` of a heavy dep fails (compile error) | Installer captures stderr and points to a wiki page with troubleshooting (e.g., torch wheels for the platform). The half-built `.venv/` is **wiped** before the installer exits non-zero, so re-running starts clean (otherwise the next `pip install` would skip already-installed-but-broken dependencies and report success on a partial venv). |
+| Disk full mid `pip install` | Same handling as compile failure: wipe `.venv/`, exit non-zero with a clear "out of disk during install" message. The user re-runs after clearing space. |
 | KDE doesn't see the new launcher | Installer runs `kbuildsycoca6` if available; if KDE Plasma needs a session restart in rare cases, the README documents this. |
 | `~/.local/bin` not on PATH | Installer detects, prints a one-liner to add to `~/.bashrc` / `~/.zshrc`. |
 | User installs as root | Installer refuses: "Run as your user, not root. Album Builder is per-user." |
 | Reinstall when running | Installer detects via the single-instance lock and refuses with "Quit the running Album Builder first." |
 
-## Tests
+## Test contract
 
-- **Manual smoke (no automation needed for v1):** Run `./install.sh` on a clean account; verify launcher appears in K Menu under Multimedia; click; window opens; quit; click launcher again; window opens fresh; run `./uninstall.sh`; verify all paths gone.
-- **CI-friendly:** lint the installer with `shellcheck`; lint the `.desktop` file with `desktop-file-validate`; verify SVG renders with `cairosvg`.
+Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-12-NN` marker.
+
+**Phase status — Phase 1 ships TC-12-01 + TC-12-02 (shellcheck on install.sh + desktop-file-validate).** TC-12-03..06 are Phase 1 manual-smoke (described below; not automated). TC-12-07..09 are Phase 2 (re-tested at the end of Phase 2 to confirm packaging stays green).
+
+- **TC-12-01** — `shellcheck install.sh uninstall.sh` exits 0 (no warnings, no errors). Phase 1 ✓.
+- **TC-12-02** — `desktop-file-validate packaging/album-builder.desktop.in` exits 0 (after a `sed s|@@LAUNCHER@@|/tmp/album-builder|` substitution). Phase 1 ✓.
+- **TC-12-03** — Manual smoke: clean account → `./install.sh` → launcher appears in K Menu under Multimedia within 5 s → click → window opens → quit → click again → window opens fresh.
+- **TC-12-04** — Manual smoke: `./uninstall.sh` removes the five paths listed in §Uninstall and preserves the three "preserved" paths.
+- **TC-12-05** — Manual smoke: `./uninstall.sh --purge` additionally removes `~/.config/album-builder/` and `~/.cache/album-builder/`.
+- **TC-12-06** — Single-instance: launching while running raises the existing window (no second copy spawned). Phase 1 ✓.
+- **TC-12-07** — Failed `pip install` (simulate via `--no-binary :all: --target /dev/full` or a deliberately bad requirements line) → installer wipes `.venv/` before exiting non-zero. After failure, the venv directory does not exist on disk.
+- **TC-12-08** — Partial install resumed: a successful `./install.sh` after a wiped-venv failure produces the same final state as a fresh install.
+- **TC-12-09** — Reinstall-while-running: the installer refuses with the "Quit the running Album Builder first" message and exits non-zero; no files modified.
 
 ## Out of scope (v1)
 

@@ -1,6 +1,6 @@
 # 07 — Lyrics Alignment & Display
 
-**Status:** Draft · **Last updated:** 2026-04-27 · **Depends on:** 00, 01, 06
+**Status:** Draft · **Last updated:** 2026-04-28 · **Depends on:** 00, 01, 06, 10, 11
 
 ## Purpose
 
@@ -20,7 +20,7 @@ Show synchronized scrolling lyrics in the now-playing pane. The line being sung 
   - `LRC: ✓ ready` — synced playback
   - `LRC: aligning… 23%` — progress when alignment is running
   - `LRC: not yet aligned` — track has lyrics text but no LRC; clicking "Align now" enqueues alignment
-  - `LRC: no lyrics text` — the file has no `lyrics-eng` tag; user can drop a `.txt` file with the same stem next to the audio to provide source text
+  - `LRC: no lyrics text` — the file has no `lyrics-eng` ID3 tag; the user must add one in their tagging tool of choice (Album Builder is read-only on source audio per Spec 00 non-goals — this spec does **not** read `.txt` sidecars in v1; that was an earlier draft idea, withdrawn)
   - `LRC: alignment failed` — show fallback (unsynced lyrics text) and an error message
 
 ### Alignment job (background)
@@ -103,10 +103,10 @@ Sung-vocal accuracy expectation: ~80–90% of lines aligned within ±0.5 s on fi
 
 | Condition | Behavior |
 |---|---|
-| `lyrics_text` is None or empty | Status `no lyrics text`. Lyrics panel shows helper: "Add lyrics by writing a `.txt` file with the same name next to this audio." User can also paste lyrics in a future spec, but v1 is `.txt` only. |
-| `.txt` file present beside audio + ID3 lyrics also present | ID3 wins. (Could surface a "use .txt instead" toggle in settings if it ever becomes a problem.) |
+| `lyrics_text` is None or empty | Status `no lyrics text`. Lyrics panel shows helper: "Add lyrics via the `lyrics-eng` ID3 tag in your tagging tool of choice." (No `.txt` sidecar is read in v1.) |
 | Alignment process killed mid-run | No `.lrc` produced; status reverts to `not yet aligned`. Re-running is safe and idempotent. |
-| Whisper model download fails | One retry with backoff; on second failure, show error with a "Retry" button. Album Builder is otherwise fully functional. |
+| Whisper model download interrupted (user kills app, network drop) | Partial blob in `~/.cache/album-builder/whisper-models/.partial` is detected on next launch; resume via `huggingface_hub`'s built-in resume on the same `etag`, or — if etag drifted — discard and restart. Disk usage of `.partial` is bounded at the model size; never leaked. |
+| Whisper model download fails (after retry) | One automatic retry with backoff; on second failure, show error with a "Retry" button. Album Builder is otherwise fully functional. |
 | Existing `.lrc` is malformed | Treat as `not yet aligned`; offer to regenerate. Keep the malformed one as `<stem>.lrc.bak`. |
 | Audio file shorter than expected by lyrics text | Whisper returns whatever it can; trailing lines may have no good timestamp. Mark them at end-of-track. |
 | Audio shorter than ~2 s | Reject alignment; not enough signal. Show "audio too short to align." |
@@ -119,14 +119,29 @@ Sung-vocal accuracy expectation: ~80–90% of lines aligned within ±0.5 s on fi
 - Reading a cached `.lrc`: <5 ms.
 - Tracker tick cost: O(1) per position update (linear-search on a small `lines` list, with a cached "last index" hint).
 
-## Tests
+## Test contract
 
-- **Unit:** `parse_lrc(text)` returns `Lyrics` with correct line times.
-- **Unit:** `format_lrc(Lyrics)` round-trips identically.
-- **Unit:** `tracker.line_at(t)` returns the correct index for boundary cases (before first line, between lines, exactly on a line, after last).
-- **Integration (slow, opt-in):** Run alignment on a 30 s fixture track with known lyrics; assert the produced LRC has line count == fixture line count and timestamps are monotonic.
-- **UI (pytest-qt):** Load a track with a known LRC; advance simulated player position; assert the `current_line_changed` signal emits at the right times and the panel highlights the right line.
-- **UI:** Status pill cycles correctly: `not yet aligned` → click "Align now" → `aligning… N%` → `ready`.
+Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-07-NN` marker.
+
+**Phase status — every TC below is Phase 3.** Lyrics alignment lands in Phase 3; no `tests/` file matches these IDs until that plan executes. The Phase 3 plan, when written, will map every TC here to its target test file.
+
+- **TC-07-01** — `parse_lrc(text)` returns `Lyrics` with line times in seconds and section markers flagged correctly.
+- **TC-07-02** — `format_lrc(Lyrics)` round-trips byte-identical text on a fixture LRC.
+- **TC-07-03** — `tracker.line_at(t)` returns the correct index for boundary cases: before the first line (`-1`), exactly at a line, between lines, exactly at the last line, after the last line.
+- **TC-07-04** — `tracker` advances monotonically: a position tick that goes backward (seek) re-runs the search; forward ticks use the cached "last index" hint and run in O(1).
+- **TC-07-05** — `current_line_changed(index)` emits exactly when the line crosses; not on every position tick.
+- **TC-07-06** — Status pill cycles correctly across alignment phases: `no lyrics text`, `not yet aligned`, `aligning… N%`, `ready`, `failed`.
+- **TC-07-07** — Audio < 2 s rejects alignment with a clear message; no `.lrc` written; status `audio too short to align`.
+- **TC-07-08** — Alignment process killed mid-run produces no `.lrc`; status reverts to `not yet aligned`; re-running is safe.
+- **TC-07-09** — Whisper model download interruption: partial blob is detected on next launch and resume / discard is correctly chosen based on etag stability.
+- **TC-07-10** — Malformed `.lrc` is moved to `<stem>.lrc.bak` and status is `not yet aligned`; the user is offered "Regenerate."
+- **TC-07-11** — Tracker is rewired on `player.set_source()` — no stale subscriptions across track switches.
+- **TC-07-12** — `Lyrics` dataclass is frozen + hashable (parallel to Phase 1's Library guarantee).
+- **TC-07-13** — Alignment opt-in: with `auto_align_on_play = false` (default), loading a track with `not yet aligned` status does not start an alignment job.
+- **TC-07-14** — `LRC` cache hit: opening a track that already has a fresh `.lrc` (mtime ≥ audio mtime) skips re-alignment and goes straight to `ready`.
+- **TC-07-15** — Visual: `now`-line styling uses `accent-warm` (Spec 11), `past` uses `text-disabled`, `future` uses `text-tertiary`.
+
+(Slow-integration "real alignment" tests stay opt-in / `@pytest.mark.slow` — they're not part of the default test contract.)
 
 ## Out of scope (v1)
 
