@@ -4,7 +4,9 @@ A small PyQt6 desktop app for curating albums from a folder of audio recordings,
 
 ## Status
 
-Phase 1 — Foundation. The app opens, scans `Tracks/`, and shows the library list. Album CRUD, playback, and report generation arrive in subsequent phases (see `docs/plans/`).
+**v0.2.0 — Phase 2: Albums (shipped 2026-04-28).** The app scans `Tracks/`, lets you create / rename / delete albums, pick tracks via a per-row toggle column, set a target track count, drag rows in the middle pane to set order, and approve. State persists across launches: window geometry, splitter sizes, last-active album, and per-album selection / target / order all round-trip through atomic JSON writes with self-heal on corrupt input. The library refreshes live when files change in `Tracks/`.
+
+Playback + lyrics alignment land in Phase 3; full export pipeline (M3U + symlink folder + PDF/HTML report) lands in Phase 4. See [`ROADMAP.md`](ROADMAP.md) and `docs/plans/` for details.
 
 ## Install (openSUSE Tumbleweed + KDE Plasma)
 
