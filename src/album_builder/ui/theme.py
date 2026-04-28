@@ -110,6 +110,14 @@ def qt_stylesheet(p: Palette) -> str:
         padding: 6px;
         border: none;
     }}
+    QTableView::item[accent="primary"] {{
+        border-left: 3px solid {p.accent_primary_1};
+        background: rgba(124, 92, 255, 0.08);
+    }}
+    QTableView::item[accent="warning"] {{
+        border-left: 3px solid {p.warning};
+        background: rgba(232, 158, 81, 0.08);
+    }}
     QSplitter::handle {{
         background-color: {p.border};
     }}

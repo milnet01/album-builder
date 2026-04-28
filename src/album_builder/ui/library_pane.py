@@ -1,10 +1,13 @@
-"""Library pane — search box + sortable table of tracks."""
+"""Library pane -- search box + sortable table of tracks."""
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt
+from pathlib import Path
+
+from PyQt6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt, pyqtSignal
 from PyQt6.QtWidgets import QFrame, QHeaderView, QLabel, QLineEdit, QTableView, QVBoxLayout
 
+from album_builder.domain.album import Album, AlbumStatus
 from album_builder.domain.library import Library
 from album_builder.domain.track import Track
 
@@ -14,6 +17,7 @@ COLUMNS: list[tuple[str, str]] = [
     ("Album", "album"),
     ("Composer", "composer"),
     ("Duration", "duration_seconds"),
+    ("✓", "_toggle"),  # check mark glyph
 ]
 
 # Spec 01: search filters across title, artist, album_artist, composer, album.
@@ -28,10 +32,28 @@ class TrackTableModel(QAbstractTableModel):
     def __init__(self, tracks: list[Track]):
         super().__init__()
         self._tracks: list[Track] = list(tracks)
+        self._selected_paths: set[Path] = set()
+        self._toggle_enabled: list[bool] = []
+        self._album_status: AlbumStatus = AlbumStatus.DRAFT
 
     def set_tracks(self, tracks: list[Track]) -> None:
         self.beginResetModel()
         self._tracks = list(tracks)
+        self._toggle_enabled = [True] * len(self._tracks)
+        self.endResetModel()
+
+    def set_album_state(
+        self, *, selected_paths: set[Path], status: AlbumStatus, target: int,
+    ) -> None:
+        self.beginResetModel()
+        self._selected_paths = selected_paths
+        self._album_status = status
+        at_target = len(selected_paths) >= target
+        is_approved = status == AlbumStatus.APPROVED
+        self._toggle_enabled = [
+            (not is_approved) and (track.path in selected_paths or not at_target)
+            for track in self._tracks
+        ]
         self.endResetModel()
 
     def track_at(self, row: int) -> Track:
@@ -60,6 +82,23 @@ class TrackTableModel(QAbstractTableModel):
             return None
         track = self._tracks[index.row()]
         attr = COLUMNS[index.column()][1]
+
+        if attr == "_toggle":
+            if role == Qt.ItemDataRole.DisplayRole:
+                return "●" if track.path in self._selected_paths else "○"
+            if role == Qt.ItemDataRole.UserRole + 2:
+                if track.path in self._selected_paths:
+                    return "warning" if track.is_missing else "primary"
+                return None
+            return None
+
+        # Non-toggle column UserRole+2 surfaces accent so the whole row
+        # picks it up via the QSS attribute selector at paint time.
+        if role == Qt.ItemDataRole.UserRole + 2:
+            if track.path in self._selected_paths:
+                return "warning" if track.is_missing else "primary"
+            return None
+
         value = getattr(track, attr)
         if role == Qt.ItemDataRole.DisplayRole:
             if attr == "duration_seconds":
@@ -103,6 +142,8 @@ class TrackFilterProxy(QSortFilterProxyModel):
 
 
 class LibraryPane(QFrame):
+    selection_toggled = pyqtSignal(object, bool)  # Path, new_state
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("Pane")
@@ -114,7 +155,9 @@ class LibraryPane(QFrame):
         title = QLabel("Library", objectName="PaneTitle")
         layout.addWidget(title)
 
-        self.search_box = QLineEdit(placeholderText="🔍  search title, artist, album, composer…")
+        self.search_box = QLineEdit(
+            placeholderText="\U0001f50d  search title, artist, album, composer…"
+        )
         self.search_box.textChanged.connect(self._on_search_changed)
         layout.addWidget(self.search_box)
 
@@ -122,6 +165,7 @@ class LibraryPane(QFrame):
         self._proxy = TrackFilterProxy()
         self._proxy.setSourceModel(self._model)
         self._proxy.setSortRole(Qt.ItemDataRole.UserRole)
+        self._current_album: Album | None = None
 
         self.table = QTableView()
         self.table.setModel(self._proxy)
@@ -143,15 +187,57 @@ class LibraryPane(QFrame):
         self.table.setColumnWidth(2, 160)  # Album
         self.table.setColumnWidth(3, 140)  # Composer
         self.table.setColumnWidth(4, 70)   # Duration
+        self.table.setColumnWidth(5, 30)   # Toggle
         self.table.setMinimumWidth(420)
         # Spec 01: default sort is Title ascending. Applied here so the user
-        # sees a deterministic order on first launch — without this, rows
+        # sees a deterministic order on first launch -- without this, rows
         # appear in filesystem-walk order.
         self.table.sortByColumn(0, Qt.SortOrder.AscendingOrder)
+        self.table.clicked.connect(self._on_table_clicked)
         layout.addWidget(self.table)
 
     def set_library(self, library: Library) -> None:
         self._model.set_tracks(library.tracks)
+
+    def set_current_album(self, album: Album | None) -> None:
+        self._current_album = album
+        if album is None:
+            self._model.set_album_state(
+                selected_paths=set(), status=AlbumStatus.DRAFT, target=0,
+            )
+        else:
+            self._model.set_album_state(
+                selected_paths=set(album.track_paths),
+                status=album.status,
+                target=album.target_count,
+            )
+
+    def toggle_enabled_at(self, view_row: int) -> bool:
+        # view_row here refers to source-model row (test convention); the
+        # proxy's sort order does not affect this accessor.
+        if view_row >= len(self._model._toggle_enabled):
+            return False
+        return self._model._toggle_enabled[view_row]
+
+    def row_accent_at(self, view_row: int) -> str | None:
+        # view_row here refers to source-model row (test convention).
+        src = self._model.index(view_row, 0)
+        if not src.isValid():
+            return None
+        return self._model.data(src, Qt.ItemDataRole.UserRole + 2)
+
+    def _on_table_clicked(self, view_index: QModelIndex) -> None:
+        if not view_index.isValid():
+            return
+        if COLUMNS[view_index.column()][1] != "_toggle":
+            return
+        src = self._proxy.mapToSource(view_index)
+        row = src.row()
+        if row >= len(self._model._toggle_enabled) or not self._model._toggle_enabled[row]:
+            return
+        track = self._model.track_at(row)
+        was_selected = track.path in self._model._selected_paths
+        self.selection_toggled.emit(track.path, not was_selected)
 
     def row_count(self) -> int:
         return self._proxy.rowCount()
