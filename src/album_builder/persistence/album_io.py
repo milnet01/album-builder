@@ -80,10 +80,18 @@ def _deserialize(data: dict) -> tuple[Album, bool]:
     raw_paths = [Path(p) for p in data["track_paths"]]
     resolved_paths = [p if p.is_absolute() else p.resolve() for p in raw_paths]
     needs_rewrite = any(r != s for r, s in zip(raw_paths, resolved_paths, strict=True))
+    # Pre-bump target_count if a corrupt JSON has fewer slots than tracks
+    # (TC-04-09 self-heal). The Album.__post_init__ invariant assumes
+    # target_count >= len(track_paths) at construction time, so the bump
+    # must happen BEFORE the dataclass is built. load_album notices the
+    # difference and writes the fixed file back to disk.
+    target_count = int(data["target_count"])
+    if target_count < len(resolved_paths):
+        target_count = len(resolved_paths)
     album = Album(
         id=UUID(data["id"]),
         name=data["name"],
-        target_count=int(data["target_count"]),
+        target_count=target_count,
         track_paths=resolved_paths,
         status=AlbumStatus(data["status"]),
         cover_override=Path(data["cover_override"]) if data.get("cover_override") else None,

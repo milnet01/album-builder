@@ -192,3 +192,41 @@ def test_album_unapprove_clears_approval() -> None:
     a.unapprove()
     assert a.status == AlbumStatus.DRAFT
     assert a.approved_at is None
+
+
+# Indie-review L1-H3: __post_init__ invariant catches corrupt direct-construction
+# (load-from-corrupt-JSON, hand-built test fixtures) that bypasses the mutating
+# methods' guards.
+def test_album_post_init_rejects_target_below_track_count() -> None:
+    from datetime import UTC, datetime
+    from uuid import uuid4
+    with pytest.raises(ValueError, match="target_count"):
+        Album(
+            id=uuid4(), name="x", target_count=2,
+            track_paths=[Path("/abs/a.mp3"), Path("/abs/b.mp3"), Path("/abs/c.mp3")],
+            status=AlbumStatus.DRAFT, cover_override=None,
+            created_at=datetime.now(UTC), updated_at=datetime.now(UTC),
+        )
+
+
+def test_album_post_init_rejects_target_out_of_range() -> None:
+    from datetime import UTC, datetime
+    from uuid import uuid4
+    with pytest.raises(ValueError, match="target_count must be 1-99"):
+        Album(
+            id=uuid4(), name="x", target_count=0, track_paths=[],
+            status=AlbumStatus.DRAFT, cover_override=None,
+            created_at=datetime.now(UTC), updated_at=datetime.now(UTC),
+        )
+
+
+def test_album_post_init_rejects_approved_without_tracks() -> None:
+    from datetime import UTC, datetime
+    from uuid import uuid4
+    with pytest.raises(ValueError, match="approved album"):
+        Album(
+            id=uuid4(), name="x", target_count=3, track_paths=[],
+            status=AlbumStatus.APPROVED, cover_override=None,
+            created_at=datetime.now(UTC), updated_at=datetime.now(UTC),
+            approved_at=datetime.now(UTC),
+        )

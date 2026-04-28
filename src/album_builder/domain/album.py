@@ -47,6 +47,26 @@ class Album:
     updated_at: datetime
     approved_at: datetime | None = None
 
+    def __post_init__(self) -> None:
+        # Defensive invariant for direct dataclass construction (load from JSON,
+        # tests, future code). The mutating methods (`select`, `set_target`,
+        # `reorder`) all enforce target_count >= len(track_paths); persistence
+        # self-heal (album_io._deserialize, TC-04-09) bumps target_count on a
+        # corrupt file before construction. Anything that bypasses both paths
+        # gets caught here.
+        if not (1 <= self.target_count <= 99):
+            raise ValueError(
+                f"target_count must be 1-99, got {self.target_count}"
+            )
+        if self.target_count < len(self.track_paths):
+            raise ValueError(
+                f"target_count ({self.target_count}) < len(track_paths) "
+                f"({len(self.track_paths)}); fix at the load site or via "
+                f"persistence self-heal"
+            )
+        if self.status == AlbumStatus.APPROVED and not self.track_paths:
+            raise ValueError("approved album must have at least one track")
+
     @classmethod
     def create(cls, *, name: str, target_count: int) -> Album:
         now = _now()
@@ -111,6 +131,16 @@ class Album:
         self.updated_at = _now()
 
     def approve(self) -> None:
+        """Flip status DRAFT -> APPROVED with timestamps.
+
+        Domain-level checks: status must be DRAFT, track_paths non-empty.
+        The MISSING-track-on-disk precondition (Spec 02 TC-02-10:
+        FileNotFoundError if any path doesn't exist) is enforced ONE LAYER UP
+        in `AlbumStore.approve()`, which calls this method only after the
+        path-existence check. Direct callers of `Album.approve()` MUST
+        replicate that check or accept the risk of approving an album whose
+        files have moved out from under it.
+        """
         if self.status != AlbumStatus.DRAFT:
             raise ValueError(f"cannot approve from status {self.status!r}; only draft -> approved")
         if not self.track_paths:

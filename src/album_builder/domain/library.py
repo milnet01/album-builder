@@ -48,16 +48,26 @@ class Library:
             return cls(folder=folder, tracks=())
         tracks: list[Track] = []
         for entry in entries:
-            if entry.is_file() and entry.suffix.lower() in SUPPORTED_EXTENSIONS:
-                try:
-                    tracks.append(Track.from_path(entry))
-                except mutagen.MutagenError:
-                    # Spec 01: malformed audio with no parseable tags is loaded
-                    # with placeholders by Track.from_path itself. A bare
-                    # MutagenError here means truly unrecoverable parsing —
-                    # skip silently. OSError (PermissionError, transient mount
-                    # loss) is unwrapped by Track.from_path and propagates.
+            # Per-entry OSError (stale NFS, transient mount loss on `is_file()`
+            # / `suffix` access) skips the entry rather than aborting the whole
+            # scan. Spec 01 TC-01-02 says an unreadable folder yields an empty
+            # Library; a single unreadable entry should not be more disruptive
+            # than that. PermissionError from Track.from_path's stat() still
+            # propagates - that path is exercised by TC-01-10.
+            try:
+                if not (entry.is_file() and entry.suffix.lower() in SUPPORTED_EXTENSIONS):
                     continue
+            except OSError:
+                continue
+            try:
+                tracks.append(Track.from_path(entry))
+            except mutagen.MutagenError:
+                # Spec 01: malformed audio with no parseable tags is loaded
+                # with placeholders by Track.from_path itself. A bare
+                # MutagenError here means truly unrecoverable parsing —
+                # skip silently. OSError (PermissionError, transient mount
+                # loss) is unwrapped by Track.from_path and propagates.
+                continue
         return cls(folder=folder, tracks=tuple(tracks))
 
     def find(self, path: Path) -> Track | None:

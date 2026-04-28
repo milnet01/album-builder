@@ -121,3 +121,32 @@ def test_library_scan_unreadable_file_propagates(tmp_path: Path, tagged_track) -
             Library.scan(tmp_path)
     finally:
         locked.chmod(0o644)
+
+
+# Indie-review L1-H1: per-entry OSError on `is_file()` outside the try/except
+# would kill the whole scan. A stale-NFS / permission-denied directory entry
+# should be skipped, not propagate (matches TC-01-02's spirit at per-entry
+# granularity). Track.from_path's PermissionError on stat() still propagates
+# - that path is exercised by test_library_scan_unreadable_file_propagates.
+def test_library_scan_skips_entries_with_os_error_metadata(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import _pytest.monkeypatch  # noqa: F401 - import for typing
+
+    good = tmp_path / "good.mp3"
+    good.write_bytes(b"\xff\xfb\x90\x00" + b"\x00" * 1024)  # minimal MP3-like
+    bad = tmp_path / "bad.mp3"
+    bad.write_bytes(b"\xff\xfb\x90\x00" + b"\x00" * 1024)
+
+    real_is_file = Path.is_file
+    def boom_on_bad(self):
+        if self.name == "bad.mp3":
+            raise OSError("simulated stale NFS")
+        return real_is_file(self)
+    monkeypatch.setattr(Path, "is_file", boom_on_bad)
+
+    lib = Library.scan(tmp_path)
+    # 'good' may or may not parse depending on mutagen; the contract under
+    # test is that scan didn't raise.
+    assert isinstance(lib.tracks, tuple)
+    assert all(t.path.name != "bad.mp3" for t in lib.tracks)
