@@ -28,8 +28,10 @@ from PyQt6.QtGui import QIcon
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMainWindow
 
-from album_builder.domain.library import Library
 from album_builder.persistence import settings
+from album_builder.persistence.state_io import load_state
+from album_builder.services.album_store import AlbumStore
+from album_builder.services.library_watcher import LibraryWatcher
 from album_builder.ui.main_window import MainWindow
 from album_builder.version import __version__
 
@@ -57,8 +59,11 @@ def run() -> int:
         return 0
 
     tracks_dir = _resolve_tracks_dir()
-    library = Library.scan(tracks_dir)
-    window = MainWindow(library=library)
+    project_root = _resolve_project_root()
+    state = load_state(project_root)
+    library_watcher = LibraryWatcher(tracks_dir)
+    store = AlbumStore(project_root / "Albums")
+    window = MainWindow(store, library_watcher, state, project_root)
     server = start_raise_server(window)
     window.show()
 
@@ -148,6 +153,16 @@ def _bring_to_front(window: QMainWindow) -> None:
     window.show()
     window.raise_()
     window.activateWindow()
+
+
+def _resolve_project_root() -> Path:
+    """Return the project root that hosts the Albums/ folder and state.json.
+
+    Convention: the working directory when the process is launched. Production
+    installs set CWD via the .desktop file's ``Path=`` field; the dev tree uses
+    the repo root. A settings-driven override can land here in a later release.
+    """
+    return Path.cwd()
 
 
 def _resolve_tracks_dir() -> Path:

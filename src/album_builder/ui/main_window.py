@@ -1,88 +1,238 @@
-"""Main window — top bar + three-pane horizontal splitter."""
+"""Main window - top bar + three-pane horizontal splitter, wired to
+AlbumStore + LibraryWatcher + AppState (Phase 2)."""
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
+from pathlib import Path
+from uuid import UUID
+
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QFrame,
-    QHBoxLayout,
+    QInputDialog,
     QLabel,
     QMainWindow,
-    QPushButton,
+    QMessageBox,
     QSplitter,
     QVBoxLayout,
     QWidget,
 )
 
-from album_builder.domain.library import Library
+from album_builder.persistence.state_io import AppState, WindowState, save_state
+from album_builder.services.album_store import AlbumStore
+from album_builder.services.library_watcher import LibraryWatcher
+from album_builder.ui.album_order_pane import AlbumOrderPane
 from album_builder.ui.library_pane import LibraryPane
 from album_builder.ui.theme import Palette, qt_stylesheet
+from album_builder.ui.top_bar import TopBar
 from album_builder.version import __version__
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, library: Library):
+    def __init__(
+        self,
+        store: AlbumStore,
+        library_watcher: LibraryWatcher,
+        state: AppState,
+        project_root: Path,
+    ):
         super().__init__()
+        self._store = store
+        self._library_watcher = library_watcher
+        self._state = state
+        self._project_root = project_root
         self.setWindowTitle(f"Album Builder {__version__}")
-        self.resize(1400, 900)
+        self.resize(state.window.width, state.window.height)
+        self.move(state.window.x, state.window.y)
         self.setStyleSheet(qt_stylesheet(Palette.dark_colourful()))
 
         central = QWidget()
         self.setCentralWidget(central)
-
         outer = QVBoxLayout(central)
         outer.setContentsMargins(12, 12, 12, 12)
         outer.setSpacing(10)
 
-        self.top_bar = self._build_top_bar()
+        self.top_bar = TopBar(store)
         outer.addWidget(self.top_bar)
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setChildrenCollapsible(False)
-
         self.library_pane = LibraryPane()
-        self.library_pane.set_library(library)
+        self.library_pane.set_library(library_watcher.library())
+        self.album_order_pane = AlbumOrderPane()
+        self.now_playing_pane = self._build_placeholder_pane("Now playing")  # Phase 3
         self.splitter.addWidget(self.library_pane)
-
-        # Phase 1 stubs — Phase 2 fills these in
-        self.album_order_pane = self._build_placeholder_pane("Album order")
-        self.now_playing_pane = self._build_placeholder_pane("Now playing")
         self.splitter.addWidget(self.album_order_pane)
         self.splitter.addWidget(self.now_playing_pane)
-
-        # Relative ratios (Qt normalises across the splitter's actual width),
-        # not absolute pixels — works on both 1080p and HiDPI displays.
-        self.splitter.setSizes([5, 3, 5])
+        self.splitter.setSizes(state.window.splitter_sizes)
         outer.addWidget(self.splitter, stretch=1)
 
-    def _build_top_bar(self) -> QFrame:
-        bar = QFrame(objectName="TopBar")
-        bar.setFixedHeight(56)
-        layout = QHBoxLayout(bar)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(8)
+        # Debounced state-save timer for splitter / geometry mutations (TC-03-10).
+        self._state_save_timer = QTimer(self)
+        self._state_save_timer.setSingleShot(True)
+        self._state_save_timer.setInterval(250)
+        self._state_save_timer.timeout.connect(self._save_state_now)
 
-        # Phase 1: placeholder dropdown stub. Phase 2 wires the real switcher.
-        album_btn = QPushButton("▾ No albums (Phase 2)")
-        album_btn.setEnabled(False)
-        layout.addWidget(album_btn)
+        # Wire signals
+        self.top_bar.switcher.current_album_changed.connect(self._on_current_changed)
+        self.top_bar.rename_committed.connect(self._on_rename)
+        self.top_bar.target_committed.connect(self._on_target)
+        self.top_bar.approve_requested.connect(self._on_approve)
+        self.top_bar.reopen_requested.connect(self._on_reopen)
+        self.top_bar.switcher.new_album_requested.connect(self._on_new_album)
+        self.top_bar.switcher.delete_requested.connect(self._on_delete_album)
+        self.library_pane.selection_toggled.connect(self._on_selection_toggled)
+        self.album_order_pane.reordered.connect(self._on_reorder_done)
+        library_watcher.tracks_changed.connect(self.library_pane.set_library)
+        self.splitter.splitterMoved.connect(lambda *_: self._state_save_timer.start())
 
-        layout.addStretch(1)
+        # Restore current album from state (TC-03-07) with fallback (TC-03-09)
+        if state.current_album_id and store.get(state.current_album_id):
+            self.top_bar.switcher.set_current(state.current_album_id)
+        else:
+            albums = store.list()
+            if albums:
+                self.top_bar.switcher.set_current(albums[0].id)
 
-        approve_btn = QPushButton("✓ Approve…")
-        approve_btn.setEnabled(False)
-        layout.addWidget(approve_btn)
+    def _current_album(self):
+        cid = self.top_bar.switcher.current_id
+        return self._store.get(cid) if cid else None
 
-        return bar
+    def _on_current_changed(self, album_id) -> None:
+        self.top_bar.set_current(album_id)
+        album = self._store.get(album_id) if album_id else None
+        self.library_pane.set_current_album(album)
+        self.album_order_pane.set_album(
+            album, list(self._library_watcher.library().tracks) if album else []
+        )
+        self._state.current_album_id = album_id
+        self._state_save_timer.start()
+
+    def _on_rename(self, album_id: UUID, new_name: str) -> None:
+        self._store.rename(album_id, new_name)
+        self.top_bar.set_current(album_id)
+
+    def _on_target(self, album_id: UUID, n: int) -> None:
+        album = self._store.get(album_id)
+        if album is None:
+            return
+        try:
+            album.set_target(n)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Cannot lower target", str(exc))
+            self.top_bar.set_current(album_id)  # revert UI
+            return
+        self._store.schedule_save(album_id)
+        self.top_bar.set_current(album_id)
+
+    def _on_approve(self, album_id: UUID) -> None:
+        if QMessageBox.question(
+            self, "Approve album",
+            "Approve this album? Symlinks + report will be generated (Phase 4).",
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self._store.approve(album_id)
+        except (FileNotFoundError, ValueError) as exc:
+            QMessageBox.warning(self, "Cannot approve", str(exc))
+            return
+        self.top_bar.set_current(album_id)
+        self.library_pane.set_current_album(self._store.get(album_id))
+        self.album_order_pane.set_album(
+            self._store.get(album_id), list(self._library_watcher.library().tracks)
+        )
+
+    def _on_reopen(self, album_id: UUID) -> None:
+        if QMessageBox.question(
+            self, "Reopen for editing",
+            "Reopening will delete the approved report. Continue?",
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        self._store.unapprove(album_id)
+        self.top_bar.set_current(album_id)
+        self.library_pane.set_current_album(self._store.get(album_id))
+        self.album_order_pane.set_album(
+            self._store.get(album_id), list(self._library_watcher.library().tracks)
+        )
+
+    def _on_new_album(self) -> None:
+        name, ok = QInputDialog.getText(self, "New album", "Album name (1-80 chars):")
+        if not ok or not name.strip():
+            return
+        target, ok = QInputDialog.getInt(
+            self, "Target track count", "How many tracks?", 12, 1, 99,
+        )
+        if not ok:
+            return
+        try:
+            album = self._store.create(name=name.strip(), target_count=target)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Cannot create album", str(exc))
+            return
+        self.top_bar.switcher.set_current(album.id)
+
+    def _on_delete_album(self, album_id: UUID) -> None:
+        album = self._store.get(album_id)
+        if album is None:
+            return
+        if QMessageBox.question(
+            self, "Delete album",
+            f"Delete '{album.name}'? A backup is kept in Albums/.trash/.",
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        self._store.delete(album_id)
+        self.top_bar.switcher.set_current(self._store.current_album_id)
+
+    def _on_selection_toggled(self, path: Path, new_state: bool) -> None:
+        album = self._current_album()
+        if album is None:
+            return
+        try:
+            if new_state:
+                album.select(path)
+            else:
+                album.deselect(path)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Cannot toggle", str(exc))
+            return
+        self._store.schedule_save(album.id)
+        self.top_bar.set_current(album.id)
+        self.library_pane.set_current_album(album)
+        self.album_order_pane.set_album(album, list(self._library_watcher.library().tracks))
+
+    def _on_reorder_done(self) -> None:
+        album = self._current_album()
+        if album is None:
+            return
+        self._store.schedule_save(album.id)
+
+    def closeEvent(self, e) -> None:
+        # Flush all debounced writes before exit (Spec 10).
+        self._store.flush()
+        self._save_state_now()
+        super().closeEvent(e)
+
+    def _save_state_now(self) -> None:
+        # Spec 10 state.json: splitter_sizes are RATIOS, not pixels.
+        # QSplitter.sizes() returns pixels, so normalise to small integers
+        # before persisting - same shape that QSplitter.setSizes() consumes.
+        pixels = self.splitter.sizes()
+        total = sum(pixels) or 1
+        ratios = [max(1, round(p * 13 / total)) for p in pixels]
+        self._state.window = WindowState(
+            width=self.width(), height=self.height(),
+            x=self.x(), y=self.y(),
+            splitter_sizes=ratios,
+        )
+        save_state(self._project_root, self._state)
 
     def _build_placeholder_pane(self, title: str) -> QFrame:
         pane = QFrame(objectName="Pane")
         layout = QVBoxLayout(pane)
         layout.setContentsMargins(10, 10, 10, 10)
-        title_label = QLabel(title, objectName="PaneTitle")
-        layout.addWidget(title_label)
+        layout.addWidget(QLabel(title, objectName="PaneTitle"))
         layout.addStretch(1)
-        empty = QLabel("(coming in Phase 2)")
+        empty = QLabel("(coming in Phase 3)")
         empty.setObjectName("PlaceholderText")
         empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(empty)
