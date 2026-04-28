@@ -20,6 +20,7 @@ succeeds, ``detach()`` only drops *our* reference, and the subsequent
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -38,9 +39,14 @@ from album_builder.version import __version__
 DEFAULT_TRACKS_DIR = Path("/mnt/Storage/Scripts/Linux/Music_Production/Tracks")
 SHARED_KEY = "album-builder-single-instance-v1"
 RAISE_MESSAGE = b"raise\n"
-RAISE_TIMEOUT_MS = 500
+# 500 ms was too tight: a busy first instance (Whisper alignment running, big
+# folder scan in progress) misses the connect window and the second launch
+# silently exits 0 with no visible action. 2000 ms gives the user a beat;
+# the cost is "user waits 2 s before realising they need to click again".
+RAISE_TIMEOUT_MS = 2000
 ICON_NAME = "album-builder"
 DEV_ASSET_DIR = Path(__file__).parent.parent.parent / "assets"
+DEV_MODE_ENV = "ALBUM_BUILDER_DEV_MODE"
 
 
 def run() -> int:
@@ -67,9 +73,16 @@ def run() -> int:
     server = start_raise_server(window)
     window.show()
 
-    rc = app.exec()
-    server.close()
-    lock.detach()
+    try:
+        rc = app.exec()
+    finally:
+        # Always release the SHM segment + tear down the local server, even
+        # on uncaught exceptions from app.exec(). Without this finally a
+        # crash leaks the lock and the next launch hits the stale-segment
+        # recovery path - works, but defensive scaffolding for an avoidable
+        # leak.
+        server.close()
+        lock.detach()
     return rc
 
 
@@ -97,23 +110,46 @@ def resolve_app_icon(theme_name: str = ICON_NAME, dev_svg: Path | None = None) -
 
 def acquire_single_instance_lock() -> QSharedMemory | None:
     """Return a ``QSharedMemory`` we own, or ``None`` if another live
-    instance holds it. See module docstring for the recovery rationale."""
+    instance holds it. See module docstring for the recovery rationale.
+
+    Distinguishes "another instance owns it" (returns None silently; caller
+    does the raise handshake) from "kernel SHM is exhausted / EACCES / other
+    failure" (returns None but logs to stderr so the user has something to
+    debug from). The two paths look identical to the caller because the
+    raise handshake is harmless when there's no peer.
+    """
     lock = QSharedMemory(SHARED_KEY)
     if lock.attach():
         lock.detach()
     if lock.create(1):
         return lock
+    err = lock.error()
+    if err != QSharedMemory.SharedMemoryError.AlreadyExists:
+        print(
+            f"album-builder: shared-memory init failed: {lock.errorString()} "
+            f"(error={err}). The single-instance lock could not be acquired; "
+            f"the app may launch multiple copies.",
+            file=sys.stderr,
+        )
     return None
 
 
 def signal_raise_existing_instance() -> None:
     """Ask the running instance (whoever owns the lock) to raise its window.
 
-    Best-effort: silent if the server isn't listening yet or the connection
-    times out. The user can always click the taskbar icon as a fallback."""
+    Best-effort: logs to stderr if the server isn't listening yet or the
+    connection times out so the user has something to act on - the alternative
+    is a silent "click did nothing" which looks like the app froze. The user
+    can always click the taskbar icon as a fallback."""
     socket = QLocalSocket()
     socket.connectToServer(SHARED_KEY)
     if not socket.waitForConnected(RAISE_TIMEOUT_MS):
+        print(
+            "album-builder: another instance holds the lock but the raise "
+            "handshake timed out. The window may be on a different desktop "
+            "or the previous instance is busy. Use the taskbar to focus it.",
+            file=sys.stderr,
+        )
         return
     socket.write(RAISE_MESSAGE)
     socket.flush()
@@ -124,7 +160,13 @@ def signal_raise_existing_instance() -> None:
 def start_raise_server(window: QMainWindow) -> QLocalServer:
     """Start a ``QLocalServer`` that brings ``window`` to the foreground when
     a peer sends :data:`RAISE_MESSAGE`. Returns the server so callers can
-    keep it alive for the application lifetime."""
+    keep it alive for the application lifetime.
+
+    PRECONDITION: only the SHM-lock holder reaches this function. Callers
+    of `run()` enforce this via the `if lock is None: return 0` early-out
+    above. The unconditional `removeServer(SHARED_KEY)` below would
+    otherwise nuke a peer's listening socket; relying on the lock-holder
+    invariant lets us treat the socket as ours to claim."""
     QLocalServer.removeServer(SHARED_KEY)
     server = QLocalServer()
     server.listen(SHARED_KEY)
@@ -165,23 +207,35 @@ def _resolve_project_root() -> Path:
     return Path.cwd()
 
 
+def _running_from_source_tree() -> bool:
+    """Heuristic: a `pyproject.toml` sibling to the package's parent dir
+    means we're running from the source checkout, not from an installed
+    site-packages location. Used to gate the DEFAULT_TRACKS_DIR fallback
+    so an installed user doesn't silently pick the developer's path."""
+    candidate = Path(__file__).resolve().parent.parent.parent / "pyproject.toml"
+    return candidate.exists()
+
+
 def _resolve_tracks_dir() -> Path:
     """Pick the tracks folder the library should scan.
 
     Priority order (Spec 12 + Spec 01):
     1. ``tracks_folder`` from ``$XDG_CONFIG_HOME/album-builder/settings.json``
        — the value the user configured. Used in production.
-    2. The hardcoded ``DEFAULT_TRACKS_DIR`` if it exists — convenience for
-       running from the dev tree without a settings file. Emits a stderr
-       warning so the user notices it's the unintended fallback.
+    2. The hardcoded ``DEFAULT_TRACKS_DIR`` if it exists AND we're running
+       from the dev tree — convenience for running without a settings file.
+       Gated to avoid silently picking a coincidentally-named user path.
+       Trigger: either the ``ALBUM_BUILDER_DEV_MODE`` env is set or a
+       ``pyproject.toml`` sits next to the running script.
     3. ``./Tracks`` relative to the CWD — last-resort dev fallback.
     """
     configured = settings.read_tracks_folder()
     if configured is not None:
         return configured
-    if DEFAULT_TRACKS_DIR.exists():
+    dev_mode = os.environ.get(DEV_MODE_ENV) == "1" or _running_from_source_tree()
+    if dev_mode and DEFAULT_TRACKS_DIR.exists():
         print(
-            f"album-builder: no settings.json found; falling back to dev path "
+            f"album-builder: no settings.json found; using dev-tree path "
             f"{DEFAULT_TRACKS_DIR}. Configure {settings.settings_path()} to "
             f"point at your own tracks folder.",
             file=sys.stderr,

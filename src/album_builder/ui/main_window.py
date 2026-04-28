@@ -30,6 +30,12 @@ from album_builder.version import __version__
 
 logger = logging.getLogger(__name__)
 
+# Spec 10 §state.json: splitter_sizes is normalised to small relative ratios
+# rather than DPI-dependent absolute pixels. The total only needs to be a
+# stable small integer for round-trip identity; matches the spec example
+# `[5, 3, 5]` (sum 13) but is otherwise arbitrary.
+SPLITTER_RATIO_TOTAL = 13
+
 
 class MainWindow(QMainWindow):
     def __init__(
@@ -45,8 +51,12 @@ class MainWindow(QMainWindow):
         self._state = state
         self._project_root = project_root
         self.setWindowTitle(f"Album Builder {__version__}")
-        self.resize(state.window.width, state.window.height)
-        self.move(state.window.x, state.window.y)
+        # Clamp restored geometry against pathological values (hand-edited
+        # state.json with width=10 would open a 10 px wide window). Spec 10
+        # documents minimum 100px implicit; explicit here so a corrupt cache
+        # doesn't make the app unusable.
+        self.resize(max(400, state.window.width), max(300, state.window.height))
+        self.move(max(0, state.window.x), max(0, state.window.y))
         self.setStyleSheet(qt_stylesheet(Palette.dark_colourful()))
 
         central = QWidget()
@@ -234,11 +244,14 @@ class MainWindow(QMainWindow):
 
     def _save_state_now(self) -> None:
         # Spec 10 state.json: splitter_sizes are RATIOS, not pixels.
-        # QSplitter.sizes() returns pixels, so normalise to small integers
-        # before persisting - same shape that QSplitter.setSizes() consumes.
+        # QSplitter.sizes() returns pixels; QSplitter.setSizes() interprets
+        # any positive ints as ratios and rescales to the actual pane width
+        # at restore time. We normalise to a fixed small total so
+        # state.json doesn't grow with display DPI - the absolute values
+        # would otherwise drift between screens.
         pixels = self.splitter.sizes()
         total = sum(pixels) or 1
-        ratios = [max(1, round(p * 13 / total)) for p in pixels]
+        ratios = [max(1, round(p * SPLITTER_RATIO_TOTAL / total)) for p in pixels]
         self._state.window = WindowState(
             width=self.width(), height=self.height(),
             x=self.x(), y=self.y(),

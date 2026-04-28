@@ -31,7 +31,7 @@ def test_resolve_tracks_dir_prefers_settings(
     )
     assert app._resolve_tracks_dir() == user_tracks
     # No warning emitted when settings.json wins
-    assert "falling back to dev path" not in capsys.readouterr().err
+    assert "using dev-tree path" not in capsys.readouterr().err
 
 
 def test_resolve_tracks_dir_warns_when_falling_back_to_dev(
@@ -47,7 +47,7 @@ def test_resolve_tracks_dir_warns_when_falling_back_to_dev(
     fake_dev.mkdir()
     monkeypatch.setattr(app, "DEFAULT_TRACKS_DIR", fake_dev)
     assert app._resolve_tracks_dir() == fake_dev
-    assert "falling back to dev path" in capsys.readouterr().err
+    assert "using dev-tree path" in capsys.readouterr().err
 
 
 def test_resolve_tracks_dir_settings_wins_over_dev_path(
@@ -69,7 +69,7 @@ def test_resolve_tracks_dir_settings_wins_over_dev_path(
         json.dumps({"tracks_folder": str(user_tracks)})
     )
     assert app._resolve_tracks_dir() == user_tracks
-    assert "falling back to dev path" not in capsys.readouterr().err
+    assert "using dev-tree path" not in capsys.readouterr().err
 
 
 # --- Single-instance lock + raise handshake ---------------------------------
