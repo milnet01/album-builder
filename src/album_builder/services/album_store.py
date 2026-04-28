@@ -35,27 +35,74 @@ class AlbumStore(QObject):
         super().__init__(parent)
         self._albums_dir = Path(albums_dir)
         self._albums_dir.mkdir(parents=True, exist_ok=True)
+        self._check_trash_same_filesystem()
         self._albums: dict[UUID, Album] = {}
         self._folders: dict[UUID, Path] = {}
         self._current_id: UUID | None = None
         self._writer = DebouncedWriter(parent=self)
         self.rescan()
 
+    def _check_trash_same_filesystem(self) -> None:
+        """Warn if `.trash` is on a different filesystem than `Albums/`.
+
+        `delete()` uses `shutil.move` which falls back to copy+delete across
+        filesystems, voiding atomicity (a power loss mid-copy leaves a
+        half-copied trash dir). The default config has `.trash` as a
+        subdirectory of `Albums/` (same FS guaranteed), but a user could
+        symlink it elsewhere for capacity reasons. Surface the issue at
+        construction so the user sees it before the first delete."""
+        import os as _os
+        trash = self._albums_dir / TRASH_DIRNAME
+        if not trash.exists():
+            return  # default case: created lazily on first delete, same FS
+        try:
+            albums_dev = _os.stat(self._albums_dir).st_dev
+            trash_dev = _os.stat(trash).st_dev
+        except OSError:
+            return  # can't stat - skip the check rather than crash startup
+        if albums_dev != trash_dev:
+            logger.warning(
+                "%s and %s are on different filesystems; trash moves will "
+                "fall back to copy+delete (non-atomic). See ROADMAP "
+                "indie-review L4-H1.",
+                self._albums_dir, trash,
+            )
+
     @property
     def albums_dir(self) -> Path:
         return self._albums_dir
 
     def rescan(self) -> None:
-        """Walk Albums/, load every parseable album.json, skip + log corrupt ones."""
+        """Walk Albums/, load every parseable album.json, skip + log corrupt ones.
+
+        Single-threaded assumption: the AlbumStore lives on Qt's main event
+        loop and rescan() is called only from the main thread (typically at
+        startup or in response to a foreground signal). The clear()-then-
+        rebuild sequence is NOT lock-protected; a future AlbumStoreWatcher
+        that calls rescan() asynchronously while a CRUD method runs would
+        race and could resurrect deleted albums. If async re-scanning is
+        ever added, gate the body on a re-entrancy flag or move to a
+        diff-based update.
+        """
         self._albums.clear()
         self._folders.clear()
         for entry in sorted(self._albums_dir.iterdir() if self._albums_dir.exists() else []):
             if not entry.is_dir() or entry.name == TRASH_DIRNAME:
                 continue
+            # Skip dotfile / dunder directories silently (e.g. __pycache__,
+            # .git, .DS_Store dirs) - users dropping random folders into
+            # Albums/ should not produce per-rescan AlbumDirCorrupt warnings.
+            if entry.name.startswith(".") or entry.name.startswith("__"):
+                continue
             try:
                 album = load_album(entry)
             except AlbumDirCorrupt as exc:
                 logger.warning("skipping corrupt album dir %s: %s", entry, exc)
+                continue
+            except Exception as exc:
+                # Defensive: any unexpected exception (e.g. a future
+                # _deserialize bug) shouldn't abort the whole rescan.
+                logger.exception("unexpected error loading %s: %s", entry, exc)
                 continue
             self._albums[album.id] = album
             self._folders[album.id] = entry

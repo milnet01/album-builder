@@ -35,19 +35,34 @@ class LibraryWatcher(QObject):
         self._debounce.setInterval(200)
         self._debounce.timeout.connect(self.refresh)
         self._watcher.directoryChanged.connect(self._on_dir_changed)
-        self._watcher.fileChanged.connect(self._on_file_changed)
+        # NOTE: fileChanged is NOT connected. We do not addPath() any files
+        # (the per-file overhead would scale poorly with library size and
+        # the interesting events at this layer are add/remove, not in-place
+        # edit). The directory mtime change covers add/remove/rename which
+        # is what `tracks_changed` represents.
         self._rebind_watch()
 
     def _rebind_watch(self) -> None:
+        """Bind the watcher to `self._folder` AND its parent.
+
+        Watching the parent is what lets us recover from "user moves Tracks/
+        aside, recreates it" (TC-01-P2-04 path). With only a self._folder
+        watch, the deletion fires once, then the recreation goes unnoticed
+        because the inotify watch was on a now-orphan inode. Watching the
+        parent picks the recreation up via directoryChanged on the parent.
+        """
         if self._watcher.directories():
             self._watcher.removePaths(self._watcher.directories())
         if self._folder.exists():
             self._watcher.addPath(str(self._folder))
+        # Also watch the parent so a delete-recreate cycle of the folder
+        # itself fires events. Parent is typically stable (a project root or
+        # user home), so the extra watch costs nothing.
+        parent = self._folder.parent
+        if parent.exists() and parent != self._folder:
+            self._watcher.addPath(str(parent))
 
     def _on_dir_changed(self, _path: str) -> None:
-        self._debounce.start()
-
-    def _on_file_changed(self, _path: str) -> None:
         self._debounce.start()
 
     def library(self) -> Library:
