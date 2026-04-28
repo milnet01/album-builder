@@ -113,3 +113,45 @@ def test_album_set_target_range(bad: int) -> None:
     a = Album.create(name="x", target_count=5)
     with pytest.raises(ValueError):
         a.set_target(bad)
+
+
+# Spec: TC-05-01
+def test_album_reorder_basic() -> None:
+    a = Album.create(name="x", target_count=5)
+    for letter in "abcd":
+        a.select(Path(f"/abs/{letter}.mp3"))
+    a.reorder(2, 0)  # move C to front: [a,b,c,d] -> [c,a,b,d]
+    assert [p.stem for p in a.track_paths] == ["c", "a", "b", "d"]
+
+
+# Spec: TC-05-02
+def test_album_reorder_out_of_range_raises() -> None:
+    a = Album.create(name="x", target_count=5)
+    for letter in "ab":
+        a.select(Path(f"/abs/{letter}.mp3"))
+    with pytest.raises(IndexError):
+        a.reorder(5, 0)
+    with pytest.raises(IndexError):
+        a.reorder(0, 5)
+    with pytest.raises(IndexError):
+        a.reorder(-1, 0)
+
+
+# Spec: TC-05-03
+def test_album_reorder_rejected_when_approved() -> None:
+    a = Album.create(name="x", target_count=5)
+    a.select(Path("/abs/a.mp3"))
+    a.select(Path("/abs/b.mp3"))
+    a.status = AlbumStatus.APPROVED
+    with pytest.raises(ValueError):
+        a.reorder(0, 1)
+
+
+# Spec: TC-05-06
+def test_album_reorder_does_not_change_set_membership() -> None:
+    a = Album.create(name="x", target_count=5)
+    for letter in "abcd":
+        a.select(Path(f"/abs/{letter}.mp3"))
+    before = set(a.track_paths)
+    a.reorder(3, 0)
+    assert set(a.track_paths) == before

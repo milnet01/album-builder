@@ -98,3 +98,14 @@ class Album:
             )
         self.target_count = n
         self.updated_at = _now()
+
+    def reorder(self, from_idx: int, to_idx: int) -> None:
+        self._require_draft("reorder")
+        n = len(self.track_paths)
+        if not (0 <= from_idx < n and 0 <= to_idx < n):
+            raise IndexError(f"reorder out of range: from={from_idx} to={to_idx} len={n}")
+        if from_idx == to_idx:
+            return  # no-op, no write
+        item = self.track_paths.pop(from_idx)
+        self.track_paths.insert(to_idx, item)
+        self.updated_at = _now()
