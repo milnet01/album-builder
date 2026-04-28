@@ -1,6 +1,6 @@
 [project]
 name = "album-builder"
-version = "0.2.0"
+version = "0.2.1"
 description = "Curate albums from a folder of audio recordings"
 requires-python = ">=3.11"
 license = "MIT"

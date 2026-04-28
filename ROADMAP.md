@@ -106,6 +106,26 @@ Plan: [`docs/plans/2026-04-28-phase-2-albums.md`](docs/plans/2026-04-28-phase-2-
 
 ---
 
+## ✅ v0.2.1 — Phase 2 hardening (2026-04-28)
+
+Patch release closing the `/indie-review` Tier 1 + Tier 2 fix queue. Same-day follow-up to v0.2.0; no user-facing feature changes. The detailed fix breakdown lives in the per-tier sections below.
+
+**Shipped (34 items across 13 commits):**
+
+- **Tier 1 (6 ship-now items):** `AlbumStore.delete()` crash-atomicity + sub-second trash precision; `closeEvent` step-isolated try/except; CLAUDE.md rewrite; README v0.2.0 status; Phase-2-plan crosswalk truthfulness for TC-01-P2-03/04.
+- **Tier 2 (28 hardening items):** Domain invariants + per-entry OSError; JSON self-heal symmetry + state.json field-type guards + `Path.absolute()` symlink preservation; atomic-write parent fsync + `DebouncedWriter` exception guard + XDG absolute-path conformance; cross-FS trash warning + parent-folder watcher + dotfile-skip; UI a11y (keyboard activation, AccessibleTextRole, accessible names, approved tooltip); locale-aware sort; pill empty-state middle dot; counter empty-snap-to-1; setMaxLength→commit-time validation; SHM-error-class distinction + try/finally; window-geometry restore clamp; spec coherence sweep (Spec 12 `%F`, Spec 04 boundary, Spec 00 keyboard wiring status, Spec 01 watcher ownership).
+
+**Test count:** 173 → 195 passing (+22 regression tests). Ruff clean. `/audit` clean across all 7 tools.
+
+Three items intentionally deferred to v0.3.0:
+- `LibraryPane._model._toggle_enabled` direct access (refactor → public accessor on `TrackTableModel`).
+- `ACCENT_ROLE = Qt.UserRole + 2` magic-number → module constant.
+- 17 Tier 3 structural / cosmetic items (gradients, refactors, perf, doc nits — better grouped with Phase 3 work).
+
+One item accepted as v1 acceptance: stale-segment-recovery TOCTOU (microsecond race window during owner shutdown; documented in code).
+
+---
+
 ## 🔥 Cross-cutting findings from `/indie-review` (2026-04-28)
 
 8-lane multi-agent independent review (7 code lanes + 1 documentation lane). Same-mental-model blind spots caught by ≥2 reviewers. Author-bias flagged: parent session authored all of Phase 2; mitigation = fresh-context subagents widening external specs cited.
