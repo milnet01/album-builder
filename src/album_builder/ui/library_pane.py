@@ -53,6 +53,11 @@ class TrackTableModel(QAbstractTableModel):
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
             return None
+        # A stale proxy index that survives a set_tracks() reset can point
+        # past the end of the new list. Returning None lets Qt skip the cell
+        # rather than letting a Python IndexError leak into C++ slot dispatch.
+        if index.row() >= len(self._tracks):
+            return None
         track = self._tracks[index.row()]
         attr = COLUMNS[index.column()][1]
         value = getattr(track, attr)
@@ -126,6 +131,10 @@ class LibraryPane(QFrame):
         self.table.setShowGrid(False)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        # Spec 01: default sort is Title ascending. Applied here so the user
+        # sees a deterministic order on first launch — without this, rows
+        # appear in filesystem-walk order.
+        self.table.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         layout.addWidget(self.table)
 
     def set_library(self, library: Library) -> None:
