@@ -53,15 +53,15 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 
 ## 🔒 Tier 2 — hardening sweep (correctness)
 
-Pre-Phase-2 cleanup.
+✅ **All 7 landed 2026-04-28** (6 from this sweep + 1 free fix folded into Tier 1.2). 57/57 tests pass; ruff + shellcheck clean.
 
 - ✅ **HIGH — Three-way version split.** `src/album_builder/app.py` now imports `__version__` from `album_builder.version` (commit `ad0496b`, folded into Tier 1.2 since the file was already being touched).
-- 📋 **HIGH — install.sh Python version check uses wrong interpreter.** `install.sh:26`. Version string obtained from `$PY` but compared via bare `python3 -c` (could be a different binary). Use `$PY` for the comparison.
-- 📋 **HIGH — Non-deterministic COMM/USLT frame selection.** `src/album_builder/domain/track.py:101-118`. ID3 frames keyed `COMM:eng:` and `COMM:fra:` can coexist; iteration order isn't stable. Prefer `lang == "eng"`; fall back to first non-empty.
-- 📋 **HIGH — JPEG covers silently dropped.** `src/album_builder/domain/track.py:121`. Field named `cover_png` filters APIC frames to `image/png` only. Real-world WhatsApp/iTunes-tagged tracks often carry JPEG covers → silent loss in Phase 2's now-playing pane. Either rename to `cover_data` + accept any image, or add `image/jpeg` alongside PNG. Update Spec 01 to match.
-- 📋 **HIGH — WCAG AA contrast failure on placeholder text.** `src/album_builder/ui/main_window.py:85` hardcodes `#6e717c` (`text_tertiary`) at 3.2:1 against `bg_pane` — fails WCAG AA's 4.5:1. Add a `text_placeholder` token at ~`#9a9da8` (4.9:1); replace inline `setStyleSheet` with a `QLabel#PlaceholderText` QSS rule.
-- 📋 **HIGH — `TrackTableModel.data()` no row-bounds guard.** `src/album_builder/ui/library_pane.py:46`. Stale proxy index after `set_tracks()` reset can pass an out-of-range row to `data()`; bare `IndexError` bubbles into Qt's C++ slot dispatch. Add `if index.row() >= len(self._tracks): return None` after the `isValid()` guard.
-- 📋 **MEDIUM — No default sort applied at construction.** `src/album_builder/ui/library_pane.py`. Spec 01 says "Default sort: Title ascending"; add `self.table.sortByColumn(0, Qt.SortOrder.AscendingOrder)` after `addWidget(self.table)`.
+- ✅ **HIGH — install.sh Python version check uses the wrong interpreter.** Now uses `"$PY"` consistently for both version read AND comparison; tuple compare via `sys.version_info >= (3, 11)`. Commit `a7dc745`.
+- ✅ **HIGH — Non-deterministic COMM/USLT frame selection.** New `_pick_localised()` helper in `track.py` prefers `lang == "eng"` and falls back to the first non-empty other language. Empty English frames no longer shadow populated alternatives. Commit `cd829d4`.
+- ✅ **HIGH — JPEG covers silently dropped.** Field renamed `cover_png → cover_data` + new `cover_mime`. `_first_apic_image()` accepts any `image/*` MIME (PNG, JPEG, WebP, GIF). Spec 01 updated. Commit `cd829d4`.
+- ✅ **HIGH — WCAG AA contrast failure on placeholder text.** New `text_placeholder` palette token at `#9a9da8` (6.4:1 vs `bg_pane`). New `QLabel#PlaceholderText` QSS rule replaces inline `setStyleSheet`. Test asserts ratio via WCAG 2.2 luminance formula. Commit `b632264`.
+- ✅ **HIGH — `TrackTableModel.data()` no row-bounds guard.** Explicit `if index.row() >= len(self._tracks): return None` after the validity check; stale proxy indices no longer crash via `IndexError` into Qt's C++ slot dispatch. Commit `b54466d`.
+- ✅ **MEDIUM — No default sort applied at construction.** `LibraryPane.__init__` now calls `sortByColumn(0, AscendingOrder)`. Commit `b54466d`.
 
 ## ⚡ Tier 3 — structural / cosmetic
 
