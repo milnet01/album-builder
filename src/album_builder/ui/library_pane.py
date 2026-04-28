@@ -212,16 +212,16 @@ class LibraryPane(QFrame):
                 target=album.target_count,
             )
 
-    def toggle_enabled_at(self, view_row: int) -> bool:
-        # view_row here refers to source-model row (test convention); the
-        # proxy's sort order does not affect this accessor.
-        if view_row >= len(self._model._toggle_enabled):
+    def toggle_enabled_at(self, source_row: int) -> bool:
+        # Operates on source-model rows (independent of the proxy's sort).
+        # Real user clicks go through `_on_table_clicked`, which maps view->source.
+        if source_row >= len(self._model._toggle_enabled):
             return False
-        return self._model._toggle_enabled[view_row]
+        return self._model._toggle_enabled[source_row]
 
-    def row_accent_at(self, view_row: int) -> str | None:
-        # view_row here refers to source-model row (test convention).
-        src = self._model.index(view_row, 0)
+    def row_accent_at(self, source_row: int) -> str | None:
+        # Operates on source-model rows (independent of the proxy's sort).
+        src = self._model.index(source_row, 0)
         if not src.isValid():
             return None
         return self._model.data(src, Qt.ItemDataRole.UserRole + 2)
