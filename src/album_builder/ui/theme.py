@@ -171,3 +171,22 @@ def qt_stylesheet(p: Palette) -> str:
         background: none;
     }}
     """.strip()
+
+
+class Glyphs:
+    """Single source of truth for symbolic glyphs used by widgets.
+    Mirror of Spec 11 Glyphs - every widget that uses a glyph imports from here."""
+
+    DRAG_HANDLE = "⋮⋮"  # vertical-ellipsis x2 - Spec 05 middle pane
+    UP = "▲"                  # black up-pointing triangle - Spec 04 target counter
+    DOWN = "▼"                # black down-pointing triangle - Spec 04 target counter
+    TOGGLE_ON = "●"           # black circle - Spec 04 selection
+    TOGGLE_OFF = "○"          # white circle - Spec 04 selection
+    LOCK = "\U0001f512"            # lock - Spec 03 approved-album prefix
+    CHECK = "✓"               # check mark - Spec 03 active-album prefix, Spec 04 at-target
+    CARET = "▾"               # black down-pointing small triangle - Spec 03 pill dropdown indicator
+    SEARCH = "\U0001f50d"          # left-pointing magnifying glass - Spec 01 library search box
+    PLAY = "▶"                # black right-pointing triangle - Spec 06 transport
+    PAUSE = "⏸"               # double vertical bar - Spec 06 transport
+    MUTE = "\U0001f507"            # speaker with cancellation stroke - Spec 06 mute
+    UNMUTE = "\U0001f50a"          # speaker with three sound waves - Spec 06 unmute
