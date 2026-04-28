@@ -3680,8 +3680,8 @@ Every TC ID from Specs 02/03/04/05 has a home — direct test, indirect coverage
 | TC-03-13b | direct | Task 13 — `test_active_and_approved_renders_both_prefixes_in_order` (stacked active+lock prefix) |
 | TC-01-P2-01 | direct | Task 11 — `test_initial_scan_populates_library` |
 | TC-01-P2-02 | direct | Task 11 — `test_tracks_changed_fires_on_file_added` |
-| TC-01-P2-03 | direct | Task 11 — `test_tracks_changed_fires_on_file_removed` |
-| TC-01-P2-04 | direct | Task 11 — `test_watcher_survives_folder_deletion_and_recreation` |
+| TC-01-P2-03 | **deferred** | Spec 01 §Phase 2 clauses — requires diffing successive `Library.scan` results to set `Track.is_missing=True` on removal (preserving album references); Phase 2 watcher emits a re-scan only. The existing `test_tracks_changed_fires_on_file_removed` asserts the signal fires, NOT the `is_missing` semantics. Tracked for a later phase. |
+| TC-01-P2-04 | **deferred** | Spec 01 §Phase 2 clauses — requires `Library.search(include_missing=False)` parameter, not implemented in v1. The existing `test_watcher_survives_folder_deletion_and_recreation` covers folder-recreate resilience, NOT search filtering. Tracked for a later phase. |
 | TC-10-01 | direct | **Phase 1 ✓** — `tests/persistence/test_atomic_io.py` |
 | TC-10-02 | direct | **Phase 1 ✓** — `tests/persistence/test_atomic_io.py` |
 | TC-10-03 | direct | Task 6 — `test_migrate_forward_runs_chain` |
