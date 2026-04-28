@@ -1,6 +1,6 @@
 """Slug derivation for album folder names.
 
-Names are user-supplied free-text (1–80 chars, validated by Album.create);
+Names are user-supplied free-text (1-80 chars, validated by Album.create);
 slugs are URL/filesystem-safe ASCII. Derivation rules:
 - Lowercase
 - Non-[a-z0-9] runs collapse to a single '-'
