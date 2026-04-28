@@ -62,13 +62,22 @@ Written atomically (Spec 10) on every change, debounced to ~500 ms to avoid thra
 - The active album in the dropdown has a checkmark prefix.
 - The pill's gradient uses the album's "approved-green" if approved, the theme's primary purple/magenta gradient otherwise.
 
-## Tests
+## Test contract
 
-- **Unit:** `AlbumStore.list()` returns alphabetically sorted; rename moves the entry.
-- **Unit:** Switching `current_album_id` to an unknown UUID is rejected.
-- **UI (pytest-qt):** Clicking the switcher opens a popup with one item per fixture album. Selecting one fires `current_album_changed` with the right Album.
-- **UI:** Empty state opens the create dialog on click.
-- **Integration:** Quit app with album X selected; restart; album X is the current selection.
+- **TC-03-01** — `AlbumStore.list()` returns the loaded albums sorted alphabetically by `name`; rename moves the entry to the new sort position.
+- **TC-03-02** — `AlbumStore.list()` reflects the on-disk filesystem state at call time (re-walks `Albums/`); not cached.
+- **TC-03-03** — Setting `current_album_id` to a UUID not in `AlbumStore` raises (or no-ops with a warning) — never silently sets a dangling pointer.
+- **TC-03-04** — The switcher dropdown shows one entry per album with the correct badge: `selected/target` for drafts, `✓` for approved.
+- **TC-03-05** — Selecting an album from the dropdown emits `current_album_changed(Album)` exactly once with the chosen album.
+- **TC-03-06** — Empty state (zero albums on disk): pill reads `▾ No albums · + New album`; clicking the pill opens the create dialog directly (skipping the dropdown).
+- **TC-03-07** — `state.json` persists `current_album_id`; restarting the app restores the previously-selected album.
+- **TC-03-08** — Corrupt `state.json` (unparseable JSON, missing keys) → fall back to first alphabetical album; warning logged; `state.json` rewritten.
+- **TC-03-09** — `current_album_id` references a deleted album → fall back to first alphabetical; clear the stale id from `state.json`.
+- **TC-03-10** — `state.json` writes are atomic (Spec 10) and debounced ~500 ms — splitter-drag does not produce one write per pixel.
+- **TC-03-11** — An album folder whose `album.json` is corrupt is skipped on load with a one-line warning toast and a console log; app start does not crash.
+- **TC-03-12** — Approved albums in the dropdown have a lock-icon prefix.
+- **TC-03-13** — The currently-active album in the dropdown has a checkmark prefix.
+- **TC-03-14** — `AlbumStore` emits `album_added`, `album_removed`, `album_renamed` signals when corresponding filesystem changes are detected; the dropdown refreshes in response.
 
 ## Out of scope (v1)
 

@@ -1,9 +1,13 @@
+"""Tests for album_builder.domain.track — see docs/specs/01-track-library.md
+test contract for TC IDs."""
+
 from pathlib import Path
 
 from album_builder.domain.track import Track
 from tests.conftest import _write_tags
 
 
+# Spec: TC-01-04
 def test_track_from_path_parses_tags(tagged_track) -> None:
     path = tagged_track()
     track = Track.from_path(path)
@@ -18,6 +22,7 @@ def test_track_from_path_parses_tags(tagged_track) -> None:
     assert not track.is_missing
 
 
+# Spec: TC-01-05
 def test_track_from_path_with_minimal_tags(tagged_track) -> None:
     path = tagged_track()
     _write_tags(path, title="only title")  # strips everything but title
@@ -34,6 +39,7 @@ def test_track_from_path_missing_file(tmp_path: Path) -> None:
     assert track.title == "nonexistent.mp3"
 
 
+# Spec: TC-01-06
 def test_track_album_artist_falls_back_to_artist(tagged_track) -> None:
     path = tagged_track()
     _write_tags(path, title="x", artist="Solo Artist")
@@ -42,6 +48,7 @@ def test_track_album_artist_falls_back_to_artist(tagged_track) -> None:
     assert track.album_artist == "Solo Artist"
 
 
+# Spec: TC-01-04, TC-01-13
 def test_track_with_embedded_png_cover(tagged_track) -> None:
     fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
     path = tagged_track(cover_data=fake_png, cover_mime="image/png")
@@ -51,6 +58,7 @@ def test_track_with_embedded_png_cover(tagged_track) -> None:
     assert track.cover_mime == "image/png"
 
 
+# Spec: TC-01-13
 def test_track_with_embedded_jpeg_cover(tagged_track) -> None:
     """Spec 01 update: real-world WhatsApp/iTunes-tagged tracks often carry
     JPEG covers. Accept them alongside PNG."""
@@ -62,6 +70,7 @@ def test_track_with_embedded_jpeg_cover(tagged_track) -> None:
     assert track.cover_mime == "image/jpeg"
 
 
+# Spec: TC-01-13
 def test_track_rejects_non_image_apic(tagged_track) -> None:
     """An APIC payload with a non-image/* mime is dropped — we can't render
     it, and embedding random bytes in cover_data confuses the consumer."""
@@ -71,6 +80,7 @@ def test_track_rejects_non_image_apic(tagged_track) -> None:
     assert track.cover_mime is None
 
 
+# Spec: TC-01-12
 def test_track_prefers_english_comment_over_other_languages(tagged_track) -> None:
     """A file with both COMM:eng: and COMM:fra: frames must consistently
     return the English one. Without the preference, dict iteration order
@@ -96,6 +106,7 @@ def test_track_prefers_english_comment_over_other_languages(tagged_track) -> Non
     assert Track.from_path(path).comment == "english comment"
 
 
+# Spec: TC-01-12
 def test_track_falls_back_to_non_english_comment_when_no_english(tagged_track) -> None:
     from mutagen.id3 import COMM, ID3
 
@@ -108,6 +119,7 @@ def test_track_falls_back_to_non_english_comment_when_no_english(tagged_track) -
     assert Track.from_path(path).comment == "commentaire"
 
 
+# Spec: TC-01-12
 def test_track_prefers_english_lyrics_over_other_languages(tagged_track) -> None:
     from mutagen.id3 import ID3, USLT
 
@@ -121,6 +133,7 @@ def test_track_prefers_english_lyrics_over_other_languages(tagged_track) -> None
     assert Track.from_path(path).lyrics_text == "english lyrics"
 
 
+# Spec: TC-01-05, TC-01-11
 def test_track_with_unparseable_tags_uses_placeholders(tmp_path: Path) -> None:
     """Spec 01 errors-table row 3: 'Audio file with no readable tags →
     use placeholder strings; the file is still playable.' This forces the
@@ -146,6 +159,7 @@ def test_track_with_unparseable_tags_uses_placeholders(tmp_path: Path) -> None:
     assert not track.is_missing
 
 
+# Spec: TC-01-12
 def test_track_lyrics_skips_empty_english_for_non_empty_other(tagged_track) -> None:
     """An empty USLT:eng: shouldn't shadow a populated USLT:fra:."""
     from mutagen.id3 import ID3, USLT

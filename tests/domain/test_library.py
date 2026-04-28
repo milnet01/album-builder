@@ -1,19 +1,25 @@
+"""Tests for album_builder.domain.library — see docs/specs/01-track-library.md
+test contract for TC IDs."""
+
 from pathlib import Path
 
 from album_builder.domain.library import Library, SortKey
 
 
+# Spec: TC-01-02
 def test_library_scan_empty_dir(tmp_path: Path) -> None:
     lib = Library.scan(tmp_path)
     assert lib.tracks == ()
 
 
+# Spec: TC-01-01
 def test_library_scan_finds_three_tracks(tracks_dir: Path) -> None:
     lib = Library.scan(tracks_dir)
     titles = sorted(t.title for t in lib.tracks)
     assert titles == ["drift", "memoirs intro", "something more (calm)"]
 
 
+# Spec: TC-01-07
 def test_library_search_by_title(tracks_dir: Path) -> None:
     lib = Library.scan(tracks_dir)
     results = lib.search("intro")
@@ -21,6 +27,7 @@ def test_library_search_by_title(tracks_dir: Path) -> None:
     assert results[0].title == "memoirs intro"
 
 
+# Spec: TC-01-07
 def test_library_search_case_insensitive(tracks_dir: Path) -> None:
     lib = Library.scan(tracks_dir)
     assert len(lib.search("INTRO")) == 1
@@ -30,11 +37,13 @@ def test_library_search_case_insensitive(tracks_dir: Path) -> None:
     assert len(lib.search("Other Artist")) == 1
 
 
+# Spec: TC-01-07
 def test_library_search_empty_query_returns_all(tracks_dir: Path) -> None:
     lib = Library.scan(tracks_dir)
     assert len(lib.search("")) == 3
 
 
+# Spec: TC-01-08
 def test_library_sort_by_title_ascending(tracks_dir: Path) -> None:
     lib = Library.scan(tracks_dir)
     sorted_tracks = lib.sorted(SortKey.TITLE, ascending=True)
@@ -42,6 +51,7 @@ def test_library_sort_by_title_ascending(tracks_dir: Path) -> None:
     assert titles == sorted(titles)
 
 
+# Spec: TC-01-08
 def test_library_sort_by_title_descending(tracks_dir: Path) -> None:
     lib = Library.scan(tracks_dir)
     sorted_tracks = lib.sorted(SortKey.TITLE, ascending=False)
@@ -56,6 +66,7 @@ def test_library_find_by_path(tracks_dir: Path) -> None:
     assert lib.find(tracks_dir / "nonexistent.mp3") is None
 
 
+# Spec: TC-01-03
 def test_library_skips_unsupported_files(tmp_path: Path, tagged_track) -> None:
     tagged_track("song.mp3")
     (tmp_path / "readme.txt").write_text("not audio")
@@ -64,6 +75,7 @@ def test_library_skips_unsupported_files(tmp_path: Path, tagged_track) -> None:
     assert len(lib.tracks) == 1
 
 
+# Spec: TC-01-02
 def test_library_scan_unreadable_dir_returns_empty(tmp_path: Path) -> None:
     target = tmp_path / "locked"
     target.mkdir(mode=0o000)
@@ -74,6 +86,7 @@ def test_library_scan_unreadable_dir_returns_empty(tmp_path: Path) -> None:
         target.chmod(0o755)
 
 
+# Spec: TC-01-14
 def test_library_tracks_is_immutable_tuple(tracks_dir: Path) -> None:
     """A frozen dataclass with a list field is only superficially immutable —
     `lib.tracks.append(...)` mutates state through the supposedly frozen
@@ -87,6 +100,7 @@ def test_library_tracks_is_immutable_tuple(tracks_dir: Path) -> None:
         lib.tracks.append(lib.tracks[0])  # type: ignore[attr-defined]
 
 
+# Spec: TC-01-14
 def test_library_is_hashable(tracks_dir: Path) -> None:
     """A frozen dataclass with a tuple field is hashable, which lets the
     Library participate in sets / dict keys / lru_cache. The list version
@@ -95,6 +109,7 @@ def test_library_is_hashable(tracks_dir: Path) -> None:
     hash(lib)  # must not raise
 
 
+# Spec: TC-01-10
 def test_library_scan_unreadable_file_propagates(tmp_path: Path, tagged_track) -> None:
     """Per Spec 01: 'no readable tags' uses placeholders, but file-level
     PermissionError is a real I/O failure that must surface, not silently skip."""

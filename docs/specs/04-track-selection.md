@@ -100,17 +100,27 @@ All mutations debounce-write to `album.json` via Spec 10's atomic write. Debounc
 | User types `> 99` | Snaps to `99`. |
 | User types non-integer | Reverts to previous valid value on blur. |
 
-## Tests
+## Test contract
 
-- **Unit:** `Album.select(track)` appends; `select` again is no-op; order preserved on subsequent selects.
-- **Unit:** `Album.deselect(track)` removes without disturbing order of others.
-- **Unit:** `Album.set_target(n)` rejects `n < len(track_paths)`.
-- **Unit:** `Album.set_target(n)` accepts `n == len(track_paths)`.
-- **Unit:** Self-heal on load when persisted `target < len(track_paths)`.
-- **UI (pytest-qt):** Toggle a 12th of 12; OFF toggles in other rows visibly disable in the same frame.
-- **UI:** Deselect one of 12; OFF toggles re-enable.
-- **UI:** Down arrow disabled when `selected == target`; enabled otherwise.
-- **UI:** Approved album: clicking a toggle does nothing.
+- **TC-04-01** — `Album.select(track_path)` appends to `track_paths` if absent; is a no-op if already present.
+- **TC-04-02** — `Album.select` and `Album.deselect` raise (or no-op with a warning) when `album.status == APPROVED`.
+- **TC-04-03** — `Album.select` preserves the existing order of other tracks when called for an already-selected track (idempotent, no shuffle).
+- **TC-04-04** — `Album.deselect(track_path)` removes the path; preserves the relative order of the remaining tracks.
+- **TC-04-05** — `Album.deselect` on a path not currently in `track_paths` is a no-op.
+- **TC-04-06** — `Album.set_target(n)` raises `ValueError` for `n < len(track_paths)` (cannot reduce target below current selection).
+- **TC-04-07** — `Album.set_target(n)` accepts `n == len(track_paths)` (boundary-equal is allowed).
+- **TC-04-08** — `Album.set_target(n)` rejects `n < 1` and `n > 99` with `ValueError`.
+- **TC-04-09** — Self-heal on load: persisted `target_count < len(track_paths)` (corruption / hand-edit) → bump `target_count = len(track_paths)`, log warning, write back.
+- **TC-04-10** — UI: target counter `▼` is disabled in the same frame `selected_count == target_count` becomes true; re-enabled the frame `selected_count` drops below.
+- **TC-04-11** — UI: target counter `▲` is enabled while `target_count < 99`; disabled at `99`.
+- **TC-04-12** — UI: typing `0` or empty into the target field snaps to `1` on blur; typing `> 99` snaps to `99`.
+- **TC-04-13** — UI: typing a non-integer reverts to the previous valid value on blur.
+- **TC-04-14** — UI: at-target → all currently-OFF library toggles become disabled (greyed, unclickable, tooltip explains); ON toggles remain enabled (so the user can deselect).
+- **TC-04-15** — UI: deselecting a track such that `selected_count` drops below `target_count` re-enables every previously-disabled OFF toggle in the same frame.
+- **TC-04-16** — UI: approved album → toggle is non-interactive; tooltip "Album is approved. Click 'Reopen for editing' to make changes."
+- **TC-04-17** — Persistence: every selection / target mutation triggers a debounced (250 ms) atomic write to `album.json`. Rapid toggling of N tracks within the window produces ONE write, not N.
+- **TC-04-18** — UI: a selected library row gets the "in album" accent strip (coloured left border + subtle gradient).
+- **TC-04-19** — UI: a selected row whose track is missing on disk shows the accent strip in `warning` (amber) instead of the theme accent.
 
 ## Out of scope (v1)
 

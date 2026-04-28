@@ -155,15 +155,30 @@ Atomic write: write to `album.json.tmp`, fsync, rename to `album.json`. See Spec
 | `album.json.status == "approved"` but `.approved` missing | Self-heal in the other direction: write `.approved`. |
 | Conflict: app crashed mid-approval | Idempotent: re-run approval is safe. The export and report pipelines overwrite any partial output. |
 
-## Tests
+## Test contract
 
-- **Unit:** `Album.create(name="x", target_count=12)` produces a valid draft.
-- **Unit:** `Album.approve()` raises `ValueError` if `track_paths` is empty.
-- **Unit:** `Album.approve()` raises if any path doesn't exist; passes if all do.
-- **Unit:** Status transitions: only draft→approved and approved→draft allowed; any other call is a no-op or raises.
-- **Integration:** create album, write to disk, restart app (re-load), assert state matches.
-- **Integration:** approve → `.approved` marker + report present; unapprove → both gone; symlinks remain.
-- **Integration:** delete → folder moved to `.trash/` with timestamp suffix; original gone.
+Each clause is a testable assertion. Tests must reference its TC ID.
+
+- **TC-02-01** — `Album.create(name, target_count)` returns a draft `Album` with a fresh `UUID`, `track_paths == []`, `status == DRAFT`, `created_at = now`, `approved_at == None`.
+- **TC-02-02** — `Album.create` rejects empty / whitespace-only / >80-char names with `ValueError`.
+- **TC-02-03** — `Album.create` rejects `target_count < 1` with `ValueError`. (No upper bound is enforced by the domain — Spec 04 enforces ≤ 99 in the UI counter.)
+- **TC-02-04** — Slug derived from name is lowercase-kebab. Collision with an existing folder appends ` (2)`, ` (3)`, etc. — never overwrites.
+- **TC-02-05** — `Album.create` writes `Albums/<slug>/album.json` immediately (synchronous, atomic write per Spec 10).
+- **TC-02-06** — `Album.rename(new_name)` validates `1 ≤ len(trim(new_name)) ≤ 80` and rejects out-of-range with `ValueError`.
+- **TC-02-07** — `Album.rename` renames the on-disk folder to the new slug; M3U + reports remain at their relative paths inside the folder.
+- **TC-02-08** — `Album.rename` collision: append ` (2)` not overwrite.
+- **TC-02-09** — `Album.approve()` raises `ValueError` if `track_paths` is empty.
+- **TC-02-10** — `Album.approve()` raises `FileNotFoundError` (or equivalent) if any `track_path` does not exist on disk; lists all missing.
+- **TC-02-11** — `Album.approve()` is a no-op (or rejects) when `status == APPROVED`; only `DRAFT → APPROVED` and `APPROVED → DRAFT` transitions are valid.
+- **TC-02-12** — Successful `Album.approve()` writes `.approved` marker, sets `status = APPROVED`, sets `approved_at = now`, persists `album.json`.
+- **TC-02-13** — `Album.approve()` synchronously regenerates symlinks + M3U (Spec 08) and report (Spec 09); on completion all four artefacts are on disk.
+- **TC-02-14** — `Album.unapprove()` deletes `.approved` marker and `reports/`; leaves the symlink folder + M3U intact; sets `status = DRAFT`, `approved_at = None`.
+- **TC-02-15** — `Album.delete()` moves `Albums/<slug>/` to `Albums/.trash/<slug>-YYYYMMDD-HHMMSS/` (no `rm -rf`).
+- **TC-02-16** — Deleting the *current* album switches the current selection to the alphabetically-first remaining album, or to `None` if none remain.
+- **TC-02-17** — Self-heal on load: `.approved` marker present + `album.json.status == "draft"` → fix `album.json.status` to `"approved"` and write back.
+- **TC-02-18** — Self-heal on load: `album.json.status == "approved"` + `.approved` missing → write `.approved` marker.
+- **TC-02-19** — `Album.approve()` is idempotent: re-running after a partial-crash mid-approval produces a consistent on-disk state with no duplicates / leftover tmp files.
+- **TC-02-20** — `album.json` schema has `schema_version == 1` and the field set listed in §Persistence; round-trip (load → save → load) preserves every field byte-for-byte except `updated_at`.
 
 ## Out of scope (v1)
 

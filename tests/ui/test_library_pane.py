@@ -60,6 +60,7 @@ def test_track_table_model_data_handles_out_of_range_row() -> None:
     assert model.data(bogus, Qt.ItemDataRole.DisplayRole) is None
 
 
+# Spec: TC-01-09
 def test_library_pane_default_sort_is_title_ascending(populated_pane) -> None:
     """Spec 01: 'Default sort: Title ascending'. The pane must apply this at
     construction time so the user sees a deterministic order on first launch."""
@@ -68,6 +69,7 @@ def test_library_pane_default_sort_is_title_ascending(populated_pane) -> None:
     assert titles == sorted(titles, key=str.lower)
 
 
+# Spec: TC-01-15
 def test_library_pane_search_matches_album_artist(populated_pane, qtbot) -> None:
     """Per Spec 01: search covers title, artist, album_artist, composer, album.
 

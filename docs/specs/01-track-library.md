@@ -82,13 +82,61 @@ What *is* persisted: the `lrc_path` sibling files (see Spec 07) and album JSON f
 
 `.mp3`, `.mpeg` (the WhatsApp output, MP3 inside), `.m4a`, `.flac`, `.ogg`, `.opus`, `.wav`. Anything else is ignored.
 
-## Tests
+## Test contract
 
-- **Unit:** `Track.from_path(fixture.mp3)` returns expected fields; missing tags fall back; cover is bytes; duration matches `mutagen` reading.
-- **Unit:** `Library.search("sinner")` returns tracks whose title/artist/etc. contain "sinner" case-insensitively.
-- **Unit:** Sort ordering for each column, both directions.
-- **Integration:** start with 3 fixture tracks; add a 4th → `tracks_changed` fires and the library now has 4. Remove one → marked missing.
-- **Integration (slow):** scan 100 fixture tracks, assert under 2 s on test runner.
+Each clause below is a testable assertion. Every clause must have at least
+one regression test referencing its TC ID in a `# Spec: TC-NN-MM` comment
+or test docstring. Tests added for this spec must cite a TC ID — that's
+how reviewers confirm coverage validates the spec, not the implementation.
+
+### Phase 1 (shipped) clauses
+
+- **TC-01-01** — `Library.scan(folder)` returns a `Library` with one `Track` per file in `folder` whose suffix is in `{.mp3, .mpeg, .m4a, .flac, .ogg, .opus, .wav}`.
+- **TC-01-02** — `Library.scan(nonexistent)` returns `Library(tracks=())`. Same for an unreadable folder (`PermissionError` on `iterdir`).
+- **TC-01-03** — Files with unsupported extensions are silently skipped by the scan.
+- **TC-01-04** — `Track.from_path(audio)` parses ID3v2 tags: `TIT2→title`, `TPE1→artist`, `TPE2→album_artist`, `TALB→album`, `TCOM→composer`, `COMM→comment`, `USLT→lyrics_text`, `APIC (image/*)→cover_data + cover_mime`.
+- **TC-01-05** — When tags are absent, `Track.from_path` populates placeholders: `title = path.name`, `artist = "Unknown artist"`, `album_artist` cascades from `artist`, `album/composer/comment = ""`, `lyrics_text/cover_data/cover_mime = None`.
+- **TC-01-06** — `Track.album_artist` falls back to `Track.artist` when `TPE2` is missing.
+- **TC-01-07** — `Library.search(q)` matches case-insensitive substring against `title`, `artist`, `album_artist`, `composer`, `album`. Empty query returns all tracks.
+- **TC-01-08** — `Library.sorted(SortKey.TITLE)` is title-ascending; `ascending=False` reverses. Same shape for `ARTIST`, `ALBUM`, `COMPOSER`, `DURATION`.
+- **TC-01-09** — `LibraryPane` applies default sort (Title ascending) at construction, without user interaction.
+- **TC-01-10** — A file the OS refuses to read propagates `PermissionError` out of `Library.scan` — silent loss of an unreadable file is a bug.
+- **TC-01-11** — A file mutagen cannot parse (no underlying `OSError`) loads with placeholder fields (TC-01-05), not skipped or crashed.
+- **TC-01-12** — Multiple-language `COMM` / `USLT` frames: prefer `lang == "eng"`; fall back to first non-empty other-language. An empty English frame must not shadow a populated other-language frame.
+- **TC-01-13** — `APIC` frames with any `image/*` MIME populate `cover_data` and `cover_mime`. Non-image MIME (e.g. `application/octet-stream`) leaves both as `None`.
+- **TC-01-14** — `Library.tracks` is a `tuple[Track, ...]`. Mutation through the frozen-dataclass boundary (`lib.tracks.append(...)`) raises. `Library` is hashable.
+- **TC-01-15** — `LibraryPane` search-box filter scope matches `Library.search()` — 5 fields including `album_artist`, which is not a displayed column.
+
+### Phase 2 (deferred) clauses
+
+Listed here so they receive stable TC IDs at the point of *speccing*, not
+when Phase 2's tests land. Implementation is deferred per §User-visible
+behaviour and §Outputs.
+
+- **TC-01-P2-01** — `Library` exposes `signal tracks_changed` emitted when the watched folder content changes.
+- **TC-01-P2-02** — A new file added to `Tracks/` appears in `Library.tracks` within ~2 s without restart.
+- **TC-01-P2-03** — A file removed from `Tracks/` is marked `is_missing=True`; not removed from any album that already referenced it.
+- **TC-01-P2-04** — `Library.search()` excludes `is_missing` tracks by default; opt-in via `include_missing=True`.
+
+### Coverage map (Phase 1)
+
+| TC | Test(s) |
+|---|---|
+| 01-01 | `tests/domain/test_library.py::test_library_scan_finds_three_tracks` |
+| 01-02 | `test_library_scan_empty_dir`, `test_library_scan_unreadable_dir_returns_empty` |
+| 01-03 | `test_library_skips_unsupported_files` |
+| 01-04 | `tests/domain/test_track.py::test_track_from_path_parses_tags`, `test_track_with_embedded_png_cover` |
+| 01-05 | `test_track_from_path_with_minimal_tags`, `test_track_with_unparseable_tags_uses_placeholders` |
+| 01-06 | `test_track_album_artist_falls_back_to_artist` |
+| 01-07 | `test_library_search_by_title`, `test_library_search_case_insensitive`, `test_library_search_empty_query_returns_all` |
+| 01-08 | `test_library_sort_by_title_ascending`, `test_library_sort_by_title_descending` |
+| 01-09 | `tests/ui/test_library_pane.py::test_library_pane_default_sort_is_title_ascending` |
+| 01-10 | `test_library_scan_unreadable_file_propagates` |
+| 01-11 | `test_track_with_unparseable_tags_uses_placeholders` |
+| 01-12 | `test_track_prefers_english_comment_over_other_languages`, `test_track_falls_back_to_non_english_comment_when_no_english`, `test_track_prefers_english_lyrics_over_other_languages`, `test_track_lyrics_skips_empty_english_for_non_empty_other` |
+| 01-13 | `test_track_with_embedded_png_cover`, `test_track_with_embedded_jpeg_cover`, `test_track_rejects_non_image_apic` |
+| 01-14 | `test_library_tracks_is_immutable_tuple`, `test_library_is_hashable` |
+| 01-15 | `tests/ui/test_library_pane.py::test_library_pane_search_matches_album_artist` |
 
 ## Out of scope (v1)
 

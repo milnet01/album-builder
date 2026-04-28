@@ -54,13 +54,21 @@ Same as Spec 04. Drop-completed → debounced atomic write to `album.json` → r
 | Track in the order references a missing file | Row shows missing-state styling; can still be reordered or removed via toggle. |
 | User selects a new track while drag is in flight | Drag completes first; new track appends after. |
 
-## Tests
+## Test contract
 
-- **Unit:** `Album.reorder(from_idx=2, to_idx=0)` produces the expected `track_paths` permutation.
-- **Unit:** `reorder` with invalid indices raises `IndexError`.
-- **UI (pytest-qt):** Drag row 3 above row 1 → numbering shows `1, 2, 3, 4` mapped to the new physical order; `track_paths` updated accordingly.
-- **UI:** Approved album: model rejects drag (no movement, no write).
-- **Integration:** After reorder, `playlist.m3u8` reflects the new order, and the symlink filenames are renumbered.
+- **TC-05-01** — `Album.reorder(from_idx, to_idx)` produces the expected permutation of `track_paths` (e.g. `reorder(2, 0)` on `[A,B,C,D]` yields `[C,A,B,D]`).
+- **TC-05-02** — `Album.reorder` with `from_idx` or `to_idx` outside `[0, len(track_paths))` raises `IndexError`.
+- **TC-05-03** — `Album.reorder` raises (or no-ops with warning) when `album.status == APPROVED`.
+- **TC-05-04** — `Album.select` on a draft appends to the *end* of `track_paths`, not at a random position.
+- **TC-05-05** — `Album.deselect` closes the gap; subsequent track-number prefixes re-index automatically.
+- **TC-05-06** — `Album.reorder` does not change *which* tracks are selected — only their order. `set(track_paths)` is invariant under reorder.
+- **TC-05-07** — UI: dragging row N onto row M reorders + emits the reorder; during drag, the grabbed row is semi-transparent and a 2 px `accent_primary_1` line shows the drop position.
+- **TC-05-08** — UI: drag canceled by dropping outside the list returns the row to its original position; no write is fired.
+- **TC-05-09** — UI: approved album → drag handles are hidden; the model's `flags()` excludes `Qt.ItemIsDragEnabled` so drag does not start.
+- **TC-05-10** — UI: dragging row 1 onto itself is a no-op; no write fired.
+- **TC-05-11** — UI: 1-track album shows the drag handle but reorder has no effect.
+- **TC-05-12** — Persistence: drop-completed → debounced atomic write to `album.json`; export pipeline (Spec 08) re-runs to renumber symlink filenames and re-emit `playlist.m3u8`.
+- **TC-05-13** — A track in the order whose file is missing on disk shows missing-state styling but remains reorderable; toggle-off via the row's toggle is also still allowed.
 
 ## Out of scope (v1)
 
