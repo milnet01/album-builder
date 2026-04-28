@@ -12,7 +12,7 @@ Discover the audio files in `Tracks/`, parse their metadata, and present a live,
 - Each row shows: title, artist, album, composer, duration. Cover thumbnail is loaded lazily for the now-playing pane (not the library row, to keep the list compact).
 - A search box at the top of the library pane filters rows by case-insensitive substring match against title, artist, album_artist, composer, and album.
 - Column headers are click-to-sort (Title, Artist, Album, Composer, Duration). Default sort: Title ascending. Clicking the same header toggles direction.
-- *(Phase 2 — deferred)* New files dropped into `Tracks/` appear within ~2 seconds without restarting; files removed from `Tracks/` are marked **missing** in the library (greyed out, excluded from search by default, unselectable for new albums). Albums that already reference a missing file show the gap and warn at approve time. Phase 1 rescans only at app start.
+- *(Phase 2)* New files dropped into `Tracks/` appear within ~2 seconds without restarting; files removed from `Tracks/` are marked **missing** in the library (greyed out, excluded from search by default, unselectable for new albums). Albums that already reference a missing file show the gap and warn at approve time.
 - Duration is shown as `m:ss` for under an hour, `h:mm:ss` otherwise.
 
 ## Inputs
@@ -34,7 +34,7 @@ Discover the audio files in `Tracks/`, parse their metadata, and present a live,
   - `tracks: list[Track]`
   - `find(path) -> Track | None`
   - `search(query: str) -> list[Track]`
-  - *(Phase 2 — deferred)* `signal tracks_changed` — emitted when the watched folder content changes; bound to a `QFileSystemWatcher`.
+  - *(Phase 2)* `signal tracks_changed` — emitted when the watched folder content changes; bound to a `QFileSystemWatcher`.
 
 ## Data shape
 
@@ -109,11 +109,9 @@ how reviewers confirm coverage validates the spec, not the implementation.
 - **TC-01-14** — `Library.tracks` is a `tuple[Track, ...]`. Mutation through the frozen-dataclass boundary (`lib.tracks.append(...)`) raises. `Library` is hashable.
 - **TC-01-15** — `LibraryPane` search-box filter scope matches `Library.search()` — 5 fields including `album_artist`, which is not a displayed column.
 
-### Phase 2 (deferred) clauses
+### Phase 2 clauses
 
-Listed here so they receive stable TC IDs at the point of *speccing*, not
-when Phase 2's tests land. Implementation is deferred per §User-visible
-behaviour and §Outputs.
+Implemented via `LibraryWatcher` service (Spec 11).
 
 - **TC-01-P2-01** — `Library` exposes `signal tracks_changed` emitted when the watched folder content changes.
 - **TC-01-P2-02** — A new file added to `Tracks/` appears in `Library.tracks` within ~2 s without restart.
