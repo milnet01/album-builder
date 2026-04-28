@@ -50,7 +50,9 @@ class MainWindow(QMainWindow):
         self.splitter.addWidget(self.album_order_pane)
         self.splitter.addWidget(self.now_playing_pane)
 
-        self.splitter.setSizes([500, 350, 550])
+        # Relative ratios (Qt normalises across the splitter's actual width),
+        # not absolute pixels — works on both 1080p and HiDPI displays.
+        self.splitter.setSizes([5, 3, 5])
         outer.addWidget(self.splitter, stretch=1)
 
     def _build_top_bar(self) -> QFrame:

@@ -130,4 +130,44 @@ def qt_stylesheet(p: Palette) -> str:
         color: {p.text_disabled};
         border-color: {p.border};
     }}
+    /* Spec 11 focus ring: 2 px outline at accent_primary_1. Qt QSS does not
+       support outline-offset, so we widen the existing border and shrink
+       padding by the same amount to avoid layout shift on focus. */
+    QPushButton:focus {{
+        border: 2px solid {p.accent_primary_1};
+        padding: 4px 11px;
+    }}
+    QTableView:focus {{
+        border: 2px solid {p.accent_primary_1};
+    }}
+    QLineEdit:focus {{
+        border: 2px solid {p.accent_primary_1};
+        padding: 3px 7px;
+    }}
+    QScrollBar:vertical {{
+        background-color: {p.bg_pane};
+        width: 10px;
+        margin: 0;
+    }}
+    QScrollBar:horizontal {{
+        background-color: {p.bg_pane};
+        height: 10px;
+        margin: 0;
+    }}
+    QScrollBar::handle:vertical, QScrollBar::handle:horizontal {{
+        background-color: {p.border_strong};
+        border-radius: 5px;
+        min-height: 24px;
+        min-width: 24px;
+    }}
+    QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {{
+        background-color: {p.text_tertiary};
+    }}
+    QScrollBar::sub-line, QScrollBar::add-line {{
+        height: 0;
+        width: 0;
+    }}
+    QScrollBar::sub-page, QScrollBar::add-page {{
+        background: none;
+    }}
     """.strip()

@@ -130,7 +130,20 @@ class LibraryPane(QFrame):
         self.table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
         self.table.setShowGrid(False)
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        # Title gets the leftover space; metadata columns size to content.
+        # Stretching everything equally truncated long titles in a narrow pane
+        # while wasting horizontal space on the 7-character Duration column.
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for col in range(1, len(COLUMNS)):
+            header.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
+        # Sensible default widths so the table is usable before the user
+        # touches any column gripper.
+        self.table.setColumnWidth(1, 140)  # Artist
+        self.table.setColumnWidth(2, 160)  # Album
+        self.table.setColumnWidth(3, 140)  # Composer
+        self.table.setColumnWidth(4, 70)   # Duration
+        self.table.setMinimumWidth(420)
         # Spec 01: default sort is Title ascending. Applied here so the user
         # sees a deterministic order on first launch — without this, rows
         # appear in filesystem-walk order.

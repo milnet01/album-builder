@@ -14,7 +14,9 @@ ICON_PNG="${INSTALL_PREFIX}/share/icons/hicolor/256x256/apps/album-builder.png"
 ICON_SVG="${INSTALL_PREFIX}/share/icons/hicolor/scalable/apps/album-builder.svg"
 BIN="${INSTALL_PREFIX}/bin/album-builder"
 
-if pgrep -f "python.* -m album_builder" >/dev/null; then
+# Match python, python3, python3.11, python3.13 — but not "pythonista" or
+# random binaries that happen to start with the letters "python".
+if pgrep -f "python[0-9.]* -m album_builder" >/dev/null; then
     echo "Quit Album Builder first." >&2
     exit 1
 fi
@@ -33,4 +35,9 @@ gtk-update-icon-cache -t "$INSTALL_PREFIX/share/icons/hicolor" || true
 if command -v kbuildsycoca6 >/dev/null; then kbuildsycoca6 || true; fi
 
 echo "Uninstalled."
-[[ $PURGE -eq 0 ]] && echo "User settings preserved at ~/.config/album-builder (use --purge to remove)."
+# Plain `if` rather than `[[ … ]] && echo`: under `set -e`, a compound
+# `false-test && echo` makes the whole script exit if it's the final command
+# in some shell variants. `if` is unambiguously safe.
+if [[ $PURGE -eq 0 ]]; then
+    echo "User settings preserved at ~/.config/album-builder (use --purge to remove)."
+fi

@@ -55,3 +55,25 @@ def test_qt_stylesheet_includes_placeholder_text_rule() -> None:
     objectName instead of inline setStyleSheet (which bypasses the palette)."""
     qss = qt_stylesheet(Palette.dark_colourful())
     assert "QLabel#PlaceholderText" in qss
+
+
+def test_qt_stylesheet_carries_focus_ring_rules() -> None:
+    """Spec 11 §state-styling: 2px focus outline at accent_primary_1 on
+    interactive controls. The focus ring is a keyboard-nav affordance —
+    without it, sighted-keyboard and screen-reader users can't tell which
+    widget will receive Enter."""
+    p = Palette.dark_colourful()
+    qss = qt_stylesheet(p)
+    assert "QPushButton:focus" in qss
+    assert "QTableView:focus" in qss
+    # The 2px width for the focus indicator is in spec
+    assert "2px solid" in qss
+    # accent_primary_1 is the spec'd colour
+    assert p.accent_primary_1 in qss
+
+
+def test_qt_stylesheet_styles_scrollbars() -> None:
+    """The dark theme must style QScrollBar; Qt's default scrollbar is the
+    Plasma/system widget, which clashes visibly with the dark palette."""
+    qss = qt_stylesheet(Palette.dark_colourful())
+    assert "QScrollBar" in qss

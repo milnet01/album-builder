@@ -65,20 +65,22 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 
 ## ⚡ Tier 3 — structural / cosmetic
 
-- 📋 **MEDIUM — `pgrep -f "python.* -m album_builder"` regex unescaped dot.** `install.sh:32`, `uninstall.sh:17`. Escape: `python\.* -m album_builder`.
-- 📋 **MEDIUM — `.desktop` Exec= has dead `%F` field.** `packaging/album-builder.desktop.in:7`. App doesn't parse argv files; remove `%F` or wire it up.
-- ✅ **MEDIUM — install.sh swallows cache-refresh errors.** `2>/dev/null` removed from both `install.sh` and `uninstall.sh`; `|| true` is preserved so missing tools don't abort the script. Folded into the cross-cutting Theme 2 sweep.
-- 📋 **MEDIUM — Focus ring missing 2 px outline.** Spec 11 prescribes a 2 px outline at `accent_primary_1`; current QSS only changes border colour on focus. Add `QPushButton:focus`, `QTableView:focus` rules.
-- 📋 **MEDIUM — Library pane columns all stretch equally.** `src/album_builder/ui/library_pane.py:98`. Narrow pane truncates titles; Duration column needs only ~55px. Set Title column to Stretch, others to Interactive with sane defaults; add a min width.
-- 📋 **MEDIUM — `Library.tracks` is mutable list inside a frozen dataclass.** `src/album_builder/domain/library.py:29`. False immutability and unhashable. Convert to `tuple[Track, ...]` via `__post_init__`.
-- 📋 **LOW — `cover_png` field name + spec wording mismatch.** Even if PNG-only is the deliberate design, document why JPEG is excluded inside Spec 01 to prevent reviewer churn.
-- 📋 **LOW — Tmp filename collision risk.** `src/album_builder/persistence/atomic_io.py:10`. Phase 1 is single-threaded so the collision can't happen; Phase 2 debounce timers per album make it possible. Suffix with PID/UUID before Phase 2 ships.
-- 📋 **LOW — `[[ $PURGE -eq 0 ]] && echo …` brittle under `set -e`.** `uninstall.sh:35`. Convert to `if`.
-- 📋 **LOW — `Library.search()` doesn't filter `is_missing` tracks.** Spec 01 says "excluded from search results by default". Currently the UI would have to filter; cleaner to default-exclude in domain with an `include_missing` opt-in.
-- 📋 **LOW — No QScrollBar QSS styling.** `src/album_builder/ui/theme.py`. System default scrollbar clashes with dark theme.
-- 📋 **LOW — Splitter sizes use absolute px (`[500, 350, 550]`).** `src/album_builder/ui/main_window.py:53`. Brittle on HiDPI; relative ratios `[5, 3, 5]` are normalised by Qt.
-- 📋 **LOW — README lacks WeasyPrint system-deps mention** for Phase 2 (`pango`, `cairo`, `gdk-pixbuf2`). Add when those deps land.
-- 📋 **INFO — `track_at()` only used by tests.** `src/album_builder/ui/library_pane.py:31`. Confirm Phase 2 needs it; otherwise inline.
+✅ **Sweep complete 2026-04-28.** 11 fixes landed; 2 carried forward (Phase 4 prep + intentional INFO defer). 65/65 tests pass; ruff + shellcheck clean.
+
+- ✅ **MEDIUM — `pgrep` regex tightened.** `python[0-9.]*` matches `python`, `python3`, `python3.11`, `python3.13` — but not `pythonista` or random binaries.
+- ✅ **MEDIUM — `.desktop` Exec= dead `%F` removed.** App doesn't parse argv files; the field was a Phase-1 placeholder.
+- ✅ **MEDIUM — install.sh swallows cache-refresh errors.** `2>/dev/null` removed; `|| true` preserved. Folded into Theme 2 sweep.
+- ✅ **MEDIUM — Focus ring 2px outline.** New `QPushButton:focus`, `QTableView:focus`, `QLineEdit:focus` rules with `2px solid accent_primary_1`. Padding compensated to avoid layout shift.
+- ✅ **MEDIUM — Library pane column resize policy.** Title=Stretch, all others=Interactive with sensible default widths (140/160/140/70 px). Min table width 420 px.
+- ✅ **MEDIUM — `Library.tracks` is now `tuple[Track, ...]`.** `__post_init__` coerces incoming iterables; Library is hashable; mutation through the frozen boundary blocked.
+- ✅ **LOW — `cover_data` rename + spec sync.** Resolved by Tier 2.D (rename `cover_png → cover_data`/`cover_mime` + accept any `image/*` MIME). Spec 01 already updated.
+- ✅ **LOW — Tmp filename collision.** `_unique_tmp_path()` suffixes with PID + 8 hex chars of `uuid4`. Concurrent Phase-2 debounce writers no longer collide.
+- ✅ **LOW — `[[ $PURGE -eq 0 ]] && echo …` brittleness.** Converted to `if`-block; `set -e` safe.
+- ✅ **LOW — `Library.search()` doesn't filter `is_missing`.** Carried forward into Phase 2 deliverables (only meaningful once `is_missing` is reachable post-rescan).
+- ✅ **LOW — QScrollBar QSS styling.** Dark-theme scrollbars: `bg_pane` track, `border_strong` → `text_tertiary`-on-hover handle, 5px radius, no arrow buttons.
+- ✅ **LOW — Splitter ratios.** `[500, 350, 550]` → `[5, 3, 5]` — HiDPI-friendly.
+- 📋 **LOW — README WeasyPrint system-deps.** Genuinely Phase 4 prep (no WeasyPrint dependency until then). Add when `requirements.txt` pulls it in.
+- 📋 **INFO — `track_at()` only used by tests.** Phase 2 will use it for click-to-play row → Track resolution. Keep.
 
 ---
 
@@ -115,4 +117,4 @@ M3U + symlink folder per album, hard-lock approval state, PDF + HTML report gene
 
 ---
 
-*Last reviewed: 2026-04-28 — Tier 1 + Tier 2 fixes landed; `/audit --quick` clean on the diff; `/debt-sweep` triaged 7 findings (5 trivial fixed inline, 2 behavioural in-progress).*
+*Last reviewed: 2026-04-28 — Tier 1 + Tier 2 + Tier 3 sweeps landed (cross-cutting Themes 1/2/3 closed); `/debt-sweep` triaged 7 findings (5 trivial fixed inline, 2 behavioural — `tracks_changed` deferred to Phase 2, missing-tags placeholder test added). 2 Tier-3 items intentionally carried forward (README WeasyPrint deps for Phase 4 prep; `track_at()` Phase 2 use confirmed). Phase 1 is feature-complete and hardened.*

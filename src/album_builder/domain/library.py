@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
@@ -26,18 +26,26 @@ class SortKey(StrEnum):
 @dataclass(frozen=True)
 class Library:
     folder: Path
-    tracks: list[Track] = field(default_factory=list)
+    tracks: tuple[Track, ...] = ()
+
+    def __post_init__(self) -> None:
+        # Permit callers to pass any iterable (list, generator) — but store
+        # as a tuple so the frozen-dataclass guarantee holds and Library is
+        # hashable. object.__setattr__ is the standard escape hatch for a
+        # frozen dataclass to coerce its own field in __post_init__.
+        if not isinstance(self.tracks, tuple):
+            object.__setattr__(self, "tracks", tuple(self.tracks))
 
     @classmethod
     def scan(cls, folder: Path) -> Library:
         folder = Path(folder).resolve()
         if not folder.exists():
-            return cls(folder=folder, tracks=[])
+            return cls(folder=folder, tracks=())
         try:
             entries = sorted(folder.iterdir())
         except OSError:
             # folder unreadable (permissions, transient mount loss): empty library
-            return cls(folder=folder, tracks=[])
+            return cls(folder=folder, tracks=())
         tracks: list[Track] = []
         for entry in entries:
             if entry.is_file() and entry.suffix.lower() in SUPPORTED_EXTENSIONS:
@@ -50,7 +58,7 @@ class Library:
                     # skip silently. OSError (PermissionError, transient mount
                     # loss) is unwrapped by Track.from_path and propagates.
                     continue
-        return cls(folder=folder, tracks=tracks)
+        return cls(folder=folder, tracks=tuple(tracks))
 
     def find(self, path: Path) -> Track | None:
         target = Path(path).resolve()

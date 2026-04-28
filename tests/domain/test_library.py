@@ -5,7 +5,7 @@ from album_builder.domain.library import Library, SortKey
 
 def test_library_scan_empty_dir(tmp_path: Path) -> None:
     lib = Library.scan(tmp_path)
-    assert lib.tracks == []
+    assert lib.tracks == ()
 
 
 def test_library_scan_finds_three_tracks(tracks_dir: Path) -> None:
@@ -69,9 +69,30 @@ def test_library_scan_unreadable_dir_returns_empty(tmp_path: Path) -> None:
     target.mkdir(mode=0o000)
     try:
         lib = Library.scan(target)
-        assert lib.tracks == []
+        assert lib.tracks == ()
     finally:
         target.chmod(0o755)
+
+
+def test_library_tracks_is_immutable_tuple(tracks_dir: Path) -> None:
+    """A frozen dataclass with a list field is only superficially immutable —
+    `lib.tracks.append(...)` mutates state through the supposedly frozen
+    boundary, and the dataclass is unhashable. Convert to tuple so the type
+    system enforces what the @dataclass(frozen=True) decorator promises."""
+    import pytest as _pytest
+
+    lib = Library.scan(tracks_dir)
+    assert isinstance(lib.tracks, tuple)
+    with _pytest.raises((AttributeError, TypeError)):
+        lib.tracks.append(lib.tracks[0])  # type: ignore[attr-defined]
+
+
+def test_library_is_hashable(tracks_dir: Path) -> None:
+    """A frozen dataclass with a tuple field is hashable, which lets the
+    Library participate in sets / dict keys / lru_cache. The list version
+    raised TypeError on hash()."""
+    lib = Library.scan(tracks_dir)
+    hash(lib)  # must not raise
 
 
 def test_library_scan_unreadable_file_propagates(tmp_path: Path, tagged_track) -> None:

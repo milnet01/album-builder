@@ -31,8 +31,10 @@ if ! "$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'; t
     exit 1
 fi
 
-# 2. Refuse to run while the app is open (single-instance lock)
-if pgrep -f "python.* -m album_builder" >/dev/null; then
+# 2. Refuse to run while the app is open (single-instance lock).
+# Match python, python3, python3.11, python3.13 — but not "pythonista" or
+# random binaries that happen to start with "python".
+if pgrep -f "python[0-9.]* -m album_builder" >/dev/null; then
     echo "Quit Album Builder first; it is currently running." >&2
     exit 1
 fi
