@@ -109,7 +109,7 @@ def _accept_raise(server: QLocalServer, window: QMainWindow) -> None:
         return
 
     def on_ready_read() -> None:
-        message = bytes(sock.readAll()).strip()
+        message = sock.readAll().data().strip()
         if message == RAISE_MESSAGE.strip():
             _bring_to_front(window)
         sock.disconnectFromServer()
