@@ -103,7 +103,7 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-03-06** — Empty state (zero albums on disk): pill reads `▾ No albums · + New album`; clicking the pill opens the create dialog directly (skipping the dropdown).
 - **TC-03-07** — `state.json` persists `current_album_id`; restarting the app restores the previously-selected album.
 - **TC-03-08** — Corrupt `state.json` (unparseable JSON, missing keys) → fall back to first alphabetical album; warning logged; `state.json` rewritten.
-- **TC-03-09** — `current_album_id` references a deleted album → fall back to first alphabetical; clear the stale id from `state.json`.
+- **TC-03-09** — `current_album_id` references a deleted album → fall back to first alphabetical; clear the stale id from `state.json`. Implementation note: MainWindow's restoration block does an ad-hoc `store.get(state.current_album_id)` lookup BEFORE calling `set_current(...)`, rather than calling `set_current` directly and catching the `ValueError`. Both paths satisfy TC-03-09; the lookup-first approach avoids the spurious exception when the persisted id is stale.
 - **TC-03-10** — `state.json` writes are atomic (Spec 10) and debounced **250 ms** (the canonical app-wide window — Spec 10 §Debounce) — splitter-drag does not produce one write per pixel.
 - **TC-03-11** — An album folder whose `album.json` is corrupt is skipped on load with a one-line warning toast and a console log; app start does not crash.
 - **TC-03-12** — Approved albums in the dropdown have the `🔒` lock-icon prefix.

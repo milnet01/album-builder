@@ -34,7 +34,7 @@ Discover the audio files in `Tracks/`, parse their metadata, and present a live,
   - `tracks: list[Track]`
   - `find(path) -> Track | None`
   - `search(query: str) -> list[Track]`
-  - *(Phase 2)* `signal tracks_changed` — emitted when the watched folder content changes; bound to a `QFileSystemWatcher`.
+  - *(Phase 2)* The signal `tracks_changed(Library)` is exposed by **`LibraryWatcher`** (Spec-internal service in `services/library_watcher.py`), not by `Library` itself - `Library` stays a frozen-dataclass snapshot with no Qt dependency. `LibraryWatcher` wraps a `QFileSystemWatcher` around the source folder and emits a fresh `Library` on debounced change.
 
 ## Data shape
 

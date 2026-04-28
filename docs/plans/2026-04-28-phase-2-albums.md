@@ -3713,6 +3713,8 @@ Every TC ID from Specs 02/03/04/05 has a home — direct test, indirect coverage
 | TC-11-09 | indirect | Task 17 cover-placeholder rendering — exercised by manual smoke-test step 5; pixel-exact gradient assertion is out of scope (per Spec 11 §Tests) |
 | TC-11-10 | **Phase 4** | Footer renders `__version__` at render time — TC-09-02 covers the same assertion; only re-tested when Phase 4 lands |
 | TC-11-11 | direct | Task 12 step 0 — `Glyphs` namespace constants are reachable via `chr(codepoint)` and present in QFont coverage (asserted by widget render tests) |
+| TC-12-01..05 | direct | **Phase 1 ✓** — `tests/test_app.py` covers `_resolve_tracks_dir` priorities, single-instance lock acquisition + stale-segment recovery, `QIcon.fromTheme` resolution. |
+| TC-12-06..09 | indirect / manual | Phase 2 keeps the Phase-1 single-instance machinery untouched; the raise-handshake + `setDesktopFileName` + `StartupWMClass` association are exercised by manual smoke (launch twice, second invocation focuses the first's window). No automated test in v1 — pytest cannot reliably spawn a second QApplication in the same process. |
 
 Indirect coverage means: there is no single test asserting the TC verbatim, but the behaviour the TC describes is the composition of mechanisms that ARE individually tested. This is acceptable for wiring-class TCs (debounce + signal routing) where the failure mode would also fail one of the unit tests upstream. For each indirect entry, Phase 2's manual smoke-test in Task 17 step 5 exercises the path end-to-end — if any indirect TC silently breaks, the smoke-test catches it before release.
 

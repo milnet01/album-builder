@@ -90,7 +90,7 @@ Version=1.0
 Name=Album Builder
 GenericName=Music Album Curator
 Comment=Curate albums from a folder of recordings
-Exec=@@LAUNCHER@@ %F
+Exec=@@LAUNCHER@@
 Icon=album-builder
 Terminal=false
 Categories=AudioVideo;Audio;Music;Qt;
@@ -102,7 +102,7 @@ Keywords=album;music;curate;tracks;
 
 Notes:
 
-- `Exec=…` is patched at install time with the real launcher path.
+- `Exec=…` is patched at install time with the real launcher path. No `%F` field code: the app does not parse argv files, and the freedesktop spec recommends omitting field codes when not used. (If file-association lands later, restore `%F` and wire `QApplication.arguments()` parsing in `run()`.)
 - `Icon=album-builder` is a **theme name**, not a file path. KDE resolves it via the freedesktop icon spec.
 - `StartupWMClass=album-builder` lets KDE associate the running app to the launcher icon (so the taskbar groups them correctly). The app sets the same string via `QApplication.setDesktopFileName("album-builder")`.
 - `Categories=AudioVideo;Audio;Music;Qt;` puts it in the Multimedia section of the K Menu.

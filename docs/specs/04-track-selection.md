@@ -19,7 +19,7 @@ The mechanism by which a user picks tracks for the current album. Comprises the 
 - Colour state of the readout, anchored in Spec 11 palette tokens:
   - `selected < target` → `text-secondary` (neutral grey).
   - `selected == target` → `success` (green) with a `✓` glyph.
-  - `selected > target` → **cannot happen by design** (if the on-disk JSON ever has it, it's a corruption — see Errors).
+  - `selected > target` → **cannot happen by design** (if the on-disk JSON ever has it, it's a corruption — see Errors). The boundary case `selected == target` is the at-target state and is **valid**: the user has filled the album exactly. `select()` refuses additional adds; `set_target(n)` refuses `n < selected_count` but accepts `n == selected_count`.
 
 ### On/off toggle (library row)
 
