@@ -84,23 +84,29 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 
 ---
 
-## 🔭 Upcoming phases
+## ✅ v0.2.0 — Phase 2: Albums (2026-04-28)
 
-### 🚧 v0.2.0 — Phase 2: Albums (planned)
+Phase 2 lands the entire album state machine + service layer + UI on top of Phase 1's library. Specs: **02** (lifecycle), **03** (switcher), **04** (selection + target counter), **05** (drag-reorder), **10** (full schema-versioning framework + per-key debounce + state.json), **11** (palette tokens + glyph anchors used by the new widgets), and Spec 01 TC-01-P2-01..02 (`tracks_changed` + `QFileSystemWatcher` watcher mechanism).
 
-Phase 2 lands the entire album state machine + service layer + UI on top of Phase 1's library. Specs: **02** (lifecycle), **03** (switcher), **04** (selection + target counter), **05** (drag-reorder), **10** (full schema-versioning framework + per-key debounce + state.json), **11** (palette tokens + glyph anchors used by the new widgets), and Spec 01 Phase-2-deferred items (`tracks_changed` + `QFileSystemWatcher`).
-
-**Deliverables (mirror of `docs/plans/2026-04-28-phase-2-albums.md` Tasks 1–18):**
+**Shipped (Tasks 1–18 from `docs/plans/2026-04-28-phase-2-albums.md`):**
 
 - Domain — `Album` dataclass + `AlbumStatus` + state machine (create, rename, select, deselect, set_target, reorder, approve, unapprove); `slug` helper with collision resolver.
-- Persistence — schema-version migration runner (`migrate_forward`); `album.json` (de)serialization with self-heal; `state.json` AppState round-trip; `DebouncedWriter` (250 ms per-key idle); ISO-8601 ms-precision Z-suffix encoding helper.
-- Services — `AlbumStore` (Qt-aware CRUD + signals + `.trash` backup + service-level `approve` / `unapprove`); `LibraryWatcher` (closes TC-01-P2-01..04).
-- UI — `TargetCounter` widget; `AlbumSwitcher` pill dropdown; `AlbumOrderPane` (middle pane drag-reorder); `LibraryPane` extensions (selection toggle column + at-target disable + accent strip); `TopBar` (composes switcher + name editor + counter + approve/reopen); `MainWindow` wire-up + state restore + close-flush.
-- Release — bump 0.1.0 → 0.2.0; ROADMAP close-out.
+- Persistence — schema-version migration runner (`migrate_forward`); `album.json` (de)serialization with self-heal (relative-path resolve, target-vs-count bump, marker/status reconcile); `state.json` AppState round-trip with corrupt/too-new fallback; `DebouncedWriter` (250 ms per-key idle); ISO-8601 ms-precision Z-suffix encoding helper.
+- Services — `AlbumStore` (Qt-aware CRUD + signals + `.trash` backup + service-level `approve` / `unapprove`); `LibraryWatcher` wraps `QFileSystemWatcher` with 200 ms debounce.
+- UI — `TargetCounter` widget; `AlbumSwitcher` pill dropdown (stackable ✓/🔒 prefixes); `AlbumOrderPane` (middle pane drag-reorder via `QListWidget.InternalMove`); `LibraryPane` extensions (selection toggle column + at-target disable + accent strip with primary/warning variants); `TopBar` (composes switcher + name editor + counter + approve/reopen); `MainWindow` fully wired with state restore + close-flush + window-resize/move state-save.
+- Release — bumped 0.1.0 → 0.2.0; ROADMAP close-out.
 
 Two TCs explicitly Phase-4-deferred: TC-02-13 (export-pipeline regen on approve) and TC-02-19 (export-pipeline crash-injection idempotence). Phase 2's `AlbumStore.approve()` writes the `.approved` marker + flips status only.
 
-Plan: [`docs/plans/2026-04-28-phase-2-albums.md`](docs/plans/2026-04-28-phase-2-albums.md) (~3700 lines, 18 tasks, ready to execute).
+Spec 01 deferral correction: TC-01-P2-03 (Track.is_missing on file-removed) and TC-01-P2-04 (Library.search filter parameter) remain deferred — they require diffing successive scans + a search() kwarg. Spec 01 was updated to reflect this honestly rather than claim full TC-01-P2-01..04 coverage.
+
+**Test contract:** all 79 TCs in the plan crosswalk are mapped to direct/indirect/deferred coverage. Final test count: 171 passing (up from 86 at end of Phase 1).
+
+Plan: [`docs/plans/2026-04-28-phase-2-albums.md`](docs/plans/2026-04-28-phase-2-albums.md) (~3700 lines, 18 tasks, all complete).
+
+---
+
+## 🔭 Upcoming phases
 
 ### 📋 v0.3.0 — Phase 3: Playback & Lyrics (planned)
 
