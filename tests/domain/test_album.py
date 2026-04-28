@@ -155,3 +155,40 @@ def test_album_reorder_does_not_change_set_membership() -> None:
     before = set(a.track_paths)
     a.reorder(3, 0)
     assert set(a.track_paths) == before
+
+
+# Spec: TC-02-09
+def test_album_approve_rejects_empty_selection() -> None:
+    a = Album.create(name="x", target_count=3)
+    with pytest.raises(ValueError):
+        a.approve()
+
+
+# Spec: TC-02-11
+def test_album_approve_rejected_when_already_approved() -> None:
+    a = Album.create(name="x", target_count=3)
+    a.select(Path("/abs/a.mp3"))
+    a.status = AlbumStatus.APPROVED
+    with pytest.raises(ValueError):
+        a.approve()
+
+
+# Spec: TC-02-12
+def test_album_approve_flips_status_and_stamps() -> None:
+    a = Album.create(name="x", target_count=3)
+    a.select(Path("/abs/a.mp3"))
+    before = a.updated_at
+    a.approve()
+    assert a.status == AlbumStatus.APPROVED
+    assert a.approved_at is not None
+    assert a.updated_at >= before
+
+
+# Spec: TC-02-14
+def test_album_unapprove_clears_approval() -> None:
+    a = Album.create(name="x", target_count=3)
+    a.select(Path("/abs/a.mp3"))
+    a.approve()
+    a.unapprove()
+    assert a.status == AlbumStatus.DRAFT
+    assert a.approved_at is None

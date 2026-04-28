@@ -109,3 +109,20 @@ class Album:
         item = self.track_paths.pop(from_idx)
         self.track_paths.insert(to_idx, item)
         self.updated_at = _now()
+
+    def approve(self) -> None:
+        if self.status != AlbumStatus.DRAFT:
+            raise ValueError(f"cannot approve from status {self.status!r}; only draft -> approved")
+        if not self.track_paths:
+            raise ValueError("cannot approve an empty album; select at least one track")
+        now = _now()
+        self.status = AlbumStatus.APPROVED
+        self.approved_at = now
+        self.updated_at = now
+
+    def unapprove(self) -> None:
+        if self.status != AlbumStatus.APPROVED:
+            raise ValueError(f"cannot unapprove from status {self.status!r}")
+        self.status = AlbumStatus.DRAFT
+        self.approved_at = None
+        self.updated_at = _now()
