@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import shutil
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -112,13 +112,24 @@ class AlbumStore(QObject):
         self.album_renamed.emit(album)
 
     def delete(self, album_id: UUID) -> None:
-        folder = self._folders.pop(album_id, None)
-        self._albums.pop(album_id, None)
+        # Move-then-mutate: if shutil.move raises (disk full, EXDEV, perms),
+        # state is unchanged and the caller can retry. Mutating in-memory
+        # state before the move would orphan the folder on disk while the
+        # store has already forgotten the album.
+        folder = self._folders.get(album_id)
         if folder is not None and folder.exists():
             trash = self._albums_dir / TRASH_DIRNAME
             trash.mkdir(exist_ok=True)
-            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            # Microsecond precision (UTC, matching the rest of the codebase)
+            # so two rapid deletes of albums sharing a folder name (delete -
+            # recreate - delete cycle) don't land on the same trash path
+            # and cause shutil.move to silently nest the second inside the
+            # first.
+            stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
             shutil.move(str(folder), str(trash / f"{folder.name}-{stamp}"))
+        # Disk move succeeded (or folder was already gone) - mutate state.
+        self._folders.pop(album_id, None)
+        self._albums.pop(album_id, None)
         # TC-02-16: deleting the current album re-points current at the
         # alphabetically-first remaining album (or None).
         # Emit album_removed BEFORE current_album_changed so subscribers

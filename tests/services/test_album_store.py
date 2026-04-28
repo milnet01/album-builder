@@ -184,3 +184,54 @@ def test_approve_then_unapprove_round_trip(
     assert a.status == AlbumStatus.DRAFT
     assert a.approved_at is None
     assert not (folder / ".approved").exists()
+
+
+# Indie-review L4-C1: delete() must move-then-mutate, not mutate-then-move,
+# so a failed shutil.move leaves the album recoverable in the store.
+def test_delete_failure_keeps_album_in_store(
+    store: AlbumStore, tmp_path: Path, monkeypatch,
+) -> None:
+    a = store.create(name="x", target_count=3)
+    folder = store.folder_for(a.id)
+    assert folder is not None and folder.exists()
+
+    def boom(*_args, **_kwargs):
+        raise OSError("simulated disk-full")
+    monkeypatch.setattr("album_builder.services.album_store.shutil.move", boom)
+
+    with pytest.raises(OSError, match="simulated disk-full"):
+        store.delete(a.id)
+
+    # Album survives in the store; folder still on disk.
+    assert store.get(a.id) is not None
+    assert store.folder_for(a.id) == folder
+    assert folder.exists()
+
+
+# Indie-review L4-C2: same-second deletes of albums with the SAME folder
+# name (delete-then-recreate-then-delete cycle) must not collide on
+# `<slug>-stamp`. The 1 s `%Y%m%d-%H%M%S` stamp let `shutil.move` silently
+# nest the second trash dir inside the first. Sub-second precision avoids
+# the collision.
+def test_delete_same_folder_name_same_second_does_not_collide(
+    store: AlbumStore, tmp_path: Path,
+) -> None:
+    a1 = store.create(name="x", target_count=3)
+    folder1 = store.folder_for(a1.id)
+    assert folder1.name == "x"
+    store.delete(a1.id)             # moves x -> .trash/x-<stamp>
+    a2 = store.create(name="x", target_count=3)
+    folder2 = store.folder_for(a2.id)
+    # Slug is reusable now that a1 is in trash.
+    assert folder2.name == "x"
+    store.delete(a2.id)             # would silently nest into .trash/x-<stamp>/x
+    trash_entries = sorted((tmp_path / ".trash").iterdir())
+    # Each must be a top-level "x-..." dir; neither nested inside the other.
+    assert len(trash_entries) == 2, [str(p.relative_to(tmp_path)) for p in trash_entries]
+    for entry in trash_entries:
+        # Entry's child should be album.json, not another "x" folder.
+        children = sorted(entry.iterdir())
+        assert all(c.name != "x" for c in children), (
+            f"Trash entry {entry.name} contains a nested album folder: "
+            f"{[c.name for c in children]}"
+        )
