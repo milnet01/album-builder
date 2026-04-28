@@ -64,3 +64,37 @@ class Album:
     def rename(self, new_name: str) -> None:
         self.name = _validate_name(new_name)
         self.updated_at = _now()
+
+    def _require_draft(self, action: str) -> None:
+        if self.status != AlbumStatus.DRAFT:
+            raise ValueError(f"cannot {action} an approved album; reopen for editing first")
+
+    def select(self, track_path: Path) -> None:
+        self._require_draft("select")
+        if track_path in self.track_paths:
+            return
+        if len(self.track_paths) >= self.target_count:
+            raise ValueError(
+                f"album is at target ({self.target_count}); deselect first or raise the target"
+            )
+        self.track_paths.append(track_path)
+        self.updated_at = _now()
+
+    def deselect(self, track_path: Path) -> None:
+        self._require_draft("deselect")
+        try:
+            self.track_paths.remove(track_path)
+        except ValueError:
+            return  # absent - no-op, no write
+        self.updated_at = _now()
+
+    def set_target(self, n: int) -> None:
+        self._require_draft("set target")
+        n = _validate_target(n)
+        if n < len(self.track_paths):
+            raise ValueError(
+                f"target {n} is below current selection ({len(self.track_paths)}); "
+                "deselect tracks first"
+            )
+        self.target_count = n
+        self.updated_at = _now()

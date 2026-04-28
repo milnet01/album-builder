@@ -2,6 +2,7 @@
 04-track-selection.md, 05-track-ordering.md test contracts."""
 
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -50,3 +51,65 @@ def test_album_rename_updates_name_and_updated_at() -> None:
     a.rename("New Name")
     assert a.name == "New Name"
     assert a.updated_at >= before
+
+
+# Spec: TC-04-01
+def test_album_select_appends_when_absent() -> None:
+    a = Album.create(name="x", target_count=3)
+    p = Path("/abs/track1.mp3")
+    a.select(p)
+    assert a.track_paths == [p]
+
+
+# Spec: TC-04-01, TC-04-03
+def test_album_select_idempotent_preserves_order() -> None:
+    a = Album.create(name="x", target_count=3)
+    a.select(Path("/abs/a.mp3"))
+    a.select(Path("/abs/b.mp3"))
+    a.select(Path("/abs/a.mp3"))  # already present
+    assert a.track_paths == [Path("/abs/a.mp3"), Path("/abs/b.mp3")]
+
+
+# Spec: TC-04-02
+def test_album_select_rejects_when_approved() -> None:
+    a = Album.create(name="x", target_count=3)
+    a.select(Path("/abs/a.mp3"))
+    a.status = AlbumStatus.APPROVED  # bypass approve() for unit test
+    with pytest.raises(ValueError):
+        a.select(Path("/abs/b.mp3"))
+
+
+# Spec: TC-04-04
+def test_album_deselect_preserves_relative_order() -> None:
+    a = Album.create(name="x", target_count=5)
+    for letter in "abcd":
+        a.select(Path(f"/abs/{letter}.mp3"))
+    a.deselect(Path("/abs/b.mp3"))
+    assert a.track_paths == [Path("/abs/a.mp3"), Path("/abs/c.mp3"), Path("/abs/d.mp3")]
+
+
+# Spec: TC-04-05
+def test_album_deselect_absent_is_noop() -> None:
+    a = Album.create(name="x", target_count=3)
+    a.select(Path("/abs/a.mp3"))
+    a.deselect(Path("/abs/missing.mp3"))
+    assert a.track_paths == [Path("/abs/a.mp3")]
+
+
+# Spec: TC-04-06, TC-04-07
+def test_album_set_target_floor_is_current_selection_length() -> None:
+    a = Album.create(name="x", target_count=5)
+    for letter in "abc":
+        a.select(Path(f"/abs/{letter}.mp3"))
+    a.set_target(3)  # boundary-equal allowed
+    assert a.target_count == 3
+    with pytest.raises(ValueError):
+        a.set_target(2)  # below current selection - refused
+
+
+# Spec: TC-04-08
+@pytest.mark.parametrize("bad", [0, -1, 100, 200])
+def test_album_set_target_range(bad: int) -> None:
+    a = Album.create(name="x", target_count=5)
+    with pytest.raises(ValueError):
+        a.set_target(bad)
