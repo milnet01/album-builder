@@ -50,3 +50,30 @@ def test_create_then_select_appears_in_order_pane(qtbot, tmp_path: Path, tracks_
     win._on_selection_toggled(first_track.path, True)
     assert first_track.path in a.track_paths
     assert win.album_order_pane.list.count() == 1
+
+
+# Indie-review L7-C1: closeEvent must save window state even if flush() raises.
+def test_close_event_saves_state_when_flush_raises(
+    qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
+) -> None:
+    store = AlbumStore(tmp_path / "Albums")
+    watcher = LibraryWatcher(tracks_dir)
+    state = AppState()
+    win = MainWindow(store, watcher, state, tmp_path)
+    qtbot.addWidget(win)
+    win.resize(1234, 567)  # known geometry
+
+    def boom() -> None:
+        raise OSError("simulated flush failure")
+    monkeypatch.setattr(store, "flush", boom)
+
+    from PyQt6.QtGui import QCloseEvent
+    win.closeEvent(QCloseEvent())
+
+    # Despite flush() raising, state.json was written with the new geometry.
+    state_file = tmp_path / ".album-builder" / "state.json"
+    assert state_file.exists()
+    import json
+    raw = json.loads(state_file.read_text())
+    assert raw["window"]["width"] == 1234
+    assert raw["window"]["height"] == 567

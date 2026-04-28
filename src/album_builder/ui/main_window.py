@@ -3,6 +3,7 @@ AlbumStore + LibraryWatcher + AppState (Phase 2)."""
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from uuid import UUID
 
@@ -26,6 +27,8 @@ from album_builder.ui.library_pane import LibraryPane
 from album_builder.ui.theme import Palette, qt_stylesheet
 from album_builder.ui.top_bar import TopBar
 from album_builder.version import __version__
+
+logger = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow):
@@ -215,9 +218,18 @@ class MainWindow(QMainWindow):
         self._state_save_timer.start()
 
     def closeEvent(self, e) -> None:
-        # Flush all debounced writes before exit (Spec 10).
-        self._store.flush()
-        self._save_state_now()
+        # Flush all debounced writes before exit (Spec 10). Each step is
+        # wrapped so a raise from one (e.g. ENOSPC mid-flush) does not skip
+        # the other - window geometry must persist even if the per-album
+        # writer queue couldn't drain.
+        try:
+            self._store.flush()
+        except Exception:
+            logger.exception("AlbumStore.flush() failed during closeEvent")
+        try:
+            self._save_state_now()
+        except Exception:
+            logger.exception("save_state_now() failed during closeEvent")
         super().closeEvent(e)
 
     def _save_state_now(self) -> None:
