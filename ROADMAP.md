@@ -134,74 +134,76 @@ Plan: [`docs/plans/2026-04-28-phase-2-albums.md`](docs/plans/2026-04-28-phase-2-
 
 ## 🔒 Tier 2 — Phase 2 hardening sweep (correctness, pre-v0.3.0)
 
-📋 **~25 surviving Highs after threat-model calibration.** Group by subsystem.
+✅ **All 28 landed 2026-04-28** across 7 commits. 195/195 tests pass; ruff clean. Two MEDIUM items intentionally deferred to Tier 3 (`LibraryPane` direct `_model` access — refactor; `ACCENT_ROLE` constant — naming-only).
 
 **Domain (L1):**
 
-- 📋 **HIGH — `Library.scan` per-entry `OSError` unhandled.** `src/album_builder/domain/library.py:51`. `entry.is_file()` sits outside the try-block; a stale-NFS / permission-denied entry kills the whole scan. TC-01-02 says return `Library(tracks=())` for an unreadable folder; per-entry should match. Wrap the per-entry block.
-- 📋 **HIGH — `Album.approve` missing-track check delegated, not documented.** `src/album_builder/domain/album.py:113-121` — domain checks status + emptiness only. Spec 02 TC-02-10 says raise `FileNotFoundError`. The check lives in `AlbumStore.approve()` (`services/album_store.py:153-156`) — fine, but the domain method's docstring should call out the precondition's owner so future callers don't bypass.
-- 📋 **HIGH — `Album.__post_init__` invariant absent.** Corrupt JSON → direct dataclass construction smuggles past every `_require_draft` / `set_target` / `select` guard. Add `__post_init__` asserting `target_count >= len(track_paths)` + status sanity. One-line.
+- ✅ **HIGH — `Library.scan` per-entry `OSError` unhandled.** `src/album_builder/domain/library.py:51` now wraps the per-entry `is_file()` + `suffix` access in try/except; stale-NFS or permission-denied entries skip the entry instead of aborting the whole scan. Commit `6744d42`. (L1-H1)
+- ✅ **HIGH — `Album.approve` missing-track check delegated, not documented.** Domain method's docstring now names `AlbumStore.approve()` as the precondition's owner; future direct callers must replicate the FileNotFoundError check or accept the risk. Commit `6744d42`. (L1-H2)
+- ✅ **HIGH — `Album.__post_init__` invariant absent.** Now enforces 1≤target_count≤99, target_count≥len(track_paths), and "approved → non-empty selection". `_deserialize` pre-bumps target_count BEFORE construction so the existing TC-04-09 self-heal flow still works. Three new domain tests. Commit `6744d42`. (L1-H3)
 
 **Persistence — JSON (L2):**
 
-- 📋 **HIGH — `save_album_for_unapprove` ordering enforcement.** `src/album_builder/persistence/album_io.py:140-146`. Function trusts caller for reports/ deletion. Spec 02 §unapprove strict order: reports → marker → JSON. Either accept `reports_dir` arg + delete inline, or `assert reports_already_deleted` precondition.
-- 📋 **HIGH — Self-heal "approved-without-marker" skips `save_album()`.** `src/album_builder/persistence/album_io.py:191-193`. `marker.touch()` direct; the other two heals call `save_album` (which bumps `updated_at`). Asymmetric. Fix: route through `save_album` for consistency.
-- 📋 **HIGH — `_deserialize` uses `Path.resolve()` not `Path.absolute()`.** `src/album_builder/persistence/album_io.py:81`. Resolve follows symlinks; Spec 10 §Paths says symlinks preserved on save. Use `Path.absolute()` for the relative→absolute heal.
-- 📋 **MEDIUM — `state_io.load_state` rewrite-on-corrupt.** `src/album_builder/persistence/state_io.py:54-71`. TC-10-12 says corrupt → rewrite with defaults. Currently returns defaults in-memory but leaves the corrupt file on disk until next save. Rewrite immediately.
-- 📋 **MEDIUM — `state_io.load_state` field-type guards.** `src/album_builder/persistence/state_io.py:65-71`. Malformed UUID raises `ValueError` past the `except (json.JSONDecodeError, ...)` block — contradicts the "state is purely cosmetic" promise. Wrap unpacking + per-field default-on-fail.
-- 📋 **MEDIUM — Self-heal `target_count` upper-bound clamp.** `src/album_builder/persistence/album_io.py:175-181`. Corrupt file with `track_paths` length 200 → `target_count = 200`, fails domain validation (max 99). Clamp to 99 with louder warning, or surface as corrupt.
+- ✅ **HIGH — `save_album_for_unapprove` ordering enforcement.** Now asserts `not (folder/"reports").exists()` before unlinking the marker; Phase 4 export-pipeline integration must delete reports/ first. Commit `4c5a562`. (L2-H1)
+- ✅ **HIGH — Self-heal "approved-without-marker" skips `save_album()`.** Now routes through `save_album` for symmetry with the marker-present-status-draft branch; `updated_at` bumps on the heal. Commit `4c5a562`. (L2-H2)
+- ✅ **HIGH — `_deserialize` uses `Path.resolve()` not `Path.absolute()`.** Switched to `Path.absolute()` so user-supplied symlinks survive the relative→absolute heal. Commit `4c5a562`. (L2-H3)
+- ✅ **MEDIUM — `state_io.load_state` rewrite-on-corrupt.** Corrupt JSON now triggers an immediate rewrite with defaults (TC-10-12). New regression test. Commit `4c5a562`. (L2-M3)
+- ✅ **MEDIUM — `state_io.load_state` field-type guards.** Per-field `_coerce_uuid` / `_coerce_path` / `_coerce_window` helpers catch malformed UUID, junk window types, stray keys; falls back to defaults instead of raising past the load_state guard. Commit `4c5a562`. (L2-M4)
+- ✅ **MEDIUM — Self-heal `target_count` upper-bound clamp.** `_deserialize` pre-bumps target_count via `max(raw_target, len(resolved_paths))`; the new `Album.__post_init__` invariant catches >99 corruption at construction. Commit `4c5a562` + `6744d42`. (L2-M5)
 
 **Persistence — write infra (L3):**
 
-- 📋 **HIGH — `atomic_write_text` parent-dir fsync.** `src/album_builder/persistence/atomic_io.py:22-36`. POSIX rename atomicity is process-time; durability requires `fsync(parent_dir)` after `os.replace`. Spec 10's "live save / atomic" framing reads as durability not just atomicity. Add the parent fsync.
-- 📋 **HIGH — `DebouncedWriter._fire` callback lacks exception guard.** `src/album_builder/persistence/debounce.py:33-36`. A raising `fn()` (disk full inside `atomic_write_text`) escapes to Qt's slot dispatcher. Spec 10 §Errors says "Disk full → toast and retry on next mutation"; current path silently drops the write. Wrap in try/except + `logger.exception`.
-- 📋 **MEDIUM — `XDG_CONFIG_HOME` relative-path acceptance.** `src/album_builder/persistence/settings.py:16-18`. freedesktop spec: relative XDG values must be ignored. Currently honored. Add `is_absolute()` guard.
-- 📋 **MEDIUM — `DebouncedWriter._timers` grows unboundedly.** `src/album_builder/persistence/debounce.py:38-42`. Every key ever scheduled stays for the writer's lifetime. Bounded by album count (fine today); leaks for high-cardinality keys. Add cleanup after consumption.
+- ✅ **HIGH — `atomic_write_text` parent-dir fsync.** New `_fsync_dir` helper called after `os.replace` in both atomic-write helpers; best-effort (swallows EINVAL/ENOTSUP on filesystems without directory-fsync support). Commit `c997729`. (L3-H1)
+- ✅ **HIGH — `DebouncedWriter._fire` callback lacks exception guard.** Wrapped in try/except + `logger.exception` so disk-full mid-callback no longer silently drops the write. Regression test schedules a raising callback + survivor. Commit `c997729`. (L3-H4)
+- ✅ **MEDIUM — `XDG_CONFIG_HOME` relative-path acceptance.** `settings.settings_dir` rejects relative + empty values per the freedesktop Base Dir Spec; falls back to `~/.config/album-builder`. Two regression tests. Commit `c997729`. (L3-M3)
+- 📋 **LOW (deferred to Tier 3) — `DebouncedWriter._timers` unbounded growth.** Bounded by album count today; revisit when high-cardinality keys land. (L3-M4)
 
 **Services (L4):**
 
-- 📋 **HIGH — Cross-FS `shutil.move` for `.trash` not asserted.** `src/album_builder/services/album_store.py:121`. If user symlinks `.trash` to another disk, move falls back to copy+delete; non-atomic on power loss. Add `os.stat(src).st_dev == os.stat(trash).st_dev` assert in `__init__`.
-- 📋 **HIGH — `datetime.now()` in trash stamp is local time.** `src/album_builder/services/album_store.py:120`. Rest of the codebase is UTC-on-disk (`album_io.py` lines 104/125/144). DST rollback footgun. Fix: `datetime.now(UTC).strftime(...)` or document the deviation.
-- 📋 **HIGH — `rescan()` race assumption undocumented.** `src/album_builder/services/album_store.py:48-61`. `clear()` then rebuild has no lock; relies on Qt single-event-loop. A future `AlbumStoreWatcher` (TC-03-14 hints) that calls `rescan()` mid-CRUD would resurrect deleted albums. Add a docstring note pinning the single-thread assumption.
-- 📋 **MEDIUM — `LibraryWatcher.fileChanged` is dead code.** `src/album_builder/services/library_watcher.py:38, 50-51`. `addPath(folder)` only watches the directory; `fileChanged` is connected but never fires. Drop the connection or wire per-file watches.
-- 📋 **MEDIUM — `LibraryWatcher` doesn't watch parent for folder-recreate.** `src/album_builder/services/library_watcher.py:42-44`. After folder deletion, no parent-watch means recreation fires no event. Manual `refresh()` is the only escape (TC-01-P2-04 path). Watch the parent.
+- ✅ **HIGH — Cross-FS `shutil.move` for `.trash` not asserted.** `AlbumStore.__init__` now compares `st_dev` of `Albums/` and `.trash` (when both exist) and warns on mismatch. Commit `0255943`. (L4-H1)
+- ✅ **HIGH — `datetime.now()` in trash stamp is local time.** Already fixed in Tier 1 (commit `a497943`) — `datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")`. (L4-H2)
+- ✅ **HIGH — `rescan()` race assumption undocumented.** Docstring now pins the single-threaded-Qt-event-loop assumption + adds defensive `except Exception` so a future loader bug doesn't abort startup. Commit `0255943`. (L4-H3)
+- ✅ **MEDIUM — `LibraryWatcher.fileChanged` is dead code.** Connection dropped; comment explains the design choice. Commit `0255943`. (L4-M1)
+- ✅ **MEDIUM — `LibraryWatcher` doesn't watch parent for folder-recreate.** `_rebind_watch` now adds the parent folder to the watcher; folder-delete-then-recreate cycle (TC-01-P2-04) recovers without manual `refresh()`. Commit `0255943`. (L4-M2)
 
 **UI — lists/tables (L5):**
 
-- 📋 **HIGH — `_toggle` column header is sortable, would crash.** `src/album_builder/ui/library_pane.py:107-108, 172`. Sort role does `getattr(track, "_toggle")` → `AttributeError`. Header click on the `✓` column either crashes or silently fails. Fix: `header.setSectionsClickable(False)` for column 5, or make the role return `track.path in self._selected_paths`.
-- 📋 **HIGH — Toggle column not keyboard-reachable.** `src/album_builder/ui/library_pane.py:196`. Only `clicked` mouse handler. WCAG 2.2 §2.1.1 fail. Connect `self.table.activated` (Enter/Space) to the same handler.
-- 📋 **HIGH — Toggle column has no `AccessibleTextRole`.** `src/album_builder/ui/library_pane.py:86-93`. Orca / NVDA read "black circle / white circle". Branch on `Qt.ItemDataRole.AccessibleTextRole` → return `"selected"` / `"not selected"`.
-- 📋 **HIGH — Drag has no reduced-motion / accessible feedback.** `src/album_builder/ui/album_order_pane.py:36`. Spec 05 §Visual feedback calls for a 2 px `accent-primary-1` insertion line; default Qt visual ships. Set `list.setAccessibleName(...)`. Reduced-motion respected via Qt platform integration.
-- 📋 **MEDIUM — Approved-album tooltip absent.** `src/album_builder/ui/library_pane.py:88`. Spec 04 row state table says approved → tooltip "Album is approved...". No `Qt.ItemDataRole.ToolTipRole` branch in `data()`. Add it.
-- 📋 **MEDIUM — `_rerender_after_move` text-mangle fragility.** `src/album_builder/ui/album_order_pane.py:95-97`. `text.split(". ", 1)[1]` correct in practice but stores display state in display text. Cleaner: store `track.path` in `Qt.UserRole`, re-render from `_album.track_paths` on move.
+- ✅ **HIGH — `_toggle` column header sortable would crash.** Sort role for `_toggle` now returns a `(selected, casefolded-name)` tuple; header click no longer raises AttributeError. Commit `236456b`. (L5-H2)
+- ✅ **HIGH — Toggle column not keyboard-reachable.** `QTableView.activated` connected to the click handler; Enter/Return on a focused toggle cell triggers the toggle. WCAG 2.2 §2.1.1. Commit `236456b`. (L5-H3)
+- ✅ **HIGH — Toggle column has no `AccessibleTextRole`.** Branch in `data()` returns `"selected: <title>"` / `"not selected: <title>"`. WCAG 2.2 §4.1.2. Regression test. Commit `236456b`. (L5-H4)
+- ✅ **HIGH — Drag has no reduced-motion / accessible feedback.** `AlbumOrderPane.list.setAccessibleName` + `setAccessibleDescription`; LibraryPane likewise. Commit `236456b`. (L5-H5)
+- ✅ **MEDIUM — Approved-album tooltip absent.** `ToolTipRole` branch on the toggle cell of an APPROVED album returns the spec'd tooltip. Regression test. Commit `236456b`. (L5-M1)
+- ✅ **MEDIUM — `_rerender_after_move` text-mangle fragility.** Now reconstructs from a cached title (`UserRole+3 / TITLE_ROLE`) rather than splitting display text on `". "`. Titles containing ". " (e.g. "Mr. Brightside") survive. Regression test. Commit `236456b`. (L5-M2)
+- ✅ **HIGH — Sort role returns raw value, not `casefold()`.** Now `value.casefold() if isinstance(value, str) else value`. Spec 00 §"Sort order (canonical)". Regression test. Commit `236456b`. (L5-H1)
 
 **UI — top-bar (L6):**
 
-- 📋 **HIGH — `set_current(None)` initial-emit suppressed.** `src/album_builder/ui/album_switcher.py:73-78`. Constructor leaves `_current_id = None` then `_refresh()` doesn't emit; first `set_current(None)` early-returns. Subscribers connected after construction never see initial state. Fix: emit unconditionally in `__init__`, or document the "callers must seed" contract.
-- 📋 **HIGH — `TargetCounter` empty-string commit reverts (TC-04-12 wants snap-to-1).** `src/album_builder/ui/target_counter.py:90-95`. Empty fails `isdigit()` and reverts. Fix: empty → `_emit(MIN_TARGET)`. Also use `try: int(text)` instead of `isdigit()` (Arabic-Indic digits, fullwidth zero).
-- 📋 **HIGH — `setMaxLength(80)` is UTF-16 code units, not code points.** `src/album_builder/ui/top_bar.py:39`. Emoji eat 2-of-80 budget; user can't input a name domain would accept. Drop `setMaxLength`, validate on `editingFinished` against `len(text) > 80` matching domain.
-- 📋 **MEDIUM — `LibraryPane` reaches into `_model._toggle_enabled` / `_selected_paths` directly.** `src/album_builder/ui/library_pane.py:218, 220, 236, 239`. Leading-underscore convention violated. Expose `is_toggle_enabled(row)` / `is_selected(row)` on `TrackTableModel`.
-- 📋 **MEDIUM — `ACCENT_ROLE` magic number `Qt.UserRole + 2`.** `src/album_builder/ui/library_pane.py:89, 97, 227`. Define module-level constant; mirror to `MISSING_ROLE` already declared in `album_order_pane.py:19`.
+- ✅ **HIGH — Empty-state pill text middle dot.** Restored to `▾ No albums · + New album` per Spec 03 line 21 + TC-03-06. Commit `ced2923`. (L6-H1)
+- ✅ **HIGH — `set_current(None)` initial-emit suppressed.** Docstring now documents the "no emit on construction; caller must seed" contract. MainWindow already seeds correctly. Commit `ced2923`. (L6-H2)
+- ✅ **HIGH — `TargetCounter` empty-string commit reverts.** Empty now snaps to `MIN_TARGET` (TC-04-12); non-integer reverts via try/except `int()` (handles negative signs, Unicode digit forms). Commit `ced2923`. (L6-H4)
+- ✅ **HIGH — `setMaxLength(80)` is UTF-16 code units.** Dropped; validation moved to commit time and uses `len(text) > 80` (code points) matching domain. Emoji-rich names no longer truncated. Commit `ced2923`. (L6-H5)
+- 📋 **LOW (deferred to Tier 3) — `LibraryPane._model._toggle_enabled` direct access.** Naming-convention violation; refactor adds `is_toggle_enabled(row)` accessor. Tier 3. (L6-M1)
+- 📋 **LOW (deferred to Tier 3) — `ACCENT_ROLE` magic number.** Define module constant; mirror to MISSING_ROLE shape. Tier 3. (L6-M2)
 
 **App integration (L7):**
 
-- 📋 **HIGH — `_save_state_now` magic constant `13` for ratio sum.** `src/album_builder/ui/main_window.py:229`. Ratio total only matches Spec 10's example `[5, 3, 5]` by accident; if the example changes, drift. Either extract `SPLITTER_RATIO_TOTAL = 13` constant or drop normalisation entirely (`QSplitter.setSizes` accepts arbitrary positive ints and normalises internally).
-- 📋 **HIGH — `DEFAULT_TRACKS_DIR` developer absolute path ships in module.** `src/album_builder/app.py:38`. `Path("/mnt/Storage/Scripts/Linux/Music_Production/Tracks")` is checked via `.exists()`; any user with that exact path silently picks it. Gate behind `ALBUM_BUILDER_DEV_MODE=1` env, or sentinel-file check (e.g. `pyproject.toml` colocated).
-- 📋 **HIGH — `signal_raise_existing_instance` silent timeout.** `src/album_builder/app.py:117`. User clicks launcher twice; if first instance is busy (>500 ms), second exits 0 with no diagnostic. Increase `RAISE_TIMEOUT_MS` to 1500-2000 ms; log to stderr on timeout.
-- 📋 **HIGH — `start_raise_server` calls `removeServer` unconditionally.** `src/album_builder/app.py:128`. Race window during double-launch + closing. Add a precondition comment ("only the lock holder reaches this") and consider checking `lock.error()` before nuking.
-- 📋 **MEDIUM — Stale-segment recovery TOCTOU.** `src/album_builder/app.py:101-106`. `attach → detach → create` race during owner shutdown can free a live segment. Microsecond window; document as v1 acceptance.
-- 📋 **MEDIUM — `acquire_single_instance_lock` doesn't distinguish error classes.** `src/album_builder/app.py:104-106`. `SHM exhausted` vs `AlreadyExists` indistinguishable. Inspect `lock.error()` and surface kernel-side failures to stderr.
-- 📋 **MEDIUM — SHM detach + server.close not in `finally`.** `src/album_builder/app.py:67-73`. `app.exec()` raise leaks the lock. Wrap in try/finally. (Was raw L7-C2 before threat-model calibration to MEDIUM.)
-- 📋 **MEDIUM — Window geometry restore not bounds-checked.** `src/album_builder/ui/main_window.py:45-46`. Hand-edited `state.json` with `width: 10` opens 10 px wide. Add `max(100, ...)` clamp at restore.
+- ✅ **HIGH — `_save_state_now` magic constant `13`.** Extracted `SPLITTER_RATIO_TOTAL = 13` module constant. Commit `8aa06d5`. (L7-H1)
+- ✅ **HIGH — `DEFAULT_TRACKS_DIR` developer absolute path.** Now gated behind `ALBUM_BUILDER_DEV_MODE=1` env OR `pyproject.toml` colocated with the running script. Installed user no longer silently picks the dev path. Commit `8aa06d5`. (L7-H2)
+- ✅ **HIGH — `signal_raise_existing_instance` silent timeout.** `RAISE_TIMEOUT_MS` 500 → 2000 ms; logs to stderr on timeout so a busy peer surfaces a diagnostic. Commit `8aa06d5`. (L7-H3)
+- ✅ **HIGH — `start_raise_server` calls `removeServer` unconditionally.** Docstring now documents the lock-holder-only precondition that justifies the unconditional removeServer. Commit `8aa06d5`. (L7-H4)
+- ✅ **MEDIUM — `acquire_single_instance_lock` doesn't distinguish error classes.** Inspects `lock.error()`; logs to stderr on non-`AlreadyExists` failures. Commit `8aa06d5`. (L7-M2)
+- ✅ **MEDIUM — SHM detach + server.close not in `finally`.** `app.exec()` wrapped in try/finally. Commit `8aa06d5`. (L7-M3)
+- ✅ **MEDIUM — Window geometry restore not bounds-checked.** `max(400, w) / max(300, h) / max(0, x|y)` clamp on restore. Commit `8aa06d5`. (L7-L1)
+- 📋 **LOW (accepted as v1) — Stale-segment recovery TOCTOU.** Microsecond race window during owner shutdown; documented in code as v1 acceptance. (L7-M1)
 
 **Documentation (L8):**
 
-- 📋 **HIGH — Spec 12 + `.desktop.in` `Exec=` drift.** `docs/specs/12-packaging.md:93` shows `Exec=@@LAUNCHER@@ %F`; `packaging/album-builder.desktop.in:7` has no `%F`. ROADMAP line 71 documents the removal but spec wasn't updated. Either restore `%F` (for future file-association) or strike from spec.
-- 📋 **MEDIUM — `set_current` raises ValueError but MainWindow restoration uses ad-hoc `store.get()` check.** `src/album_builder/ui/main_window.py:90` vs `services/album_store.py:138`. TC-03-09 fallback rule routes around the typed contract. Fine, but document the choice.
-- 📋 **MEDIUM — Phase 2 plan crosswalk has zero TC-12-NN entries.** `docs/plans/2026-04-28-phase-2-albums.md` ends at TC-11-11. Spec 12 owns 9 TCs (5 Phase 1, 4 Phase 2). Add a row noting they're manual-smoke or genuinely untested.
-- 📋 **MEDIUM — Spec 04 `selected > target` strict-vs-equal wording.** Self-heal in `album_io.py:175` uses `<`; Spec 10 §self-heal line 149 is worded "`>`" (strict). Boundary case `target_count == len(track_paths)` is correctly treated as valid by code; spec wording could explicitly call out the `==` case.
-- 📋 **MEDIUM — Spec 00 keyboard-shortcut table claims Phase-1-2 shortcuts wired.** Reword to "Phase 3 wiring" or wire Ctrl+N / Ctrl+Q / F1 now (Theme E above).
-- 📋 **MEDIUM — Glossary "Library" vs "AlbumStore" / "LibraryWatcher" wording drift.** Spec 01 line 37 calls `tracks_changed` an addition to `Library`; ships on `LibraryWatcher`. Reword Spec 01.
+- ✅ **HIGH — Spec 12 + `.desktop.in` `Exec=` drift.** Spec updated to match `Exec=@@LAUNCHER@@` (no `%F`); inline note explains the omission. Commit `ce37096`. (L8-H3)
+- ✅ **MEDIUM — `set_current` ValueError vs MainWindow ad-hoc check.** Spec 03 TC-03-09 row now documents the lookup-first approach as canonical. Commit `ce37096`. (L8-M1)
+- ✅ **MEDIUM — Phase 2 plan crosswalk missing TC-12-NN.** Crosswalk now has TC-12-01..05 (direct, Phase 1) + TC-12-06..09 (manual smoke). Commit `ce37096`. (L8-M2)
+- ✅ **MEDIUM — Spec 04 `selected == target` boundary wording.** Now explicit: at-target is valid; `set_target(n)` accepts `n == selected_count`. Commit `ce37096`. (L8-M4)
+- ✅ **MEDIUM — Spec 00 keyboard-shortcut table claims Phase-1-2 shortcuts wired.** Added "Wired?" column; all marked "Phase 3" (focus-suppression machinery groups with Spec 06 work). Commit `ce37096`. (L8-M5)
+- ✅ **MEDIUM — Spec 01 `tracks_changed` ownership.** Spec line 37 now correctly attributes the signal to `LibraryWatcher`, not `Library`. Commit `ce37096`. (L8-M6)
 
 ## ⚡ Tier 3 — Phase 2 structural / cosmetic
 
