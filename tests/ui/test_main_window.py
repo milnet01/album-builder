@@ -9,7 +9,10 @@ from album_builder.ui.main_window import MainWindow
 
 
 @pytest.fixture
-def main_window(qtbot, tracks_dir: Path, tmp_path: Path):
+def main_window(qtbot, tracks_dir: Path, tmp_path: Path, monkeypatch):
+    # Isolate per-test settings.json so any closeEvent-driven write_audio
+    # call doesn't leak into the user's real ~/.config or the next test.
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     store = AlbumStore(tmp_path / "Albums")
     watcher = LibraryWatcher(tracks_dir)
     state = AppState()
@@ -77,3 +80,119 @@ def test_close_event_saves_state_when_flush_raises(
     raw = json.loads(state_file.read_text())
     assert raw["window"]["width"] == 1234
     assert raw["window"]["height"] == 567
+
+
+# Phase 3A — Spec 06 wiring tests.
+def test_main_window_owns_player(main_window) -> None:
+    from album_builder.services.player import Player
+    assert isinstance(main_window._player, Player)
+
+
+def test_now_playing_pane_replaces_placeholder(main_window) -> None:
+    from album_builder.ui.now_playing_pane import NowPlayingPane
+    assert isinstance(main_window.now_playing_pane, NowPlayingPane)
+
+
+def test_preview_play_loads_track_into_player(main_window, qtbot) -> None:
+    track_paths = [t.path for t in main_window._library_watcher.library().tracks]
+    assert track_paths
+    main_window._on_preview_play(track_paths[0])
+    qtbot.wait(50)
+    assert main_window._player.source() == track_paths[0]
+
+
+def test_preview_play_updates_now_playing_pane(main_window, qtbot) -> None:
+    tracks = list(main_window._library_watcher.library().tracks)
+    main_window._on_preview_play(tracks[0].path)
+    assert main_window.now_playing_pane.title_label.text() == tracks[0].title
+
+
+def test_preview_play_writes_last_played_to_state(main_window, qtbot) -> None:
+    tracks = list(main_window._library_watcher.library().tracks)
+    main_window._on_preview_play(tracks[0].path)
+    assert main_window._state.last_played_track_path == tracks[0].path
+
+
+def test_preview_play_unknown_path_shows_toast(main_window, tmp_path: Path) -> None:
+    main_window.show()
+    main_window._on_preview_play(tmp_path / "does-not-exist.mpeg")
+    assert main_window._toast.isVisible()
+    assert "not in library" in main_window._toast.message_label.text()
+
+
+# Spec: TC-06-07 — codec error shows the install dialog ONCE per session.
+def test_codec_error_shows_one_shot_dialog(main_window, monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        "album_builder.ui.main_window.QMessageBox.warning",
+        lambda *a, **k: calls.append(a[2]) or 0,
+    )
+    main_window._on_player_error("Decoder unavailable: gstreamer plugin missing")
+    main_window._on_player_error("Decoder unavailable: gstreamer plugin missing")
+    assert len(calls) == 1
+
+
+def test_non_codec_error_does_not_trigger_dialog(main_window, monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        "album_builder.ui.main_window.QMessageBox.warning",
+        lambda *a, **k: calls.append(a[2]) or 0,
+    )
+    main_window.show()
+    main_window._on_player_error("Track file not found: /a/b.mp3")
+    assert calls == []
+    assert main_window._toast.isVisible()
+    assert "not found" in main_window._toast.message_label.text()
+
+
+def test_close_event_writes_audio_settings(
+    qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    store = AlbumStore(tmp_path / "Albums")
+    watcher = LibraryWatcher(tracks_dir)
+    state = AppState()
+    win = MainWindow(store, watcher, state, tmp_path)
+    qtbot.addWidget(win)
+    win._player.set_volume(42)
+    win._player.set_muted(True)
+
+    from PyQt6.QtGui import QCloseEvent
+    win.closeEvent(QCloseEvent())
+
+    from album_builder.persistence.settings import read_audio
+    a = read_audio()
+    assert a.volume == 42
+    assert a.muted is True
+
+
+# Spec: TC-06-11 — last-played round-trip; pane shows track paused at zero.
+def test_state_last_played_restored_on_construct(
+    qtbot, tmp_path: Path, tracks_dir: Path,
+) -> None:
+    store = AlbumStore(tmp_path / "Albums")
+    watcher = LibraryWatcher(tracks_dir)
+    track = next(iter(watcher.library().tracks))
+    state = AppState(last_played_track_path=track.path)
+    win = MainWindow(store, watcher, state, tmp_path)
+    qtbot.addWidget(win)
+    assert win._player.source() == track.path
+    # Restored paused at zero, NOT auto-playing.
+    from album_builder.services.player import PlayerState
+    assert win._player.state() == PlayerState.STOPPED
+    assert win.now_playing_pane.title_label.text() == track.title
+
+
+def test_state_last_played_missing_track_does_nothing(
+    qtbot, tmp_path: Path, tracks_dir: Path,
+) -> None:
+    """If state.json names a track that no longer exists, the player isn't
+    loaded — silent recovery, no toast."""
+    store = AlbumStore(tmp_path / "Albums")
+    watcher = LibraryWatcher(tracks_dir)
+    state = AppState(last_played_track_path=tmp_path / "vanished.mp3")
+    win = MainWindow(store, watcher, state, tmp_path)
+    qtbot.addWidget(win)
+    assert win._player.source() is None
+    # No track loaded means metadata labels are blank.
+    assert win.now_playing_pane.title_label.text() == ""

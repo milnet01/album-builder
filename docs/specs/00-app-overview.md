@@ -116,19 +116,19 @@ Anywhere "alphabetical" appears across these specs (album list, library default 
 
 Shortcuts are global to the main window. They are **suppressed when focus is in a `QLineEdit` or `QTextEdit`** so the user can type "L" in the search box without triggering "Loop." This rule prevents Spec 04's target counter (Up/Down arrow buttons + numeric typing) from colliding with Spec 06's playback shortcuts.
 
-**Wiring status:** as of v0.2.0 (Phase 2), no global shortcuts are wired. The shortcut wiring is grouped with Spec 06 playback work (Phase 3), where the focus-suppression rule above becomes load-bearing. The Phase-2-eligible shortcuts (`Ctrl+N`, `Ctrl+Q`, `F1`) are tracked as a Phase 3 prerequisite rather than wired in isolation, so the suppression machinery lands once.
+**Wiring status:** as of v0.3.0 (Phase 3A), every shortcut below is wired. Suppression checks `QApplication.focusWidget()` against `(QLineEdit, QSpinBox, QTextEdit)`; transport shortcuts no-op while typing.
 
 | Key | Action | Owner spec | Suppressed in text fields? | Wired? |
 |---|---|---|---|---|
-| Space | Play / pause | 06 | Yes | Phase 3 |
-| Left | Seek −5 s | 06 | Yes | Phase 3 |
-| Right | Seek +5 s | 06 | Yes | Phase 3 |
-| Shift+Left | Seek −30 s | 06 | Yes | Phase 3 |
-| Shift+Right | Seek +30 s | 06 | Yes | Phase 3 |
-| M | Mute / unmute | 06 | Yes | Phase 3 |
-| Ctrl+N | New album | 03 | No (modal opens regardless of focus) | Phase 3 |
-| Ctrl+Q | Quit (with debounced-save flush per Spec 10) | 12 | No | Phase 3 |
-| F1 | About / version | 00 | No | Phase 3 |
+| Space | Play / pause | 06 | Yes | ✓ v0.3.0 |
+| Left | Seek −5 s | 06 | Yes | ✓ v0.3.0 |
+| Right | Seek +5 s | 06 | Yes | ✓ v0.3.0 |
+| Shift+Left | Seek −30 s | 06 | Yes | ✓ v0.3.0 |
+| Shift+Right | Seek +30 s | 06 | Yes | ✓ v0.3.0 |
+| M | Mute / unmute | 06 | Yes | ✓ v0.3.0 |
+| Ctrl+N | New album | 03 | No (modal opens regardless of focus) | ✓ v0.3.0 |
+| Ctrl+Q | Quit (with debounced-save flush per Spec 10) | 12 | No | ✓ v0.3.0 |
+| F1 | Keyboard help dialog | 00 | No | ✓ v0.3.0 |
 
 The Spec 04 target counter does **not** bind Up/Down arrow keys at the *global* level — its `▲` / `▼` are mouse-clickable buttons, and the numeric input field handles its own arrow keys when it has focus. This avoids the seek-vs-target collision entirely.
 

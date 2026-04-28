@@ -218,6 +218,74 @@ def qt_stylesheet(p: Palette) -> str:
     QScrollBar::sub-page, QScrollBar::add-page {{
         background: none;
     }}
+    /* Spec 06 transport bar — neutral background; the play button picks up
+       the accent on focus via the global QPushButton:focus rule above. */
+    QPushButton#TransportPlay {{
+        font-size: 14pt;
+        padding: 4px 8px;
+    }}
+    QLabel#TransportTime {{
+        color: {p.text_secondary};
+        font-family: "JetBrains Mono", "Fira Code", monospace;
+    }}
+    QLabel#TransportBuffering {{
+        color: {p.accent_warm};
+        font-style: italic;
+    }}
+    /* Spec 06 right pane — large title, subtle metadata. */
+    QLabel#NowPlayingTitle {{
+        font-size: 14pt;
+        font-weight: 600;
+        color: {p.text_primary};
+        padding: 8px 4px 4px 4px;
+    }}
+    QLabel#NowPlayingMeta {{
+        color: {p.text_secondary};
+    }}
+    QLabel#NowPlayingMetaSecondary {{
+        color: {p.text_tertiary};
+        font-size: 9pt;
+    }}
+    QLabel#NowPlayingCover {{
+        background-color: {p.bg_pane};
+        border: 1px solid {p.border};
+        border-radius: 8px;
+    }}
+    /* Phase 3B will replace this placeholder with the lyrics panel. The
+       dashed border is a visual cue that this region is reserved. */
+    QFrame#LyricsPlaceholder {{
+        background-color: {p.bg_pane};
+        border: 1px dashed {p.border_strong};
+        border-radius: 6px;
+    }}
+    /* Spec 06 transient error notice. */
+    QFrame#Toast {{
+        background-color: {p.bg_elevated};
+        border: 1px solid {p.danger};
+        border-radius: 8px;
+        color: {p.text_primary};
+    }}
+    QLabel#ToastMessage {{
+        color: {p.text_primary};
+    }}
+    QPushButton#ToastClose {{
+        background: transparent;
+        border: none;
+        color: {p.text_secondary};
+        font-weight: 600;
+    }}
+    QPushButton#ToastClose:hover {{
+        color: {p.text_primary};
+    }}
+    /* Per-row preview-play button on the album-order pane. */
+    QPushButton#RowPlay {{
+        background: transparent;
+        border: 1px solid transparent;
+        color: {p.text_secondary};
+    }}
+    QPushButton#RowPlay:hover {{
+        color: {p.accent_warm};
+    }}
     """.strip()
 
 

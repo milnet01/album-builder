@@ -1,5 +1,5 @@
 """Main window - top bar + three-pane horizontal splitter, wired to
-AlbumStore + LibraryWatcher + AppState (Phase 2)."""
+AlbumStore + LibraryWatcher + AppState (Phase 2) + Player (Phase 3A)."""
 
 from __future__ import annotations
 
@@ -8,23 +8,30 @@ from pathlib import Path
 from uuid import UUID
 
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
-    QFrame,
+    QApplication,
     QInputDialog,
-    QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
+    QSpinBox,
     QSplitter,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
+from album_builder.persistence.settings import AudioSettings, read_audio, write_audio
 from album_builder.persistence.state_io import AppState, WindowState, save_state
 from album_builder.services.album_store import AlbumStore
 from album_builder.services.library_watcher import LibraryWatcher
+from album_builder.services.player import Player
 from album_builder.ui.album_order_pane import AlbumOrderPane
 from album_builder.ui.library_pane import LibraryPane
+from album_builder.ui.now_playing_pane import NowPlayingPane
 from album_builder.ui.theme import Palette, qt_stylesheet
+from album_builder.ui.toast import Toast
 from album_builder.ui.top_bar import TopBar
 from album_builder.version import __version__
 
@@ -68,17 +75,28 @@ class MainWindow(QMainWindow):
         self.top_bar = TopBar(store)
         outer.addWidget(self.top_bar)
 
+        # Player + audio settings (Spec 06).
+        self._player = Player(self)
+        audio = read_audio()
+        self._player.set_volume(audio.volume)
+        self._player.set_muted(audio.muted)
+        self._player.error.connect(self._on_player_error)
+
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setChildrenCollapsible(False)
         self.library_pane = LibraryPane()
         self.library_pane.set_library(library_watcher.library())
         self.album_order_pane = AlbumOrderPane()
-        self.now_playing_pane = self._build_placeholder_pane("Now playing")  # Phase 3
+        self.now_playing_pane = NowPlayingPane(self._player)
         self.splitter.addWidget(self.library_pane)
         self.splitter.addWidget(self.album_order_pane)
         self.splitter.addWidget(self.now_playing_pane)
         self.splitter.setSizes(state.window.splitter_sizes)
         outer.addWidget(self.splitter, stretch=1)
+
+        # Toast overlays the bottom of the central widget. Position is
+        # updated on resize so it always sits above the bottom edge.
+        self._toast = Toast(self)
 
         # Debounced state-save timer for splitter / geometry mutations (TC-03-10).
         self._state_save_timer = QTimer(self)
@@ -95,9 +113,25 @@ class MainWindow(QMainWindow):
         self.top_bar.switcher.new_album_requested.connect(self._on_new_album)
         self.top_bar.switcher.delete_requested.connect(self._on_delete_album)
         self.library_pane.selection_toggled.connect(self._on_selection_toggled)
+        self.library_pane.preview_play_requested.connect(self._on_preview_play)
         self.album_order_pane.reordered.connect(self._on_reorder_done)
+        self.album_order_pane.preview_play_requested.connect(self._on_preview_play)
         library_watcher.tracks_changed.connect(self.library_pane.set_library)
         self.splitter.splitterMoved.connect(lambda *_: self._state_save_timer.start())
+
+        # Spec 00 keyboard shortcuts (closes indie-review Theme E).
+        self._wire_shortcuts()
+
+        # Restore last-played track from state.json (Spec 06 TC-06-11).
+        if state.last_played_track_path:
+            last = Path(state.last_played_track_path)
+            track = next(
+                (t for t in library_watcher.library().tracks if t.path == last),
+                None,
+            )
+            if track is not None:
+                self._player.set_source(track.path)
+                self.now_playing_pane.set_track(track)
 
         # Restore current album from state (TC-03-07) with fallback (TC-03-09)
         if state.current_album_id and store.get(state.current_album_id):
@@ -221,8 +255,101 @@ class MainWindow(QMainWindow):
             return
         self._store.schedule_save(album.id)
 
+    def _wire_shortcuts(self) -> None:
+        """Spec 00 keyboard table — wired in Phase 3A.
+
+        Transport shortcuts (Space / Left / Right / Shift+Left / Shift+Right
+        / M) suppress when focus is in a text-input widget so a user typing
+        in the album-name editor or target-counter doesn't accidentally
+        scrub the player.
+        """
+        QShortcut(QKeySequence("Ctrl+N"), self, activated=self._on_new_album)
+        QShortcut(QKeySequence("Ctrl+Q"), self, activated=self.close)
+        QShortcut(QKeySequence("F1"), self, activated=self._show_help)
+        QShortcut(QKeySequence("Space"), self, activated=self._space_pressed)
+        QShortcut(QKeySequence("Left"), self, activated=lambda: self._seek_relative(-5))
+        QShortcut(QKeySequence("Right"), self, activated=lambda: self._seek_relative(5))
+        QShortcut(QKeySequence("Shift+Left"), self,
+                  activated=lambda: self._seek_relative(-30))
+        QShortcut(QKeySequence("Shift+Right"), self,
+                  activated=lambda: self._seek_relative(30))
+        QShortcut(QKeySequence("M"), self, activated=self._toggle_mute)
+
+    def _key_in_text_field(self) -> bool:
+        w = QApplication.focusWidget()
+        return isinstance(w, (QLineEdit, QSpinBox, QTextEdit))
+
+    def _space_pressed(self) -> None:
+        if self._key_in_text_field():
+            return
+        self._player.toggle()
+
+    def _seek_relative(self, delta: float) -> None:
+        if self._key_in_text_field():
+            return
+        self._player.seek(self._player.position() + delta)
+
+    def _toggle_mute(self) -> None:
+        if self._key_in_text_field():
+            return
+        self._player.set_muted(not self._player.muted())
+        # Sync transport-bar glyph if the now-playing pane has surfaced one.
+        if hasattr(self.now_playing_pane, "transport"):
+            self.now_playing_pane.transport._sync_mute_glyph()
+
+    def _show_help(self) -> None:
+        QMessageBox.information(
+            self,
+            "Album Builder — Keyboard shortcuts",
+            "Ctrl+N — New album\n"
+            "Ctrl+Q — Quit\n"
+            "F1 — This help\n"
+            "Space — Play / pause\n"
+            "Left / Right — Seek -5 s / +5 s\n"
+            "Shift+Left / Right — Seek -30 s / +30 s\n"
+            "M — Mute / unmute\n\n"
+            "Transport shortcuts are suppressed while typing in a text field.",
+        )
+
+    def _on_preview_play(self, path: Path) -> None:
+        track = next(
+            (t for t in self._library_watcher.library().tracks if t.path == path),
+            None,
+        )
+        if track is None:
+            self._toast.show_message(f"Track not in library: {path}")
+            return
+        self._player.set_source(path)
+        self._player.play()
+        self.now_playing_pane.set_track(track)
+        self._state.last_played_track_path = path
+        self._state_save_timer.start()
+
+    def _on_player_error(self, msg: str) -> None:
+        self._toast.show_message(msg)
+        if self._looks_like_codec_error(msg) and not self._player.codec_dialog_shown():
+            QMessageBox.warning(
+                self,
+                "Audio codecs unavailable",
+                "Audio playback requires the GStreamer / FFmpeg backend.\n"
+                "On openSUSE: install gstreamer-plugins-good and "
+                "gstreamer-plugins-libav via:\n\n"
+                "    sudo zypper install gstreamer-plugins-good "
+                "gstreamer-plugins-libav\n\n"
+                "Then restart the app.",
+            )
+            self._player.mark_codec_dialog_shown()
+
+    @staticmethod
+    def _looks_like_codec_error(msg: str) -> bool:
+        m = msg.lower()
+        return any(s in m for s in ("decoder", "codec", "gstreamer", "plugin"))
+
     def resizeEvent(self, e) -> None:
         super().resizeEvent(e)
+        # Bottom-of-window banner; sits above the bottom edge.
+        if hasattr(self, "_toast"):
+            self._toast.setGeometry(20, self.height() - 60, self.width() - 40, 40)
         self._state_save_timer.start()
 
     def moveEvent(self, e) -> None:
@@ -234,6 +361,16 @@ class MainWindow(QMainWindow):
         # wrapped so a raise from one (e.g. ENOSPC mid-flush) does not skip
         # the other - window geometry must persist even if the per-album
         # writer queue couldn't drain.
+        try:
+            self._player.stop()
+        except Exception:
+            logger.exception("Player.stop() failed during closeEvent")
+        try:
+            write_audio(AudioSettings(
+                volume=self._player.volume(), muted=self._player.muted(),
+            ))
+        except Exception:
+            logger.exception("write_audio() failed during closeEvent")
         try:
             self._store.flush()
         except Exception:
@@ -260,16 +397,3 @@ class MainWindow(QMainWindow):
             splitter_sizes=ratios,
         )
         save_state(self._project_root, self._state)
-
-    def _build_placeholder_pane(self, title: str) -> QFrame:
-        pane = QFrame(objectName="Pane")
-        layout = QVBoxLayout(pane)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.addWidget(QLabel(title, objectName="PaneTitle"))
-        layout.addStretch(1)
-        empty = QLabel("(coming in Phase 3)")
-        empty.setObjectName("PlaceholderText")
-        empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(empty)
-        layout.addStretch(2)
-        return pane
