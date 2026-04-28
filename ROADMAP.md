@@ -106,6 +106,41 @@ Plan: [`docs/plans/2026-04-28-phase-2-albums.md`](docs/plans/2026-04-28-phase-2-
 
 ---
 
+## ✅ v0.3.0 — Phase 3A: Audio Playback (2026-04-28)
+
+`QMediaPlayer` integration with transport bar, per-row preview-play on both library + order panes, Spec 06 signal API normalised to seconds + `PlayerState` enum, `last_played_track_path` round-trip via `state.json`, volume + mute persistence via `settings.json`, all Spec 00 keyboard shortcuts wired with focus suppression. Lyrics alignment (Spec 07) carries forward to v0.4.0 — `LyricsPlaceholder` `QFrame` reserves the panel space; `Player.position_changed` is fully exposed for the future `LyricsTracker` to subscribe.
+
+**Shipped (Tasks 1-11 from `docs/plans/2026-04-28-phase-3a-playback.md`):**
+
+- **Persistence:** `audio.{volume, muted}` round-trip via `read_audio` / `write_audio`; `_read_settings_dict` extracted as shared malformed-JSON guard reusable by Phase 3B `alignment.*` block.
+- **Services:** `Player` (QMediaPlayer + QAudioOutput wrapper) emits domain-shaped signals — `position_changed(seconds)`, `duration_changed(seconds)`, `state_changed(PlayerState)`, `error(str)`, `buffering_changed(bool)`. Volume clamps to 0..100; bool guard rejects True/False. Seek clamps to `(duration - 1.0)` and to 0. Two test tiers: unit (always runs) + integration (gated on `AB_INTEGRATION_AUDIO=1`).
+- **UI widgets:** `TransportBar` (play/pause toggle glyph, scrubber, time labels, volume slider, mute button, buffering indicator); `NowPlayingPane` (cover + title + album/artist/composer/comment + transport + lyrics placeholder); `Toast` (transient bottom-of-window error notice with auto-dismiss).
+- **UI extensions:** preview-play column on `LibraryPane` (col 0, PLAY glyph) + per-row preview-play QPushButton on `AlbumOrderPane` via `setItemWidget`. Column-index lookups via name-based `_column_index()` helper.
+- **MainWindow integration:** Player owned; preview-play wired on both panes through `_on_preview_play(path)`; `last_played_track_path` restored paused at zero on startup; `closeEvent` stops player + persists audio settings (each step try/except-wrapped per L7-C1 pattern); `Toast` positioned at bottom of central widget on resize.
+- **Keyboard:** Ctrl+N / Ctrl+Q / F1 / Space / Left / Right / Shift+Left / Shift+Right / M wired with `_key_in_text_field` suppression (`QLineEdit` / `QSpinBox` / `QTextEdit`). F1 surfaces a help dialog enumerating bindings. **Closes indie-review Theme E.**
+- **Error UX:** Player errors route through `Toast`; one-shot `QMessageBox.warning` surfaces the openSUSE GStreamer/FFmpeg install command on the first decoder-class failure, then suppresses for the rest of the session.
+- **Theme:** QSS rules for transport bar, now-playing labels, lyrics placeholder (dashed border), Toast (danger border + close button), per-row preview-play hover.
+- **Spec 00 keyboard table:** "Wired?" column flipped from "Phase 3" to "✓ v0.3.0" across all rows.
+
+**Test count:** 195 → 264 passing (+69 across player/transport_bar/now_playing_pane/toast/keyboard_shortcuts/main_window/settings/library_pane/album_order_pane). 10 integration tests skipped pending `AB_INTEGRATION_AUDIO=1`. Ruff clean.
+
+**Indie-review carry-forward closures:**
+
+- ✅ **Theme E (keyboard shortcuts).** Every Spec 00 shortcut wired with documented suppression machinery.
+
+**Manual smoke checklist** (per the Phase 3A plan §Manual smoke):
+
+1. Cold launch — right pane shows "(nothing loaded)" placeholder. ✓
+2. Click `▶` on a library row — track loads + plays + transport updates. (Manual on host with audio.)
+3. Drag scrubber → seek lands. (Manual on host with audio.)
+4. Volume + mute persist across launches via `settings.json`. (Manual.)
+5. Space toggles play/pause; suppressed in QLineEdit. ✓ (unit-tested via handler.)
+6. Quit while playing → exits cleanly; re-launch → last-played track loaded paused at zero. (Manual.)
+7. Bogus path → toast appears. ✓ (`test_preview_play_unknown_path_shows_toast`.)
+8. Codec-class error → one-shot dialog. ✓ (`test_codec_error_shows_one_shot_dialog`.)
+
+---
+
 ## ✅ v0.2.2 — Phase 2 Tier 3 sweep (2026-04-28)
 
 Patch release closing the `/indie-review` Tier 3 structural / cosmetic queue. Same-day follow-up to v0.2.1; no user-facing feature changes (one user-visible polish: classic half-up rounding on track durations + Spec 11 gradients on the approve button and album pill).
@@ -152,7 +187,7 @@ One item accepted as v1 acceptance: stale-segment-recovery TOCTOU (microsecond r
 - 📋 **Theme B — `settings.json` 8-field schema is fictional.** `persistence/settings.py` reads only `tracks_folder`. Spec 10 §`settings.json` schema (lines 189-216) documents `albums_folder`, `audio.{volume,muted}`, `alignment.{auto_align_on_play,model_size}`, `ui.{theme,open_report_folder_on_approve}`, plus `schema_version`. Either implement or mark spec as v1=tracks_folder-only. Caught by L3-M5 + L8-H5.
 - 📋 **Theme C — `.bak` file requirement unimplemented.** Spec 10 line 79 + TC-10-03 require `<file>.v<old>.bak` on schema migration. `persistence/schema.py` is pure compute, no I/O. Latent until v2 schema lands; ship-blocker once it does. Caught by L2-M2 + L8-H4.
 - 📋 **Theme D — Approve-button + AlbumPill QSS gradients absent.** Spec 11 §Gradients line 38 + TC-11-08 + Spec 03 §Visual rules line 90 specify `success → success-dark` / `accent-primary-1 → accent-primary-2` `qlineargradient` calls. `theme.py` contains zero gradient declarations. Caught by L6-M2 + L8-M4.
-- 📋 **Theme E — Keyboard shortcuts not wired.** Spec 00 §Keyboard shortcuts (lines 119-129) lists Ctrl+N / Ctrl+Q / F1 + Phase-3 Space / arrows / M. `grep -rn "QShortcut\|setShortcut" src/` returns nothing. Spec implies Phase 1-2 shortcuts wired-now, Phase 3 deferred. Caught by L5-H3 + L7-L4 + L8-M5.
+- ✅ **Theme E — Keyboard shortcuts not wired.** Closed in v0.3.0. Every Spec 00 shortcut wired with `QShortcut` + `_key_in_text_field` suppression for transport keys; F1 help dialog enumerates the bindings.
 - 📋 **Theme F — Screen-reader / a11y labels missing across all widgets.** No `setAccessibleName` / `setAccessibleDescription` / `AccessibleTextRole` anywhere in `src/album_builder/ui/`. Toggle column reads as "black circle / white circle" to Orca. WCAG 2.2 §2.1.1 (keyboard) + §4.1.2 (Name, Role, Value) fail. Caught by L5-H3 / H4 / H5 + L6-L12.
 - 📋 **Theme G — Locale-aware sort missing.** `library_pane.py:108` returns raw `value` for sort role; AlbumStore uses `name.lower()`. Spec 00 §"Sort order (canonical)" line 65 says case-insensitive locale-aware. Polish "ł", Turkish dotted I, German "ß" sort wrong; Z < a (ASCII). Caught by L1 (noted) + L5-H1 + L8-M6.
 - 📋 **Theme H — TC-01-P2-03/04 plan-crosswalk lies about coverage.** `docs/plans/2026-04-28-phase-2-albums.md:3683-3684` marks both "direct"; the named tests (`test_tracks_changed_fires_on_file_removed`, `test_watcher_survives_folder_deletion_and_recreation`) don't assert what the TCs say (`Track.is_missing=True`, `Library.search(include_missing=)` parameter). Spec 01 + ROADMAP correctly say "deferred"; the plan crosswalk is wrong. Caught by L1 (noted) + L8-H2.
@@ -272,11 +307,11 @@ One item accepted as v1 acceptance: stale-segment-recovery TOCTOU (microsecond r
 
 ## 🔭 Upcoming phases
 
-### 📋 v0.3.0 — Phase 3: Playback & Lyrics (planned)
+### 📋 v0.4.0 — Phase 3B: Lyrics Alignment (planned)
 
-`QMediaPlayer` integration, transport controls, scrolling karaoke lyrics with Whisper-aligned `.lrc` cache. Specs: 06, 07.
+WhisperX / wav2vec2 forced-alignment pipeline, on-demand model download (~1 GB total), `LyricsTracker` subscribing to `Player.position_changed`, scrolling 3-line lyrics panel replacing the v0.3.0 `LyricsPlaceholder`, `.lrc` cache co-located with audio in `Tracks/`. Spec: 07.
 
-### 📋 v0.4.0 — Phase 4: Export & Approval (planned)
+### 📋 v0.5.0 — Phase 4: Export & Approval (planned)
 
 M3U + symlink folder per album, hard-lock approval state, PDF + HTML report generation via WeasyPrint. Specs: 08, 09.
 
