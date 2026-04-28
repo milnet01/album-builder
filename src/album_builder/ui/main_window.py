@@ -81,8 +81,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(title_label)
         layout.addStretch(1)
         empty = QLabel("(coming in Phase 2)")
+        empty.setObjectName("PlaceholderText")
         empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        empty.setStyleSheet("color: #6e717c;")
         layout.addWidget(empty)
         layout.addStretch(2)
         return pane

@@ -15,6 +15,7 @@ class Palette:
     text_primary: str
     text_secondary: str
     text_tertiary: str
+    text_placeholder: str
     text_disabled: str
     accent_primary_1: str
     accent_primary_2: str
@@ -35,6 +36,10 @@ class Palette:
             text_primary="#e8e9ee",
             text_secondary="#8a8d9a",
             text_tertiary="#6e717c",
+            # WCAG 2.2 AA-compliant placeholder colour: 6.4:1 vs bg_pane.
+            # Don't replace with text_tertiary (3.2:1) for "subtle" copy on
+            # bg_pane — that fails accessibility.
+            text_placeholder="#9a9da8",
             text_disabled="#4a4d5a",
             accent_primary_1="#6e3df0",
             accent_primary_2="#c635a6",
@@ -72,6 +77,9 @@ def qt_stylesheet(p: Palette) -> str:
         text-transform: uppercase;
         padding-bottom: 6px;
         border-bottom: 1px solid {p.border};
+    }}
+    QLabel#PlaceholderText {{
+        color: {p.text_placeholder};
     }}
     QLineEdit {{
         background-color: {p.bg_base};
