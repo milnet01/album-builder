@@ -90,7 +90,7 @@ class TransportBar(QWidget):
         self.lbl_current.setText(self._format_time(seconds))
 
     def _on_duration_changed(self, seconds: float) -> None:
-        self.scrubber.setRange(0, int(round(seconds)))
+        self.scrubber.setRange(0, round(seconds))
         self.lbl_duration.setText(self._format_time(seconds))
 
     def _on_state_changed(self, state) -> None:
