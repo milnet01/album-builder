@@ -43,8 +43,12 @@ class Library:
             if entry.is_file() and entry.suffix.lower() in SUPPORTED_EXTENSIONS:
                 try:
                     tracks.append(Track.from_path(entry))
-                except (mutagen.MutagenError, OSError):
-                    # malformed file or transient I/O issue: skip silently in v1
+                except mutagen.MutagenError:
+                    # Spec 01: malformed audio with no parseable tags is loaded
+                    # with placeholders by Track.from_path itself. A bare
+                    # MutagenError here means truly unrecoverable parsing —
+                    # skip silently. OSError (PermissionError, transient mount
+                    # loss) is unwrapped by Track.from_path and propagates.
                     continue
         return cls(folder=folder, tracks=tracks)
 

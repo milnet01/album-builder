@@ -34,17 +34,9 @@ class Track:
             return cls._missing(path)
 
         size = path.stat().st_size
-        try:
-            mf = MutagenFile(path)
-        except mutagen.MutagenError:
-            mf = None
-
+        mf = _open_tags(MutagenFile, path)
         duration = float(mf.info.length) if mf and mf.info else 0.0
-
-        try:
-            id3 = ID3(path)
-        except mutagen.MutagenError:
-            id3 = None
+        id3 = _open_tags(ID3, path)
 
         title = _text(id3, "TIT2") or path.name
         artist = _text(id3, "TPE1") or "Unknown artist"
@@ -86,6 +78,26 @@ class Track:
             file_size_bytes=0,
             is_missing=True,
         )
+
+
+def _open_tags(opener, path: Path):
+    """Open `path` with mutagen, unwrapping OS-level failures.
+
+    mutagen raises ``MutagenError`` for both tag-parse failures *and*
+    OS-level failures (PermissionError, transient mount loss). Per Spec 01
+    we want the former skipped silently and the latter surfaced to the
+    user — they signal something the user must address, not a quirk of one
+    audio file's tags.
+    """
+    try:
+        return opener(path)
+    except mutagen.MutagenError as exc:
+        underlying = exc.__context__
+        if underlying is None and exc.args and isinstance(exc.args[0], OSError):
+            underlying = exc.args[0]
+        if isinstance(underlying, OSError):
+            raise underlying from exc
+        return None
 
 
 def _text(id3: ID3 | None, key: str) -> str:

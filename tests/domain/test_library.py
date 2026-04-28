@@ -72,3 +72,16 @@ def test_library_scan_unreadable_dir_returns_empty(tmp_path: Path) -> None:
         assert lib.tracks == []
     finally:
         target.chmod(0o755)
+
+
+def test_library_scan_unreadable_file_propagates(tmp_path: Path, tagged_track) -> None:
+    """Per Spec 01: 'no readable tags' uses placeholders, but file-level
+    PermissionError is a real I/O failure that must surface, not silently skip."""
+    import pytest as _pytest
+    locked = tagged_track("locked.mp3")
+    locked.chmod(0o000)
+    try:
+        with _pytest.raises(PermissionError):
+            Library.scan(tmp_path)
+    finally:
+        locked.chmod(0o644)
