@@ -106,6 +106,24 @@ Plan: [`docs/plans/2026-04-28-phase-2-albums.md`](docs/plans/2026-04-28-phase-2-
 
 ---
 
+## ✅ v0.2.2 — Phase 2 Tier 3 sweep (2026-04-28)
+
+Patch release closing the `/indie-review` Tier 3 structural / cosmetic queue. Same-day follow-up to v0.2.1; no user-facing feature changes (one user-visible polish: classic half-up rounding on track durations + Spec 11 gradients on the approve button and album pill).
+
+**Shipped (20 items across 5 logical batches):**
+
+- **Domain (5):** `slugify` NFKD transliteration ("Émile" → "emile" instead of collapsing to "album"); `Library` precomputes a casefolded search blob per track at `__post_init__`; `Library.sorted()` casefolds (Unicode-aware lower); `Album.unapprove` defensive target-invariant assert; `_to_iso` rejects naive datetimes.
+- **Persistence (4):** `cover_override` self-heal symmetric with `track_paths`; `_write_album_json` + `_snap_timestamps_to_ms` extracted from the three `save_album*` variants; `_atomic_write` shared core for text/bytes; `read_text(encoding="utf-8")` pinned on `album_io.load_album`.
+- **Services + UI (5):** `AlbumStore.list()` casefolds; `AlbumStore` signal docstring on `pyqtSignal(object)` idiom; `LibraryPane.set_tracks` selection-cache contract documented; `_format_duration` uses classic half-up rounding (was banker's); approve dialog string rewritten in user-neutral language.
+- **Theme (2):** `QPushButton#ApproveButton` `success → success-dark` gradient + `QPushButton#AlbumPill` `accent-primary-1 → accent-primary-2` gradient (Spec 11 §Gradients TC-11-08); `Glyphs.DRAG_HANDLE` rendering documented.
+- **Logging + tests (4):** `settings.read_tracks_folder` now logs OSError / malformed-JSON / non-object cases; +7 regression tests across slug, library, album_io, library_pane, and album.
+
+**Test count:** 188 → 195 passing (+7 regression tests). Ruff clean.
+
+One item carried forward as ongoing observation: `tests/ui/` filenames mirror module names rather than citing WCAG / RFC / TC-* IDs in filenames. Coverage map lives in spec; flagged for awareness, not a defect.
+
+---
+
 ## ✅ v0.2.1 — Phase 2 hardening (2026-04-28)
 
 Patch release closing the `/indie-review` Tier 1 + Tier 2 fix queue. Same-day follow-up to v0.2.0; no user-facing feature changes. The detailed fix breakdown lives in the per-tier sections below.
@@ -115,12 +133,12 @@ Patch release closing the `/indie-review` Tier 1 + Tier 2 fix queue. Same-day fo
 - **Tier 1 (6 ship-now items):** `AlbumStore.delete()` crash-atomicity + sub-second trash precision; `closeEvent` step-isolated try/except; CLAUDE.md rewrite; README v0.2.0 status; Phase-2-plan crosswalk truthfulness for TC-01-P2-03/04.
 - **Tier 2 (28 hardening items):** Domain invariants + per-entry OSError; JSON self-heal symmetry + state.json field-type guards + `Path.absolute()` symlink preservation; atomic-write parent fsync + `DebouncedWriter` exception guard + XDG absolute-path conformance; cross-FS trash warning + parent-folder watcher + dotfile-skip; UI a11y (keyboard activation, AccessibleTextRole, accessible names, approved tooltip); locale-aware sort; pill empty-state middle dot; counter empty-snap-to-1; setMaxLength→commit-time validation; SHM-error-class distinction + try/finally; window-geometry restore clamp; spec coherence sweep (Spec 12 `%F`, Spec 04 boundary, Spec 00 keyboard wiring status, Spec 01 watcher ownership).
 
-**Test count:** 173 → 195 passing (+22 regression tests). Ruff clean. `/audit` clean across all 7 tools.
+**Test count:** 173 → 188 passing (+15 regression tests). Ruff clean. `/audit` clean across all 7 tools.
 
-Three items intentionally deferred to v0.3.0:
-- `LibraryPane._model._toggle_enabled` direct access (refactor → public accessor on `TrackTableModel`).
-- `ACCENT_ROLE = Qt.UserRole + 2` magic-number → module constant.
-- 17 Tier 3 structural / cosmetic items (gradients, refactors, perf, doc nits — better grouped with Phase 3 work).
+Three items intentionally deferred:
+- `LibraryPane._model._toggle_enabled` direct access (refactor → public accessor on `TrackTableModel`) — naming-only; carried to v0.3.0.
+- `ACCENT_ROLE = Qt.UserRole + 2` magic-number → module constant — naming-only; carried to v0.3.0.
+- 20 Tier 3 structural / cosmetic items — landed in v0.2.2.
 
 One item accepted as v1 acceptance: stale-segment-recovery TOCTOU (microsecond race window during owner shutdown; documented in code).
 
@@ -227,28 +245,28 @@ One item accepted as v1 acceptance: stale-segment-recovery TOCTOU (microsecond r
 
 ## ⚡ Tier 3 — Phase 2 structural / cosmetic
 
-📋 **Lower-priority items: a11y polish, refactors, perf, docs nits.**
+✅ **All landed 2026-04-28.** 188 -> 195 tests; ruff clean. Two INFO items intentionally not actioned (test-name convention review carried as ongoing flag; `Albums/__pycache__/` silent-skip already shipped in Tier 2 L4-M1).
 
-- 📋 **MEDIUM — Locale-aware sort.** Spec 00 §Sort order; `library_pane.py:108` returns raw value; AlbumStore uses `name.lower()`. Use `casefold()` + locale collation. (Theme G fix.) Affects `library_pane.py` + `album_store.py`.
-- 📋 **MEDIUM — Approve / pill QSS gradients.** Theme D fix: add `qlineargradient(...)` rules in `theme.py` for `QPushButton#ApproveButton` (Spec 11 §Gradients) and `QPushButton#AlbumPill` (Spec 03 §Visual rules). Set `objectName` on the buttons.
-- 📋 **MEDIUM — `Library.search` lowercased-cache.** `domain/library.py:74-81` re-lowercases per keystroke. For 500-track tier (spec-stated cap), pre-compute a search-tuple cached property on `Track`. One-liner if you already touch this code.
-- 📋 **MEDIUM — `slugify` non-ASCII transliteration.** `domain/slug.py:22-24`. "Émile" / "東京" all → `"album"` and collide en masse. Consider `unicodedata.normalize("NFKD", ...) + ASCII-encode` before fallback. Spec extension call.
-- 📋 **MEDIUM — `Album.unapprove` doesn't re-validate target invariant.** Domain method; relies on approve-side guard. Defensive `assert` would close the gap.
-- 📋 **MEDIUM — `_to_iso` naive-datetime guard.** `persistence/album_io.py:39`. Naive `datetime` interpreted as local time; future caller could feed one in and silently get wrong-hour stamps with `Z` suffix. Add `if dt.tzinfo is None: raise`.
-- 📋 **LOW — Refactor `atomic_write_text` / `atomic_write_bytes` shared core.** `persistence/atomic_io.py`. Two 14-line functions could be 4 + 4-line wrappers. Rule of Three with the upcoming Phase-4 PDF write path.
-- 📋 **LOW — Refactor three `save_album*` post-write blocks.** `persistence/album_io.py:104-116, 119-131, 134-150`. Extract `_write_album_json(folder, album)` for the common dump+atomic+ms-snap; the variants differ only on marker timing.
-- 📋 **LOW — `read_text()` without explicit encoding.** `persistence/album_io.py:158`, `state_io.py:59`. Spec 10 says UTF-8, no BOM. Locale could produce ASCII default on stripped server. Pin `encoding="utf-8"`.
-- 📋 **LOW — `cover_override` no relative-path heal.** `persistence/album_io.py:69, 89`. Spec 10 §Paths lists `cover_override` with same self-heal as track_paths; not applied.
-- 📋 **LOW — `Library.scan` `casefold()` not `.lower()`.** `domain/library.py:91`. `.lower()` differs from `casefold()` only for German "ß" + a few others; near-miss not bug.
-- 📋 **LOW — Approve dialog string mentions "Phase 4".** `src/album_builder/ui/main_window.py:131`. End user has no context for the phase reference. Rewrite to user-neutral language.
-- 📋 **LOW — `AlbumStore` signal type comment vs `pyqtSignal(object)`.** `services/album_store.py:29-32`. Spec 03 documents typed signatures; idiom is `pyqtSignal(object)` with `# Album` comment. One-line clarifying note.
-- 📋 **LOW — `LibraryPane.set_tracks` resets `_toggle_enabled` but not `_selected_paths`.** `ui/library_pane.py:39-43`. Stale selection survives. Either clear or document the contract.
-- 📋 **LOW — `_format_duration` banker's rounding.** `ui/library_pane.py:113`. `round()` is half-to-even; user-readable durations want classic rounding.
-- 📋 **LOW — `Albums/__pycache__/` produces noisy warning.** `services/album_store.py:52-54`. Filter rejects it via `AlbumDirCorrupt: missing album.json`. Skip dotfile/dunder dirs silently.
-- 📋 **LOW — Empty-state pill text middle dot.** Theme A fix; `ui/album_switcher.py:91`.
-- 📋 **LOW — DRAG_HANDLE rendering depends on font.** `ui/theme.py:184-200` `"⋮⋮"` is two adjacent vertical-ellipsis; Spec 11 says "stacked." Document or implement vertically.
-- 📋 **INFO — Tests don't cite WCAG / RFC / TC-* in filenames.** `tests/ui/` filenames mirror module names; coverage map lives in spec only. Acceptable; flagged for awareness.
-- 📋 **INFO — No structured logging anywhere in `persistence/`.** Spec 10 says "log warning" multiple times; modules silently swallow corrupt JSON / missing settings keys. One `import logging; logger = logging.getLogger(__name__)` per module would close the gap.
+- ✅ **MEDIUM — Locale-aware sort.** `AlbumStore.list()` and `Library.sorted()` now use `casefold()` (Unicode-aware lower; handles German ß, Turkish dotless I, Polish ł). LibraryPane's `data()` already used casefold from Tier 2.
+- ✅ **MEDIUM — Approve / pill QSS gradients.** Added `QPushButton#ApproveButton` (`success → success-dark`) and `QPushButton#AlbumPill` (`accent-primary-1 → accent-primary-2`) gradient rules in `theme.qt_stylesheet`; `objectName="ApproveButton"` set on the top-bar approve button.
+- ✅ **MEDIUM — `Library.search` lowercased-cache.** Added `Library._search_blobs: tuple[str, ...]` precomputed at `__post_init__`. Each keystroke now allocates one casefold() on the needle, not 500 on the haystack. Field is `compare=False, repr=False` so it's invisible to equality/repr.
+- ✅ **MEDIUM — `slugify` non-ASCII transliteration.** NFKD-normalise + casefold + ASCII-encode before the regex. "Émile" → "emile", "Café" → "cafe", "Straße" → "strasse", CJK / emoji-only inputs still fall back to "album".
+- ✅ **MEDIUM — `Album.unapprove` re-validate target invariant.** Defensive `assert self.target_count >= len(self.track_paths)` closes the gap when a caller bypasses `select()`'s guard via direct list mutation.
+- ✅ **MEDIUM — `_to_iso` naive-datetime guard.** Now raises `ValueError` if `dt.tzinfo is None`. Prevents wrong-hour `Z` stamps from silently appearing if a caller forgets `tz=UTC`.
+- ✅ **LOW — Refactor `atomic_write_text` / `atomic_write_bytes`.** Shared `_atomic_write(path, mode, content, encoding=...)` core; two 14-line functions are now 1-line wrappers + a 14-line helper.
+- ✅ **LOW — Refactor three `save_album*` post-write blocks.** Extracted `_write_album_json(folder, album)` and `_snap_timestamps_to_ms(album)`; variants now differ only on marker timing as the spec intends.
+- ✅ **LOW — `read_text()` without explicit encoding.** `album_io.load_album` now passes `encoding="utf-8"`. (`state_io.load_state` was already pinned in Tier 2 P4; `settings.read_tracks_folder` was already pinned.)
+- ✅ **LOW — `cover_override` no relative-path heal.** `_deserialize` now applies the same `Path.absolute()` heal to `cover_override` as to `track_paths`; rewrites the file when healed.
+- ✅ **LOW — `Library.scan` casefold not `.lower()`.** `Library.sorted()` lambdas now casefold; `.lower()` was only wrong on German ß + Turkish dotless I but the deviation closes the loop with Spec 00.
+- ✅ **LOW — Approve dialog string mentions "Phase 4".** Rewrote the QMessageBox prompt to user-neutral language ("locked from edits until you reopen it" + parenthetical about export running automatically once that feature ships).
+- ✅ **LOW — `AlbumStore` signal type comment.** Added a leading docstring block on the four signal lines explaining the `pyqtSignal(object) + # Type` idiom and why typed signatures aren't used directly.
+- ✅ **LOW — `LibraryPane.set_tracks` `_selected_paths` contract.** Documented: selection state belongs to `set_album_state()`, not `set_tracks()`. Path equality is value-based so a track that vanishes and reappears stays correctly selected; clearing on every library refresh would visually drop the user's selection.
+- ✅ **LOW — `_format_duration` banker's rounding.** Replaced `round()` (half-to-even) with `int(seconds + 0.5)` (classic half-up). 0.5s → 1, 1.5s → 2, 2.5s → 3. Regression test pinned.
+- ✅ **LOW — `Albums/__pycache__/` noisy warning.** Already shipped in Tier 2; verified `entry.name.startswith("__")` filters it before the `AlbumDirCorrupt` log.
+- ✅ **LOW — Empty-state pill middle dot.** Already shipped in Tier 2 (album_switcher.py:103 uses U+00B7 middle dot).
+- ✅ **LOW — DRAG_HANDLE rendering.** Documented in `theme.Glyphs.DRAG_HANDLE`: U+22EE x2 approximates the spec's vertical stack at the available font sizes; a true vertical stack would require a custom-painted `QStyledItemDelegate`.
+- ✅ **INFO — Structured logging in persistence/.** Added `logger = logging.getLogger(__name__)` to `settings.py`; `read_tracks_folder` now logs `OSError`, malformed-JSON, and non-object cases. (`album_io`, `state_io`, `debounce` already had loggers from prior tiers.)
+- 📋 **INFO (carried) — Tests don't cite WCAG / RFC / TC-* in filenames.** Acceptable as flagged; `tests/ui/` filenames mirror module names; coverage map lives in spec only. Standing observation, not a defect.
 
 ---
 

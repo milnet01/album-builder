@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
@@ -23,10 +23,24 @@ class SortKey(StrEnum):
     DURATION = "duration"
 
 
+def _search_blob(t: Track) -> str:
+    # Spec 01: search filters across title, artist, album_artist, composer,
+    # album. Pre-folded once at Library-construction time so each keystroke
+    # only allocates one casefold() on the needle, not 500 on the haystack.
+    return "\n".join((
+        t.title.casefold(),
+        t.artist.casefold(),
+        t.album_artist.casefold(),
+        t.composer.casefold(),
+        t.album.casefold(),
+    ))
+
+
 @dataclass(frozen=True)
 class Library:
     folder: Path
     tracks: tuple[Track, ...] = ()
+    _search_blobs: tuple[str, ...] = field(default=(), repr=False, compare=False)
 
     def __post_init__(self) -> None:
         # Permit callers to pass any iterable (list, generator) — but store
@@ -35,6 +49,10 @@ class Library:
         # frozen dataclass to coerce its own field in __post_init__.
         if not isinstance(self.tracks, tuple):
             object.__setattr__(self, "tracks", tuple(self.tracks))
+        if not self._search_blobs:
+            object.__setattr__(
+                self, "_search_blobs", tuple(_search_blob(t) for t in self.tracks),
+            )
 
     @classmethod
     def scan(cls, folder: Path) -> Library:
@@ -78,24 +96,23 @@ class Library:
         return None
 
     def search(self, query: str) -> list[Track]:
-        q = query.strip().lower()
+        q = query.strip().casefold()
         if not q:
             return list(self.tracks)
         return [
-            t for t in self.tracks
-            if q in t.title.lower()
-            or q in t.artist.lower()
-            or q in t.album_artist.lower()
-            or q in t.composer.lower()
-            or q in t.album.lower()
+            t for t, blob in zip(self.tracks, self._search_blobs, strict=True)
+            if q in blob
         ]
 
     def sorted(self, key: SortKey, *, ascending: bool = True) -> list[Track]:
+        # Spec 00 §Sort order: case-insensitive, locale-aware. casefold() is
+        # the Unicode-aware lower (handles German ß, Turkish dotless I, etc.)
+        # — .lower() got Spec 00 wrong on a small number of locales.
         attr = {
-            SortKey.TITLE: lambda t: t.title.lower(),
-            SortKey.ARTIST: lambda t: t.artist.lower(),
-            SortKey.ALBUM: lambda t: t.album.lower(),
-            SortKey.COMPOSER: lambda t: t.composer.lower(),
+            SortKey.TITLE: lambda t: t.title.casefold(),
+            SortKey.ARTIST: lambda t: t.artist.casefold(),
+            SortKey.ALBUM: lambda t: t.album.casefold(),
+            SortKey.COMPOSER: lambda t: t.composer.casefold(),
             SortKey.DURATION: lambda t: t.duration_seconds,
         }[key]
         return sorted(self.tracks, key=attr, reverse=not ascending)

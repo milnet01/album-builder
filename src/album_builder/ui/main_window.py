@@ -141,7 +141,9 @@ class MainWindow(QMainWindow):
     def _on_approve(self, album_id: UUID) -> None:
         if QMessageBox.question(
             self, "Approve album",
-            "Approve this album? Symlinks + report will be generated (Phase 4).",
+            "Approve this album? It will be locked from edits until you "
+            "reopen it. (Export to symlinks + a printable report will run "
+            "automatically once that feature ships.)",
         ) != QMessageBox.StandardButton.Yes:
             return
         try:

@@ -230,3 +230,18 @@ def test_album_post_init_rejects_approved_without_tracks() -> None:
             created_at=datetime.now(UTC), updated_at=datetime.now(UTC),
             approved_at=datetime.now(UTC),
         )
+
+
+# Tier 3: Album.unapprove asserts the target invariant defensively. Direct
+# callers that mutate `track_paths` through the dataclass attribute (rather
+# than `select()`) and then unapprove would otherwise sneak past the
+# __post_init__ check. The assert closes that gap.
+def test_album_unapprove_asserts_target_invariant() -> None:
+    a = Album.create(name="x", target_count=2)
+    a.select(Path("/abs/a.mp3"))
+    a.approve()
+    # Bypass select()'s guard by mutating the list directly. This is the
+    # exact misuse the assert exists to catch.
+    a.track_paths.extend([Path("/abs/b.mp3"), Path("/abs/c.mp3")])
+    with pytest.raises(AssertionError, match="invariant"):
+        a.unapprove()

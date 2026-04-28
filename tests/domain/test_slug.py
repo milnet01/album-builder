@@ -23,12 +23,31 @@ def test_slugify_collapses_runs() -> None:
 
 # Spec: TC-02-04
 def test_slugify_non_ascii_falls_back_to_album() -> None:
-    """A name composed entirely of characters that don't map to [a-z0-9-]
-    must not produce an empty slug — that would create `Albums//album.json`.
-    Fall back to the literal string 'album' (the user can rename later)."""
-    assert slugify("ąęó") == "album"
+    """A name with no representable ASCII content must not produce an empty
+    slug — that would create `Albums//album.json`. CJK / emoji-only inputs
+    fall back to the literal string 'album' (the user can rename later).
+    Accented Latin characters are NFKD-normalised: "Émile" -> "emile" rather
+    than "album", so users with Polish / French / Spanish / Czech / etc.
+    names get a useful folder name."""
     assert slugify("---") == "album"
     assert slugify("") == "album"
+    # CJK + emoji + symbol-only inputs have no ASCII fallback after NFKD.
+    assert slugify("東京") == "album"
+    assert slugify("\U0001f3b5\U0001f3b6") == "album"  # musical-note emoji
+
+
+# Spec: TC-02-04 (extension: NFKD transliteration)
+def test_slugify_strips_diacritics() -> None:
+    """Accented Latin chars decompose to base + combining mark (NFKD); the
+    combining marks live above U+007F and drop on ASCII-encode, leaving the
+    base letter. This stops "Émile", "Café", "Naïve" from all colliding on
+    the same fallback "album" slug."""
+    assert slugify("Émile") == "emile"
+    assert slugify("Café Tacvba") == "cafe-tacvba"
+    assert slugify("Naïve") == "naive"
+    assert slugify("Łódź") == "odz"  # Polish ł has no NFKD decomposition; drops
+    # German ß casefolds to "ss" (Unicode-aware lower).
+    assert slugify("Straße") == "strasse"
 
 
 # Spec: TC-02-04, TC-02-08

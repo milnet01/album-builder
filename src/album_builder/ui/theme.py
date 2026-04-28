@@ -138,6 +138,46 @@ def qt_stylesheet(p: Palette) -> str:
         color: {p.text_disabled};
         border-color: {p.border};
     }}
+    /* Spec 11 §Gradients (TC-11-08): approve button uses success ->
+       success-dark. Qt QSS spells the linear-gradient(135deg, ...) form
+       as qlineargradient with normalised endpoint coordinates - 135deg
+       maps to top-left -> bottom-right. */
+    QPushButton#ApproveButton {{
+        background: qlineargradient(
+            x1:0, y1:0, x2:1, y2:1,
+            stop:0 {p.success}, stop:1 {p.success_dark}
+        );
+        border: 1px solid {p.success_dark};
+        color: {p.text_primary};
+        font-weight: 600;
+    }}
+    QPushButton#ApproveButton:disabled {{
+        background: {p.bg_elevated};
+        border-color: {p.border};
+        color: {p.text_disabled};
+    }}
+    /* Spec 03 §Visual rules: pill gradient is accent-primary-1 ->
+       accent-primary-2. The approved-album variant (success gradient) is
+       not encoded here because QSS attribute selectors don't see album
+       state without a custom Q_PROPERTY; the existing pill widget is
+       always shown over a draft-style background and approval is
+       conveyed by the in-row `lock` glyph and the disabled toolbar. */
+    QPushButton#AlbumPill {{
+        background: qlineargradient(
+            x1:0, y1:0, x2:1, y2:1,
+            stop:0 {p.accent_primary_1}, stop:1 {p.accent_primary_2}
+        );
+        border: none;
+        color: {p.text_primary};
+        font-weight: 600;
+        padding: 5px 14px;
+    }}
+    QPushButton#AlbumPill:hover {{
+        background: qlineargradient(
+            x1:0, y1:0, x2:1, y2:1,
+            stop:0 {p.accent_primary_2}, stop:1 {p.accent_primary_1}
+        );
+    }}
     /* Spec 11 focus ring: 2 px outline at accent_primary_1. Qt QSS does not
        support outline-offset, so we widen the existing border and shrink
        padding by the same amount to avoid layout shift on focus. */
@@ -185,7 +225,16 @@ class Glyphs:
     """Single source of truth for symbolic glyphs used by widgets.
     Mirror of Spec 11 Glyphs - every widget that uses a glyph imports from here."""
 
-    DRAG_HANDLE = "⋮⋮"  # vertical-ellipsis x2 - Spec 05 middle pane
+    # Spec 11 §Glyphs documents the drag handle as a vertical-stacked
+    # double-ellipsis. We use two adjacent U+22EE ("⋮") because there is
+    # no single Unicode code point for the stacked form; horizontal
+    # neighbouring approximates the visual at the available font sizes
+    # (Inter / Cantarell render the pair side-by-side, which a designer
+    # could mistake for a horizontal-2x3 dot grid). If a true vertical
+    # stack is wanted later, swap to a custom-painted QStyledItemDelegate
+    # rather than a heavier glyph - DejaVu's stacked variants are not
+    # ubiquitous on user systems.
+    DRAG_HANDLE = "⋮⋮"  # U+22EE x2 - Spec 05 middle pane
     UP = "▲"                  # black up-pointing triangle - Spec 04 target counter
     DOWN = "▼"                # black down-pointing triangle - Spec 04 target counter
     TOGGLE_ON = "●"           # black circle - Spec 04 selection

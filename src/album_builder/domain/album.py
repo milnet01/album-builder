@@ -153,6 +153,15 @@ class Album:
     def unapprove(self) -> None:
         if self.status != AlbumStatus.APPROVED:
             raise ValueError(f"cannot unapprove from status {self.status!r}")
+        # Defensive: an approved album with target_count < len(track_paths)
+        # should be impossible (approve() requires at least one track and
+        # the __post_init__ invariant rejects target<len at construction).
+        # Re-check here so a future code path that bypasses both can't
+        # silently leave a draft in an invalid state.
+        assert self.target_count >= len(self.track_paths), (
+            f"target_count ({self.target_count}) < len(track_paths) "
+            f"({len(self.track_paths)}) on unapprove — invariant violated"
+        )
         self.status = AlbumStatus.DRAFT
         self.approved_at = None
         self.updated_at = _now()

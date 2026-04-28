@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def settings_dir() -> Path:
@@ -37,13 +40,19 @@ def read_tracks_folder() -> Path | None:
         raw = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return None
-    except OSError:
+    except OSError as exc:
+        logger.warning("settings.json: unreadable (%s); falling back to default", exc)
         return None
     try:
         data = json.loads(raw)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        logger.warning("settings.json: malformed JSON (%s); falling back to default", exc)
         return None
     if not isinstance(data, dict):
+        logger.warning(
+            "settings.json: top-level value is not an object (%r); falling back",
+            type(data).__name__,
+        )
         return None
     folder = data.get("tracks_folder")
     if not isinstance(folder, str) or not folder.strip():

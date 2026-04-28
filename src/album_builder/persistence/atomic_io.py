@@ -42,10 +42,18 @@ def _fsync_dir(directory: Path) -> None:
         os.close(fd)
 
 
-def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> None:
+def _atomic_write(path: Path, mode: str, content, *, encoding: str | None = None) -> None:
+    """Shared core for both text and bytes atomic writes.
+
+    Sequence: open tmp -> write -> flush -> fsync(file) -> os.replace ->
+    fsync(parent). Any exception in the write path unlinks the tmp file
+    so the directory doesn't accumulate `.tmp` debris on a failed write.
+    `encoding` is forwarded to `open()` only for text-mode writes;
+    binary-mode `open()` rejects the kwarg, so it must be omitted there."""
     tmp = _unique_tmp_path(path)
     try:
-        with open(tmp, "w", encoding=encoding) as f:
+        kwargs = {"encoding": encoding} if encoding is not None else {}
+        with open(tmp, mode, **kwargs) as f:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())
@@ -62,19 +70,9 @@ def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> N
         raise
 
 
+def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> None:
+    _atomic_write(path, "w", content, encoding=encoding)
+
+
 def atomic_write_bytes(path: Path, content: bytes) -> None:
-    tmp = _unique_tmp_path(path)
-    try:
-        with open(tmp, "wb") as f:
-            f.write(content)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, path)
-        _fsync_dir(path.parent)
-    except Exception:
-        if tmp.exists():
-            try:
-                tmp.unlink()
-            except OSError:
-                pass
-        raise
+    _atomic_write(path, "wb", content)

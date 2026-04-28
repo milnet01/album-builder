@@ -37,6 +37,15 @@ class TrackTableModel(QAbstractTableModel):
         self._album_status: AlbumStatus = AlbumStatus.DRAFT
 
     def set_tracks(self, tracks: list[Track]) -> None:
+        # Contract: set_tracks() resets only the per-row enable cache,
+        # NOT _selected_paths. Selection state belongs to the active album
+        # and is owned by set_album_state(); a library-watcher refresh
+        # (filesystem change) doesn't change the album's selection. Path
+        # equality is value-based, so a Track that vanishes from disk and
+        # reappears at the same path stays correctly selected. The
+        # appropriate caller (MainWindow) reapplies album state after a
+        # library refresh by calling set_current_album() if the active
+        # album's view of the library needs to follow the watcher.
         self.beginResetModel()
         self._tracks = list(tracks)
         self._toggle_enabled = [True] * len(self._tracks)
@@ -125,7 +134,11 @@ class TrackTableModel(QAbstractTableModel):
 
 
 def _format_duration(seconds: float) -> str:
-    total = round(seconds)
+    # Classic half-up rounding (NOT round()'s banker's rounding) — users
+    # expect 0.5s -> 1s, 1.5s -> 2s, etc., consistently. round() in Python
+    # is half-to-even (1.5 -> 2 but 2.5 -> 2), which surfaces as a one-
+    # second jitter in displayed durations of identically-encoded files.
+    total = int(seconds + 0.5)
     h, rem = divmod(total, 3600)
     m, s = divmod(rem, 60)
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"

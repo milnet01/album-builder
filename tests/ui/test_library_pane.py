@@ -217,3 +217,18 @@ def test_approved_album_toggle_has_tooltip(populated_pane) -> None:
     tip = pane._model.data(pane._model.index(0, toggle_col), Qt.ItemDataRole.ToolTipRole)
     assert tip is not None
     assert "approved" in tip.lower()
+
+
+# Tier 3: classic half-up rounding, NOT Python's banker's. A 1.5s file and a
+# 2.5s file should both round AWAY from the same midpoint, not collapse onto
+# the same even integer.
+def test_format_duration_uses_classic_half_up_rounding() -> None:
+    from album_builder.ui.library_pane import _format_duration
+
+    # 0.5 -> 1, 1.5 -> 2, 2.5 -> 3 (classic). round() would give 0/2/2 (banker's).
+    assert _format_duration(0.5) == "0:01"
+    assert _format_duration(1.5) == "0:02"
+    assert _format_duration(2.5) == "0:03"
+    # Sanity: integer seconds unchanged, hour boundary intact.
+    assert _format_duration(0) == "0:00"
+    assert _format_duration(3600) == "1:00:00"

@@ -26,6 +26,11 @@ TRASH_DIRNAME = ".trash"
 
 
 class AlbumStore(QObject):
+    # Spec 03 documents typed signal signatures (`pyqtSignal(Album)` etc.),
+    # but the concrete idiom is `pyqtSignal(object)` with the payload type
+    # captured in the trailing comment. PyQt6 still type-checks the slot
+    # signature; using `object` here avoids the fragile auto-conversion of
+    # custom dataclasses through PyQt's meta-type system.
     album_added = pyqtSignal(object)            # Album
     album_removed = pyqtSignal(object)          # UUID
     album_renamed = pyqtSignal(object)          # Album
@@ -108,7 +113,11 @@ class AlbumStore(QObject):
             self._folders[album.id] = entry
 
     def list(self) -> list[Album]:
-        return sorted(self._albums.values(), key=lambda a: a.name.lower())
+        # Spec 00 §Sort order: case-insensitive, locale-aware. casefold() is
+        # the Unicode-aware lower (handles German ß, Turkish dotless I) —
+        # .lower() got Spec 00 wrong on a small number of locales and the
+        # AlbumSwitcher dropdown would have surfaced the inconsistency.
+        return sorted(self._albums.values(), key=lambda a: a.name.casefold())
 
     def get(self, album_id: UUID) -> Album | None:
         return self._albums.get(album_id)

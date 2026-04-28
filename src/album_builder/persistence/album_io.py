@@ -35,7 +35,16 @@ MIGRATIONS: dict[int, Callable[[dict], dict]] = {}
 def _to_iso(dt: datetime) -> str:
     """Serialize a datetime per Spec 10 Encoding rules: millisecond precision,
     Z suffix, UTC. `2026-04-28T17:02:14.514Z`. Routes every isoformat call so
-    a single source-of-truth function owns the format."""
+    a single source-of-truth function owns the format.
+
+    Naive datetimes (`tzinfo is None`) are rejected. `astimezone()` would
+    silently treat them as the host's local time and produce a wrong-hour
+    `Z` stamp; a clear error here is the safer failure mode."""
+    if dt.tzinfo is None:
+        raise ValueError(
+            f"_to_iso requires an aware datetime; got naive {dt!r}. "
+            f"Construct via `datetime.now(UTC)` or attach `tzinfo=UTC`.",
+        )
     return dt.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
@@ -77,6 +86,7 @@ def _deserialize(data: dict) -> tuple[Album, bool]:
     """Returns (album, needs_rewrite). `needs_rewrite` is True when a
     self-heal happened during deserialisation:
       - Relative track_paths resolved to absolute (Spec 10 Paths, TC-10-09).
+      - Relative cover_override resolved to absolute (Spec 10 Paths).
       - target_count bumped to len(track_paths) when JSON had fewer slots
         than tracks (TC-04-09). The bump runs BEFORE Album construction so
         the __post_init__ invariant `target_count >= len(track_paths)`
@@ -89,6 +99,16 @@ def _deserialize(data: dict) -> tuple[Album, bool]:
     resolved_paths = [p if p.is_absolute() else p.absolute() for p in raw_paths]
     paths_changed = any(r != s for r, s in zip(raw_paths, resolved_paths, strict=True))
 
+    raw_cover = data.get("cover_override")
+    cover_override: Path | None = None
+    cover_changed = False
+    if raw_cover:
+        raw_cover_path = Path(raw_cover)
+        cover_override = (
+            raw_cover_path if raw_cover_path.is_absolute() else raw_cover_path.absolute()
+        )
+        cover_changed = cover_override != raw_cover_path
+
     raw_target = int(data["target_count"])
     healed_target = max(raw_target, len(resolved_paths))
     target_changed = healed_target != raw_target
@@ -99,12 +119,33 @@ def _deserialize(data: dict) -> tuple[Album, bool]:
         target_count=healed_target,
         track_paths=resolved_paths,
         status=AlbumStatus(data["status"]),
-        cover_override=Path(data["cover_override"]) if data.get("cover_override") else None,
+        cover_override=cover_override,
         created_at=_from_iso(data["created_at"]),
         updated_at=_from_iso(data["updated_at"]),
         approved_at=_from_iso(data["approved_at"]) if data.get("approved_at") else None,
     )
-    return album, (paths_changed or target_changed)
+    return album, (paths_changed or cover_changed or target_changed)
+
+
+def _snap_timestamps_to_ms(album: Album) -> None:
+    """Truncate in-memory timestamps to ms so they match the on-disk encoding."""
+    album.created_at = _ms(album.created_at)
+    album.updated_at = _ms(album.updated_at)
+    if album.approved_at is not None:
+        album.approved_at = _ms(album.approved_at)
+
+
+def _write_album_json(folder: Path, album: Album) -> None:
+    """Bump updated_at + atomically write album.json + snap timestamps.
+
+    The save_album* variants differ only on what they do with the marker
+    (Spec 09 §canonical approve sequence; Spec 02 §unapprove); this body
+    is identical across all three so it lives here. Callers handle marker
+    timing relative to this call."""
+    album.updated_at = datetime.now(UTC)
+    payload = json.dumps(_serialize(album), indent=2, sort_keys=True)
+    atomic_write_text(folder / ALBUM_JSON, payload)
+    _snap_timestamps_to_ms(album)
 
 
 def save_album(folder: Path, album: Album) -> None:
@@ -114,14 +155,7 @@ def save_album(folder: Path, album: Album) -> None:
     use `save_album_for_approve` / `save_album_for_unapprove` to honour the
     canonical sequencing in Spec 09 canonical approve sequence and Spec 02
     unapprove."""
-    album.updated_at = datetime.now(UTC)
-    payload = json.dumps(_serialize(album), indent=2, sort_keys=True)
-    atomic_write_text(folder / ALBUM_JSON, payload)
-    # Snap all timestamps to ms precision so in-memory matches on-disk exactly.
-    album.created_at = _ms(album.created_at)
-    album.updated_at = _ms(album.updated_at)
-    if album.approved_at is not None:
-        album.approved_at = _ms(album.approved_at)
+    _write_album_json(folder, album)
     marker = folder / APPROVED_MARKER
     if album.status == AlbumStatus.APPROVED:
         marker.touch(exist_ok=True)
@@ -135,13 +169,7 @@ def save_album_for_approve(folder: Path, album: Album) -> None:
     album.status = APPROVED in memory."""
     assert album.status == AlbumStatus.APPROVED, "caller must flip status first"
     (folder / APPROVED_MARKER).touch(exist_ok=True)   # step 4
-    album.updated_at = datetime.now(UTC)
-    payload = json.dumps(_serialize(album), indent=2, sort_keys=True)
-    atomic_write_text(folder / ALBUM_JSON, payload)   # step 5
-    album.created_at = _ms(album.created_at)
-    album.updated_at = _ms(album.updated_at)
-    if album.approved_at is not None:
-        album.approved_at = _ms(album.approved_at)
+    _write_album_json(folder, album)                  # step 5
 
 
 def save_album_for_unapprove(folder: Path, album: Album) -> None:
@@ -166,13 +194,7 @@ def save_album_for_unapprove(folder: Path, album: Album) -> None:
     marker = folder / APPROVED_MARKER
     if marker.exists():
         marker.unlink()                               # step 2 (after Phase-4 reports/ delete)
-    album.updated_at = datetime.now(UTC)
-    payload = json.dumps(_serialize(album), indent=2, sort_keys=True)
-    atomic_write_text(folder / ALBUM_JSON, payload)   # step 3
-    album.created_at = _ms(album.created_at)
-    album.updated_at = _ms(album.updated_at)
-    if album.approved_at is not None:
-        album.approved_at = _ms(album.approved_at)
+    _write_album_json(folder, album)                  # step 3
 
 
 def load_album(folder: Path) -> Album:
@@ -180,7 +202,10 @@ def load_album(folder: Path) -> Album:
     if not path.exists():
         raise AlbumDirCorrupt(f"{path}: missing")
     try:
-        raw = json.loads(path.read_text())
+        # Spec 10: album.json is UTF-8, no BOM. Pinning encoding here avoids
+        # an ASCII-default decode on a stripped-down server locale (the file
+        # may legitimately contain non-ASCII album/track names).
+        raw = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
         raise AlbumDirCorrupt(f"{path}: unparseable ({exc})") from exc
 

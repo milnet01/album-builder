@@ -182,3 +182,43 @@ def test_load_missing_album_json_raises_albumdircorrupt(tmp_path: Path) -> None:
     folder.mkdir()
     with pytest.raises(AlbumDirCorrupt):
         load_album(folder)
+
+
+# Tier 3: cover_override gets the same relative-path heal as track_paths
+# (Spec 10 §Paths). A hand-edited or pre-Phase-2 file with a relative
+# cover_override should be rewritten to absolute on load.
+def test_load_resolves_relative_cover_override(tmp_path: Path) -> None:
+    folder = tmp_path / "x"
+    folder.mkdir()
+    folder.joinpath("album.json").write_text(json.dumps({
+        "schema_version": 1,
+        "id": "00000000-0000-0000-0000-00000000000a",
+        "name": "x",
+        "target_count": 3,
+        "track_paths": [],
+        "status": "draft",
+        "cover_override": "./covers/album.png",
+        "created_at": "2026-04-28T00:00:00.000Z",
+        "updated_at": "2026-04-28T00:00:00.000Z",
+        "approved_at": None,
+    }))
+    a = load_album(folder)
+    assert a.cover_override is not None
+    assert a.cover_override.is_absolute()
+    raw = json.loads((folder / "album.json").read_text(encoding="utf-8"))
+    assert raw["cover_override"].startswith("/"), (
+        f"cover_override still relative on rewrite: {raw['cover_override']}"
+    )
+
+
+# Tier 3: _to_iso must reject naive datetimes — `astimezone` would silently
+# treat them as host-local time and produce a wrong-hour `Z` stamp on a
+# non-UTC host. A clear ValueError is the safer failure mode.
+def test_to_iso_rejects_naive_datetime() -> None:
+    from datetime import datetime as _dt
+
+    from album_builder.persistence.album_io import _to_iso
+
+    naive = _dt(2026, 4, 28, 12, 0, 0)  # tzinfo=None
+    with pytest.raises(ValueError, match="aware datetime"):
+        _to_iso(naive)

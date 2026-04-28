@@ -49,6 +49,9 @@ class TopBar(QFrame):
         layout.addWidget(self.counter)
 
         self.btn_approve = QPushButton(f"{Glyphs.CHECK} Approve...")
+        # objectName lets theme.qt_stylesheet target this button specifically
+        # (Spec 11 §Gradients TC-11-08: success -> success-dark gradient).
+        self.btn_approve.setObjectName("ApproveButton")
         self.btn_approve.clicked.connect(self._on_approve_clicked)
         layout.addWidget(self.btn_approve)
 
