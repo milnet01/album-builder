@@ -157,3 +157,63 @@ def test_missing_selected_row_has_warning_accent(populated_pane, tracks_dir: Pat
     a.select(lib.tracks[1].path)
     pane.set_current_album(a)
     assert pane.row_accent_at(1) == "primary"
+
+
+# Indie-review L5-H1: Spec 00 §Sort order requires case-insensitive locale-aware
+# comparison, not raw codepoint. casefold() handles German ß, Turkish I, etc.
+def test_sort_role_returns_casefolded_strings(populated_pane) -> None:
+    from PyQt6.QtCore import Qt
+
+    from album_builder.ui.library_pane import COLUMNS, TrackTableModel
+
+    pane, lib = populated_pane
+    model: TrackTableModel = pane._model
+    # Find the first non-toggle column (Title at index 0).
+    idx = model.index(0, 0)
+    title_sort_key = model.data(idx, Qt.ItemDataRole.UserRole)
+    track = lib.tracks[0]
+    assert title_sort_key == track.title.casefold()
+    # Toggle column gets a tuple sort key (selected, casefolded-name).
+    toggle_col = next(i for i, c in enumerate(COLUMNS) if c[1] == "_toggle")
+    toggle_sort_key = model.data(model.index(0, toggle_col), Qt.ItemDataRole.UserRole)
+    assert isinstance(toggle_sort_key, tuple)
+    assert isinstance(toggle_sort_key[0], bool)
+
+
+# Indie-review L5-H4: AccessibleTextRole must say "selected" / "not selected",
+# not the raw glyph (Spec 11 / WCAG 2.2 §4.1.2).
+def test_toggle_column_accessible_text_describes_state(populated_pane) -> None:
+    from PyQt6.QtCore import Qt
+
+    from album_builder.domain.album import Album
+    from album_builder.ui.library_pane import COLUMNS
+
+    pane, lib = populated_pane
+    a = Album.create(name="x", target_count=3)
+    a.select(lib.tracks[0].path)
+    pane.set_current_album(a)
+    toggle_col = next(i for i, c in enumerate(COLUMNS) if c[1] == "_toggle")
+    selected_idx = pane._model.index(0, toggle_col)
+    text = pane._model.data(selected_idx, Qt.ItemDataRole.AccessibleTextRole)
+    assert text.startswith("selected: ")
+    unselected_idx = pane._model.index(1, toggle_col)
+    text = pane._model.data(unselected_idx, Qt.ItemDataRole.AccessibleTextRole)
+    assert text.startswith("not selected: ")
+
+
+# Indie-review L5-M7: approved-album tooltip on the toggle cell.
+def test_approved_album_toggle_has_tooltip(populated_pane) -> None:
+    from PyQt6.QtCore import Qt
+
+    from album_builder.domain.album import Album, AlbumStatus
+    from album_builder.ui.library_pane import COLUMNS
+
+    pane, lib = populated_pane
+    a = Album.create(name="x", target_count=3)
+    a.select(lib.tracks[0].path)
+    a.status = AlbumStatus.APPROVED
+    pane.set_current_album(a)
+    toggle_col = next(i for i, c in enumerate(COLUMNS) if c[1] == "_toggle")
+    tip = pane._model.data(pane._model.index(0, toggle_col), Qt.ItemDataRole.ToolTipRole)
+    assert tip is not None
+    assert "approved" in tip.lower()

@@ -82,12 +82,24 @@ class TrackTableModel(QAbstractTableModel):
             return None
         track = self._tracks[index.row()]
         attr = COLUMNS[index.column()][1]
+        is_approved = self._album_status == AlbumStatus.APPROVED
 
         if attr == "_toggle":
+            selected = track.path in self._selected_paths
             if role == Qt.ItemDataRole.DisplayRole:
-                return "●" if track.path in self._selected_paths else "○"
+                return "●" if selected else "○"
+            if role == Qt.ItemDataRole.AccessibleTextRole:
+                # Spec 11 / WCAG 2.2 §4.1.2: screen readers should hear
+                # "selected" / "not selected", not "black circle".
+                return f"{'selected' if selected else 'not selected'}: {track.title}"
+            if role == Qt.ItemDataRole.ToolTipRole and is_approved:
+                # Spec 04 row state table: approved -> non-interactive tooltip.
+                return "Album is approved; reopen for editing to change selection."
+            if role == Qt.ItemDataRole.UserRole:
+                # Sort key for the toggle column - keep selected rows together.
+                return (selected, track.path.name.casefold())
             if role == Qt.ItemDataRole.UserRole + 2:
-                if track.path in self._selected_paths:
+                if selected:
                     return "warning" if track.is_missing else "primary"
                 return None
             return None
@@ -105,7 +117,10 @@ class TrackTableModel(QAbstractTableModel):
                 return _format_duration(float(value))
             return str(value)
         if role == Qt.ItemDataRole.UserRole:
-            return value  # raw value for sort comparison
+            # Sort key. Spec 00 §Sort order: case-insensitive locale-aware.
+            # casefold() is the Unicode-aware lower (handles German ß, Turkish
+            # I, etc.); raw codepoint sort would have Z < a and Polish ł > z.
+            return value.casefold() if isinstance(value, str) else value
         return None
 
 
@@ -194,6 +209,17 @@ class LibraryPane(QFrame):
         # appear in filesystem-walk order.
         self.table.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         self.table.clicked.connect(self._on_table_clicked)
+        # Keyboard parity with mouse: Enter / Return on a focused toggle cell
+        # toggles the selection. Without this, a keyboard-only user (WCAG
+        # 2.2 §2.1.1) cannot operate the column.
+        self.table.activated.connect(self._on_table_clicked)
+        # Accessible labels (WCAG 2.2 §4.1.2) so screen readers announce
+        # the table by purpose, not by class name.
+        self.table.setAccessibleName("Track library")
+        self.table.setAccessibleDescription(
+            "Searchable list of tracks. Last column toggles inclusion in the "
+            "current album.",
+        )
         layout.addWidget(self.table)
 
     def set_library(self, library: Library) -> None:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -17,6 +19,7 @@ from album_builder.domain.track import Track
 from album_builder.ui.theme import Glyphs
 
 MISSING_ROLE = Qt.ItemDataRole.UserRole + 1
+TITLE_ROLE = Qt.ItemDataRole.UserRole + 3   # cached title for re-render
 
 
 class AlbumOrderPane(QFrame):
@@ -35,6 +38,12 @@ class AlbumOrderPane(QFrame):
         self.list.setObjectName("AlbumOrderList")
         self.list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        # WCAG 2.2 §4.1.2 (Name, Role, Value) - screen readers announce the
+        # purpose of the list rather than the widget class.
+        self.list.setAccessibleName("Album track order")
+        self.list.setAccessibleDescription(
+            "Drag tracks to reorder. Approved albums are read-only.",
+        )
         self.list.model().rowsMoved.connect(self._on_rows_moved)
         layout.addWidget(self.list)
 
@@ -43,11 +52,15 @@ class AlbumOrderPane(QFrame):
         self.list.blockSignals(True)
         self.list.clear()
         if album is not None:
-            by_path = {t.path: t for t in tracks}
+            by_path: dict[Path, Track] = {t.path: t for t in tracks}
             for i, p in enumerate(album.track_paths, start=1):
                 t = by_path.get(p)
                 title = t.title if t is not None else p.name
                 item = QListWidgetItem(f"{i}. {Glyphs.DRAG_HANDLE} {title}")
+                # Cache the title so _rerender_after_move can reconstruct
+                # the row label without re-parsing the display text (which
+                # is fragile when titles contain ". " - e.g. "Mr. Smith").
+                item.setData(TITLE_ROLE, title)
                 if album.status == AlbumStatus.APPROVED:
                     flags = item.flags()
                     flags &= ~Qt.ItemFlag.ItemIsDragEnabled
@@ -87,11 +100,10 @@ class AlbumOrderPane(QFrame):
     def _rerender_after_move(self) -> None:
         if self._album is None:
             return
-        # Quick re-render of the prefixes only - the items themselves are in
-        # place, just their numbers are stale.
+        # Reconstruct each row's label from the cached title (TITLE_ROLE)
+        # rather than parsing the display text - parsing was fragile for
+        # titles containing ". " (e.g. "Mr. Brightside").
         for i in range(self.list.count()):
             item = self.list.item(i)
-            text = item.text()
-            # text is `<n>. <DRAG_HANDLE> <title>` - replace the leading number
-            after = text.split(". ", 1)[1] if ". " in text else text
-            item.setText(f"{i + 1}. {after}")
+            title = item.data(TITLE_ROLE) or ""
+            item.setText(f"{i + 1}. {Glyphs.DRAG_HANDLE} {title}")

@@ -91,3 +91,25 @@ def test_missing_track_row_styled(pane: AlbumOrderPane) -> None:
     )])
     item = pane.list.item(0)
     assert item.data(Qt.ItemDataRole.UserRole + 1) is True
+
+
+# Indie-review L5-M2: re-render reconstructs from cached title (TITLE_ROLE),
+# not from display text. Titles containing ". " (e.g. "Mr. Brightside") would
+# scramble under the old split-on-". " logic.
+def test_rerender_preserves_title_with_period_space(pane: AlbumOrderPane) -> None:
+    from album_builder.domain.album import Album
+    a = Album.create(name="x", target_count=3)
+    a.track_paths = [Path("/abs/mr.mp3")]
+    tracks = [
+        Track(
+            path=Path("/abs/mr.mp3"), title="Mr. Brightside", artist="x",
+            album_artist="x", album="", composer="", comment="",
+            lyrics_text=None, cover_data=None, cover_mime=None,
+            duration_seconds=10.0, is_missing=False, file_size_bytes=0,
+        ),
+    ]
+    pane.set_album(a, tracks)
+    # Force a re-render. The old split-on-". " logic would have lost "Mr. ".
+    pane._rerender_after_move()
+    assert "Mr. Brightside" in pane.list.item(0).text()
+    assert pane.list.item(0).text().startswith("1. ")
