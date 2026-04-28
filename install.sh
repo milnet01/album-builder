@@ -16,15 +16,18 @@ ICON_DIR_PNG="${INSTALL_PREFIX}/share/icons/hicolor/256x256/apps"
 ICON_DIR_SVG="${INSTALL_PREFIX}/share/icons/hicolor/scalable/apps"
 BIN_DIR="${INSTALL_PREFIX}/bin"
 
-# 1. Python version check
+# 1. Python version check — verified through the SAME interpreter we'll use
+# for the venv. The previous version asked $PY for the version string but
+# evaluated the comparison via bare `python3`, which on dual-stack systems
+# (python3 → 3.13, python3.11 → 3.11) could disagree with $PY.
 PY=$(command -v python3.11 || command -v python3 || true)
 if [[ -z "$PY" ]]; then
     echo "Python 3.11+ not found. On openSUSE: zypper install python311" >&2
     exit 1
 fi
-PY_VER=$("$PY" -c 'import sys; print("%d.%d" % sys.version_info[:2])')
-if ! python3 -c "v='$PY_VER'.split('.'); exit(0 if int(v[0])>3 or (int(v[0])==3 and int(v[1])>=11) else 1)"; then
-    echo "Python 3.11 or newer required (found $PY_VER)." >&2
+if ! "$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'; then
+    PY_VER=$("$PY" -c 'import sys; print("%d.%d" % sys.version_info[:2])')
+    echo "Python 3.11 or newer required (found $PY_VER via $PY)." >&2
     exit 1
 fi
 
