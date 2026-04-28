@@ -44,18 +44,18 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 
 ## 🔒 Tier 1 — ship-this-week fixes (security / data-loss / DoS)
 
-Must land before Phase 2 builds on top of them.
+✅ **All 4 landed 2026-04-28** on branch `feature/phase-1-foundation`. 47/47 tests pass; ruff clean. Net diff: +194 LOC across `app.py`, `track.py`, `library.py`, `library_pane.py`; +1 new module `persistence/settings.py`; +17 new tests.
 
-- 📋 **CRITICAL — QSharedMemory stale-lock recovery.** `src/album_builder/app.py:30`. After any abnormal termination (SIGKILL, OOM, power loss) the SHM segment leaks and `create()` permanently returns False; user is locked out with no self-service recovery. Add `lock.attach(); lock.detach()` before `create(1)` per Qt docs. Also implement Spec 12's `QLocalServer` "raise" handshake (currently absent — only the SHM half is built).
-- 📋 **HIGH — `_resolve_tracks_dir()` consults dev path before settings.json.** `src/album_builder/app.py:46`. Hardcoded `/mnt/Storage/.../Tracks` is checked FIRST; the spec'd `~/.config/album-builder/settings.json` `tracks_folder` field is never read. Installed app silently scans dev tree instead of user-configured path. Read settings.json first; fall back to dev path with a console warning.
-- 📋 **HIGH — `Library.scan` swallows `PermissionError`.** `src/album_builder/domain/library.py:46`. `except (mutagen.MutagenError, OSError)` masks `PermissionError` (subclass of `OSError`). Spec 01 distinguishes "no readable tags" (use placeholders) from "file unreadable" (let propagate). Narrow to `except mutagen.MutagenError` only.
-- 📋 **HIGH — `LibraryPane` filter does not include `album_artist`.** `src/album_builder/ui/library_pane.py:112`. Spec 01 lists 5 filter fields including `album_artist`; the proxy's `setFilterKeyColumn(-1)` only sees displayed columns and `album_artist` is not one. Domain `Library.search()` is correct; UI proxy needs an override of `filterAcceptsRow` or a hidden 6th column.
+- ✅ **CRITICAL — QSharedMemory stale-lock recovery + QLocalServer raise handshake.** `src/album_builder/app.py`. `attach()/detach()` recovery dance before `create(1)` reclaims orphan SHM segments left by SIGKILL/OOM/power-loss. `QLocalServer` listens on the same key; second-launch sends `raise\n` via `QLocalSocket` and exits silently. Previous "Already running" dialog removed. Commit `36afe6b`.
+- ✅ **HIGH — `_resolve_tracks_dir()` consults settings.json first.** `src/album_builder/app.py`. New `persistence.settings` module is XDG-aware (`$XDG_CONFIG_HOME` honored). Dev path is the labelled fallback with stderr warning so a misconfigured install is loud. Commit `ad0496b`.
+- ✅ **HIGH — `Library.scan` surfaces real I/O errors.** `src/album_builder/domain/track.py`. New `_open_tags` helper unwraps OSError from MutagenError; PermissionError now propagates instead of silently dropping the file. Commit `cbeca8e`.
+- ✅ **HIGH — `LibraryPane` filter includes `album_artist`.** `src/album_builder/ui/library_pane.py`. New `TrackFilterProxy` subclass overrides `filterAcceptsRow` to consult the underlying Track's `SEARCH_FIELDS`, matching domain `Library.search()` semantics. Commit `87ec172`.
 
 ## 🔒 Tier 2 — hardening sweep (correctness)
 
 Pre-Phase-2 cleanup.
 
-- 📋 **HIGH — Three-way version split.** `src/album_builder/app.py:22` hardcodes `"0.1.0"` while `version.py` has the canonical `__version__`. `app.py` should `from album_builder.version import __version__`.
+- ✅ **HIGH — Three-way version split.** `src/album_builder/app.py` now imports `__version__` from `album_builder.version` (commit `ad0496b`, folded into Tier 1.2 since the file was already being touched).
 - 📋 **HIGH — install.sh Python version check uses wrong interpreter.** `install.sh:26`. Version string obtained from `$PY` but compared via bare `python3 -c` (could be a different binary). Use `$PY` for the comparison.
 - 📋 **HIGH — Non-deterministic COMM/USLT frame selection.** `src/album_builder/domain/track.py:101-118`. ID3 frames keyed `COMM:eng:` and `COMM:fra:` can coexist; iteration order isn't stable. Prefer `lang == "eng"`; fall back to first non-empty.
 - 📋 **HIGH — JPEG covers silently dropped.** `src/album_builder/domain/track.py:121`. Field named `cover_png` filters APIC frames to `image/png` only. Real-world WhatsApp/iTunes-tagged tracks often carry JPEG covers → silent loss in Phase 2's now-playing pane. Either rename to `cover_data` + accept any image, or add `image/jpeg` alongside PNG. Update Spec 01 to match.
