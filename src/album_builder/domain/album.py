@@ -7,7 +7,7 @@ in album_io.py (load/save) and AlbumStore (debounced disk writes).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -19,7 +19,7 @@ class AlbumStatus(StrEnum):
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)  # noqa: UP017
+    return datetime.now(UTC)
 
 
 def _validate_name(name: str) -> str:
