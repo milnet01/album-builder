@@ -16,6 +16,13 @@ COLUMNS: list[tuple[str, str]] = [
     ("Duration", "duration_seconds"),
 ]
 
+# Spec 01: search filters across title, artist, album_artist, composer, album.
+# album_artist is not a displayed column, so the proxy must consult the
+# underlying Track rather than the model's DisplayRole strings.
+SEARCH_FIELDS: tuple[str, ...] = (
+    "title", "artist", "album_artist", "composer", "album",
+)
+
 
 class TrackTableModel(QAbstractTableModel):
     def __init__(self, tracks: list[Track]):
@@ -65,6 +72,31 @@ def _format_duration(seconds: float) -> str:
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
+class TrackFilterProxy(QSortFilterProxyModel):
+    """Proxy that filters by a substring against every Track field in
+    SEARCH_FIELDS, including album_artist (which is not a displayed column)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._needle: str = ""
+
+    def set_needle(self, text: str) -> None:
+        self._needle = text.strip().lower()
+        self.invalidateFilter()
+
+    def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:  # noqa: N802
+        if not self._needle:
+            return True
+        model = self.sourceModel()
+        if not isinstance(model, TrackTableModel):
+            return True
+        track = model.track_at(source_row)
+        for field in SEARCH_FIELDS:
+            if self._needle in str(getattr(track, field, "")).lower():
+                return True
+        return False
+
+
 class LibraryPane(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -82,10 +114,8 @@ class LibraryPane(QFrame):
         layout.addWidget(self.search_box)
 
         self._model = TrackTableModel([])
-        self._proxy = QSortFilterProxyModel()
+        self._proxy = TrackFilterProxy()
         self._proxy.setSourceModel(self._model)
-        self._proxy.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        self._proxy.setFilterKeyColumn(-1)  # all columns
         self._proxy.setSortRole(Qt.ItemDataRole.UserRole)
 
         self.table = QTableView()
@@ -109,4 +139,4 @@ class LibraryPane(QFrame):
         return self._proxy.data(idx, Qt.ItemDataRole.DisplayRole)
 
     def _on_search_changed(self, text: str) -> None:
-        self._proxy.setFilterFixedString(text.strip())
+        self._proxy.set_needle(text)
