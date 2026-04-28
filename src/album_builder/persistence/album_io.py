@@ -75,23 +75,28 @@ def _serialize(album: Album) -> dict:
 
 def _deserialize(data: dict) -> tuple[Album, bool]:
     """Returns (album, needs_rewrite). `needs_rewrite` is True when a
-    self-heal happened during deserialisation (Spec 10 Paths: relative
-    track_paths get resolved + rewritten)."""
+    self-heal happened during deserialisation:
+      - Relative track_paths resolved to absolute (Spec 10 Paths, TC-10-09).
+      - target_count bumped to len(track_paths) when JSON had fewer slots
+        than tracks (TC-04-09). The bump runs BEFORE Album construction so
+        the __post_init__ invariant `target_count >= len(track_paths)`
+        holds at every Album instance.
+    The caller (load_album) writes the healed file back to disk."""
     raw_paths = [Path(p) for p in data["track_paths"]]
-    resolved_paths = [p if p.is_absolute() else p.resolve() for p in raw_paths]
-    needs_rewrite = any(r != s for r, s in zip(raw_paths, resolved_paths, strict=True))
-    # Pre-bump target_count if a corrupt JSON has fewer slots than tracks
-    # (TC-04-09 self-heal). The Album.__post_init__ invariant assumes
-    # target_count >= len(track_paths) at construction time, so the bump
-    # must happen BEFORE the dataclass is built. load_album notices the
-    # difference and writes the fixed file back to disk.
-    target_count = int(data["target_count"])
-    if target_count < len(resolved_paths):
-        target_count = len(resolved_paths)
+    # Spec 10 Paths: use Path.absolute() (NOT resolve()) for the relative
+    # heal so user-supplied symlinks survive the round-trip. resolve()
+    # would silently de-symlink.
+    resolved_paths = [p if p.is_absolute() else p.absolute() for p in raw_paths]
+    paths_changed = any(r != s for r, s in zip(raw_paths, resolved_paths, strict=True))
+
+    raw_target = int(data["target_count"])
+    healed_target = max(raw_target, len(resolved_paths))
+    target_changed = healed_target != raw_target
+
     album = Album(
         id=UUID(data["id"]),
         name=data["name"],
-        target_count=target_count,
+        target_count=healed_target,
         track_paths=resolved_paths,
         status=AlbumStatus(data["status"]),
         cover_override=Path(data["cover_override"]) if data.get("cover_override") else None,
@@ -99,7 +104,7 @@ def _deserialize(data: dict) -> tuple[Album, bool]:
         updated_at=_from_iso(data["updated_at"]),
         approved_at=_from_iso(data["approved_at"]) if data.get("approved_at") else None,
     )
-    return album, needs_rewrite
+    return album, (paths_changed or target_changed)
 
 
 def save_album(folder: Path, album: Album) -> None:
@@ -140,12 +145,24 @@ def save_album_for_approve(folder: Path, album: Album) -> None:
 
 
 def save_album_for_unapprove(folder: Path, album: Album) -> None:
-    """Unapprove transition (Spec 02 unapprove strict ordering): reports/
-    delete is the caller's concern (Phase 4); here we delete the marker
-    BEFORE the status flip on disk so a crash mid-flip leaves
-    marker-absent + status-approved which Spec 10 self-heals to approved
-    (the safer side - user just retries the unapprove)."""
+    """Unapprove transition (Spec 02 unapprove strict ordering).
+
+    Phase 2 scope: marker delete BEFORE status flip on disk, so a crash
+    mid-flip leaves marker-absent + status-approved which Spec 10 self-
+    heals to approved (the safer side - user just retries the unapprove).
+
+    PRECONDITION: any `reports/` directory inside `folder` MUST already
+    have been deleted by the caller (Spec 02 §unapprove step 1, Phase 4
+    backfill). Phase 2 ships without the export pipeline so reports/ won't
+    exist; the assert below catches the mistake when Phase 4 lands and a
+    caller forgets the reports cleanup. If reports/ is present, raising
+    here is correct: it would otherwise leave the user with `status=draft`
+    + `reports/` present, which Spec 02 calls "recoverable but messy"."""
     assert album.status == AlbumStatus.DRAFT, "caller must flip status first"
+    reports_dir = folder / "reports"
+    assert not reports_dir.exists(), (
+        f"caller must delete {reports_dir} before unapprove (Spec 02 §unapprove)"
+    )
     marker = folder / APPROVED_MARKER
     if marker.exists():
         marker.unlink()                               # step 2 (after Phase-4 reports/ delete)
@@ -172,20 +189,16 @@ def load_album(folder: Path) -> Album:
     except (SchemaTooNewError, UnreadableSchemaError) as exc:
         raise AlbumDirCorrupt(str(exc)) from exc
 
-    album, paths_needed_rewrite = _deserialize(data)
+    album, needs_rewrite = _deserialize(data)
 
-    # Self-heal: relative track_paths got resolved during deserialisation -- TC-10-09
-    if paths_needed_rewrite:
-        logger.warning("%s: track_paths contained relative entries; rewriting absolute", path)
-        save_album(folder, album)
-
-    # Self-heal: target_count < len(track_paths)  -- TC-04-09
-    if album.target_count < len(album.track_paths):
+    # Self-heal: relative paths normalised + target_count bumped if needed
+    # (TC-10-09 + TC-04-09). _deserialize already applied the heal to the
+    # in-memory Album; we just write it back so the next reader sees a
+    # canonical file.
+    if needs_rewrite:
         logger.warning(
-            "%s: target_count=%d < %d selected; bumping",
-            path, album.target_count, len(album.track_paths),
+            "%s: relative paths or target_count<len(track_paths) self-healed", path,
         )
-        album.target_count = len(album.track_paths)
         save_album(folder, album)
 
     # Self-heal: marker / status mismatch  -- TC-02-17, TC-02-18
@@ -197,7 +210,11 @@ def load_album(folder: Path) -> Album:
             album.approved_at = datetime.now(UTC)
         save_album(folder, album)
     elif album.status == AlbumStatus.APPROVED and not marker.exists():
+        # Symmetric with the marker-present-status-draft branch: route the
+        # heal through save_album so updated_at bumps and any downstream
+        # mtime watcher picks up the change. save_album reconciles the
+        # marker as a side-effect (touching it because status==APPROVED).
         logger.warning("%s: status=approved but .approved missing; writing marker", path)
-        marker.touch()
+        save_album(folder, album)
 
     return album

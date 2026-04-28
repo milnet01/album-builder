@@ -51,23 +51,84 @@ def _state_path(project_root: Path) -> Path:
     return project_root / STATE_DIR / STATE_FILE
 
 
+def _coerce_uuid(value: object) -> UUID | None:
+    if value is None:
+        return None
+    try:
+        return UUID(str(value))
+    except (ValueError, TypeError):
+        logger.warning("state.json: malformed current_album_id %r; defaulting to None", value)
+        return None
+
+
+def _coerce_path(value: object) -> Path | None:
+    if value is None:
+        return None
+    try:
+        return Path(str(value))
+    except (ValueError, TypeError):
+        logger.warning("state.json: malformed last_played_track_path %r; defaulting", value)
+        return None
+
+
+def _coerce_window(value: object) -> WindowState:
+    if not isinstance(value, dict):
+        return WindowState()
+    out = WindowState()
+    for field_name in ("width", "height", "x", "y"):
+        if field_name in value:
+            raw = value[field_name]
+            # bool is a subclass of int; reject it explicitly because the
+            # spec field is a pixel count.
+            if isinstance(raw, int) and not isinstance(raw, bool):
+                setattr(out, field_name, raw)
+            else:
+                logger.warning(
+                    "state.json: window.%s=%r is not int; defaulting",
+                    field_name, raw,
+                )
+    if "splitter_sizes" in value:
+        raw = value["splitter_sizes"]
+        if (
+            isinstance(raw, list)
+            and len(raw) == 3
+            and all(isinstance(n, int) and not isinstance(n, bool) and n > 0 for n in raw)
+        ):
+            out.splitter_sizes = list(raw)
+        else:
+            logger.warning(
+                "state.json: window.splitter_sizes=%r invalid; defaulting", raw,
+            )
+    return out
+
+
 def load_state(project_root: Path) -> AppState:
     path = _state_path(project_root)
     if not path.exists():
         return AppState()
     try:
-        raw = json.loads(path.read_text())
+        raw = json.loads(path.read_text(encoding="utf-8"))
         data = migrate_forward(raw, current=CURRENT_SCHEMA_VERSION, migrations=MIGRATIONS)
     except (json.JSONDecodeError, OSError, SchemaTooNewError, UnreadableSchemaError) as exc:
-        logger.warning("%s: unreadable (%s); falling back to defaults", path, exc)
+        # Spec 10 TC-10-12: corrupt state.json -> defaults + REWRITE so the
+        # next reader sees consistent state, even if the user closes the app
+        # without further mutation.
+        logger.warning("%s: unreadable (%s); falling back to defaults + rewriting", path, exc)
+        defaults = AppState()
+        try:
+            save_state(project_root, defaults)
+        except OSError as save_exc:
+            logger.warning("%s: failed to rewrite defaults (%s)", path, save_exc)
+        return defaults
+
+    if not isinstance(data, dict):
+        logger.warning("%s: top-level value is not an object; defaulting", path)
         return AppState()
 
     return AppState(
-        current_album_id=UUID(data["current_album_id"]) if data.get("current_album_id") else None,
-        last_played_track_path=(
-            Path(data["last_played_track_path"]) if data.get("last_played_track_path") else None
-        ),
-        window=WindowState(**data.get("window", asdict(WindowState()))),
+        current_album_id=_coerce_uuid(data.get("current_album_id")),
+        last_played_track_path=_coerce_path(data.get("last_played_track_path")),
+        window=_coerce_window(data.get("window")),
     )
 
 

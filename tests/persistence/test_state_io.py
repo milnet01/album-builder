@@ -60,3 +60,42 @@ def test_partial_state_preserves_known_fields(tmp_path: Path) -> None:
     assert state.last_played_track_path is None
     assert state.window.width == 1400
     assert state.window.splitter_sizes == [5, 3, 5]
+
+
+# Indie-review L2-M3: TC-10-12 says corrupt JSON -> rewrite with defaults.
+def test_corrupt_state_rewrites_file_with_defaults(tmp_path: Path) -> None:
+    state_path = tmp_path / ".album-builder" / "state.json"
+    state_path.parent.mkdir()
+    state_path.write_text("{broken json")
+    load_state(tmp_path)
+    # File must now be a valid JSON with default WindowState.
+    raw = json.loads(state_path.read_text())
+    assert raw["schema_version"] == 1
+    assert raw["current_album_id"] is None
+    assert raw["window"]["width"] == 1400
+    assert raw["window"]["splitter_sizes"] == [5, 3, 5]
+
+
+# Indie-review L2-M4: malformed UUID falls back to None instead of raising
+# past the load_state guard. Spec 10: state is purely cosmetic.
+def test_malformed_uuid_falls_back_to_none(tmp_path: Path) -> None:
+    (tmp_path / ".album-builder").mkdir()
+    (tmp_path / ".album-builder" / "state.json").write_text(json.dumps({
+        "schema_version": 1,
+        "current_album_id": "not-a-uuid",
+    }))
+    state = load_state(tmp_path)
+    assert state.current_album_id is None
+    assert state.window.width == 1400
+
+
+def test_malformed_window_block_falls_back_to_default(tmp_path: Path) -> None:
+    (tmp_path / ".album-builder").mkdir()
+    (tmp_path / ".album-builder" / "state.json").write_text(json.dumps({
+        "schema_version": 1,
+        "window": {"width": "wide", "height": None, "stray_key": 7},
+    }))
+    state = load_state(tmp_path)
+    # WindowState defaulted on type/value error; stray key dropped silently.
+    assert state.window.width == 1400
+    assert state.window.height == 900
