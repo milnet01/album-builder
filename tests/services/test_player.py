@@ -103,6 +103,50 @@ def test_seek_with_no_source_clamps_to_zero() -> None:
     assert p.position() == 0.0
 
 
+# Spec: L3-H1 (Tier 1 indie-review 2026-04-30)
+def test_invalid_media_status_emits_error_and_error_state(qtbot, tmp_path) -> None:
+    """Qt 6.11's FFmpeg backend delivers decode failures via
+    MediaStatus.InvalidMedia without firing errorOccurred. The Player
+    must translate that into the same ERROR + error.emit path so the UI
+    surfaces a toast instead of silently doing nothing."""
+    from PyQt6.QtMultimedia import QMediaPlayer
+
+    p = Player()
+    p._source = tmp_path / "broken.mp3"
+
+    error_msgs: list[str] = []
+    p.error.connect(error_msgs.append)
+    states: list = []
+    p.state_changed.connect(states.append)
+
+    p._on_media_status(QMediaPlayer.MediaStatus.InvalidMedia)
+
+    assert p.state() == PlayerState.ERROR
+    assert states == [PlayerState.ERROR]
+    assert len(error_msgs) == 1
+    assert "broken.mp3" in error_msgs[0]
+    assert "decode" in error_msgs[0].lower()
+
+
+# Spec: L3-H1 (Tier 1 indie-review 2026-04-30)
+def test_loaded_media_status_does_not_set_error(qtbot, tmp_path) -> None:
+    """A clean LoadedMedia / EndOfMedia / etc. must not be misclassified
+    as a decode error — only InvalidMedia triggers the synthetic ERROR."""
+    from PyQt6.QtMultimedia import QMediaPlayer
+
+    p = Player()
+    p._source = tmp_path / "ok.mp3"
+    error_msgs: list[str] = []
+    p.error.connect(error_msgs.append)
+
+    p._on_media_status(QMediaPlayer.MediaStatus.LoadedMedia)
+    p._on_media_status(QMediaPlayer.MediaStatus.EndOfMedia)
+    p._on_media_status(QMediaPlayer.MediaStatus.BufferingMedia)
+
+    assert p.state() == PlayerState.STOPPED
+    assert error_msgs == []
+
+
 # ---- Integration tier (opt-in) --------------------------------------
 
 

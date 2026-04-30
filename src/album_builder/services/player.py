@@ -153,6 +153,22 @@ class Player(QObject):
         is_buffering = status == QMediaPlayer.MediaStatus.BufferingMedia
         self.buffering_changed.emit(is_buffering)
 
+        # Qt 6.11's FFmpeg backend frequently delivers "decoder cannot open
+        # this file" via InvalidMedia without a corresponding errorOccurred,
+        # so a corrupt MP3 produced silence: no toast, no dialog, no ERROR
+        # state — user clicked play and nothing happened. Translate it into
+        # the same ERROR + error.emit path as a real errorOccurred, with a
+        # synthetic decode-failure message naming the source file. L3-H1.
+        if status == QMediaPlayer.MediaStatus.InvalidMedia:
+            prior = self._state
+            self._state = PlayerState.ERROR
+            path_str = str(self._source) if self._source else "<no source>"
+            msg = f"Could not decode {path_str}"
+            logger.warning("Player invalid media: %s", msg)
+            self.error.emit(msg)
+            if self._state != prior:
+                self.state_changed.emit(self._state)
+
     def _on_error(self, error, message: str) -> None:
         if error == QMediaPlayer.Error.NoError:
             return
