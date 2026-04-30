@@ -8,6 +8,7 @@ two separate playback-state enums or the millisecond unit.
 from __future__ import annotations
 
 import logging
+import time
 from enum import Enum, auto
 from pathlib import Path
 
@@ -15,6 +16,13 @@ from PyQt6.QtCore import QObject, QUrl, pyqtSignal
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 
 logger = logging.getLogger(__name__)
+
+# Window for de-duplicating identical error emits. Qt 6.11 backends can
+# double-fire errorOccurred with the same (code, message) pair on the
+# same underlying failure; collapsing the duplicate within 50 ms keeps
+# a genuine second error (different code/message, or same one >50 ms
+# later) surfacing to the toast layer. (Indie-review L3-M3.)
+_ERROR_DEDUPE_WINDOW_S = 0.05
 
 
 class PlayerState(Enum):
@@ -38,6 +46,10 @@ class Player(QObject):
     state_changed = pyqtSignal(object)       # Type: PlayerState
     error = pyqtSignal(str)                  # Type: human-readable message
     buffering_changed = pyqtSignal(bool)     # Type: True on BufferingMedia
+    # Natural end-of-track pulse (L3-H2). STOPPED alone is ambiguous —
+    # consumers needing to distinguish user-stop from end-of-media
+    # subscribe here.
+    ended = pyqtSignal()
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -50,6 +62,9 @@ class Player(QObject):
         # Track whether we've seen the first decode error this session so
         # the codec-missing dialog only surfaces once (Spec 06 TC-06-07).
         self._codec_dialog_shown = False
+        # Last (error_code, message) emitted, for the L3-M3 dedupe window.
+        self._last_error: tuple[object, str] | None = None
+        self._last_error_t = 0.0
 
         self._player.positionChanged.connect(self._on_position_changed)
         self._player.durationChanged.connect(self._on_duration_changed)
@@ -165,9 +180,16 @@ class Player(QObject):
             path_str = str(self._source) if self._source else "<no source>"
             msg = f"Could not decode {path_str}"
             logger.warning("Player invalid media: %s", msg)
-            self.error.emit(msg)
+            self._emit_error(QMediaPlayer.Error.FormatError, msg)
             if self._state != prior:
                 self.state_changed.emit(self._state)
+
+        # L3-H2: surface natural end-of-track as a separate signal so
+        # downstream consumers (lyrics tracker, autoplay UX) can tell it
+        # apart from a user-stop. The state transition itself comes via
+        # _on_playback_state -> StoppedState; ended is the orthogonal pulse.
+        if status == QMediaPlayer.MediaStatus.EndOfMedia:
+            self.ended.emit()
 
     def _on_error(self, error, message: str) -> None:
         if error == QMediaPlayer.Error.NoError:
@@ -176,6 +198,20 @@ class Player(QObject):
         self._state = PlayerState.ERROR
         msg = message or str(error)
         logger.warning("Player error: %s (%s)", msg, error)
-        self.error.emit(msg)
+        self._emit_error(error, msg)
         if self._state != prior:
             self.state_changed.emit(self._state)
+
+    def _emit_error(self, error_code: object, message: str) -> None:
+        """Emit `error` with a (code, message) dedupe window so a backend
+        that double-fires errorOccurred doesn't double-toast (L3-M3)."""
+        now = time.monotonic()
+        signature = (error_code, message)
+        if (
+            self._last_error == signature
+            and (now - self._last_error_t) < _ERROR_DEDUPE_WINDOW_S
+        ):
+            return
+        self._last_error = signature
+        self._last_error_t = now
+        self.error.emit(message)

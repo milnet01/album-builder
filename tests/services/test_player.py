@@ -128,6 +128,54 @@ def test_invalid_media_status_emits_error_and_error_state(qtbot, tmp_path) -> No
     assert "decode" in error_msgs[0].lower()
 
 
+# Indie-review L3-H2: Player must distinguish natural end-of-track from
+# user-stop. STOPPED alone is ambiguous; downstream consumers (lyrics
+# tracker, ui) need a separate `ended` pulse to drive end-of-track UX.
+def test_end_of_media_emits_ended_signal(qtbot, tmp_path) -> None:
+    from PyQt6.QtMultimedia import QMediaPlayer
+
+    p = Player()
+    p._source = tmp_path / "track.mp3"
+    ended_count = [0]
+    p.ended.connect(lambda: ended_count.__setitem__(0, ended_count[0] + 1))
+
+    p._on_media_status(QMediaPlayer.MediaStatus.EndOfMedia)
+    assert ended_count[0] == 1
+
+    # Other media statuses must not fire ended.
+    p._on_media_status(QMediaPlayer.MediaStatus.LoadedMedia)
+    p._on_media_status(QMediaPlayer.MediaStatus.BufferingMedia)
+    assert ended_count[0] == 1
+
+
+# Indie-review L3-M3: Qt 6.11 backends sometimes double-fire errorOccurred
+# with the same (code, message) pair. The error.emit shouldn't echo the
+# duplicate to the toast layer — dedupe by (code, message) within a short
+# window so a real second error (different code/message) still surfaces.
+def test_duplicate_error_emit_is_deduped(qtbot) -> None:
+    from PyQt6.QtMultimedia import QMediaPlayer
+
+    p = Player()
+    errors: list[str] = []
+    p.error.connect(errors.append)
+
+    p._on_error(QMediaPlayer.Error.ResourceError, "track.mp3 not found")
+    p._on_error(QMediaPlayer.Error.ResourceError, "track.mp3 not found")
+    assert errors == ["track.mp3 not found"]
+
+
+def test_distinct_errors_both_emit(qtbot) -> None:
+    from PyQt6.QtMultimedia import QMediaPlayer
+
+    p = Player()
+    errors: list[str] = []
+    p.error.connect(errors.append)
+
+    p._on_error(QMediaPlayer.Error.ResourceError, "first error")
+    p._on_error(QMediaPlayer.Error.FormatError, "different error")
+    assert errors == ["first error", "different error"]
+
+
 # Spec: L3-H1 (Tier 1 indie-review 2026-04-30)
 def test_loaded_media_status_does_not_set_error(qtbot, tmp_path) -> None:
     """A clean LoadedMedia / EndOfMedia / etc. must not be misclassified
