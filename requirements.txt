@@ -1,2 +1,6 @@
 PyQt6>=6.6,<7
 mutagen>=1.47,<2
+# Phase 4 (v0.5.0) — report generation + cover normalisation
+Jinja2>=3.1,<4
+weasyprint>=68,<70
+Pillow>=11,<13

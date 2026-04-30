@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,6 +14,28 @@ from album_builder.services.album_store import AlbumStore
 @pytest.fixture
 def store(qapp, tmp_path: Path) -> AlbumStore:
     return AlbumStore(tmp_path)
+
+
+class _FakeLibrary:
+    """Minimal duck-typed library for `AlbumStore.approve()` tests.
+
+    Returns a `SimpleNamespace` track for any path that exists on disk;
+    `None` for missing paths (matches what real `Library.find` does).
+    """
+
+    def find(self, path: Path):
+        path = Path(path)
+        if not path.exists():
+            return None
+        return SimpleNamespace(
+            path=path, title=path.stem, artist="Test Artist",
+            album_artist="Test Artist", composer=None, comment=None,
+            lyrics_text=None, cover_data=None, cover_mime=None,
+            duration_seconds=30.0, is_missing=False,
+        )
+
+    def refresh(self) -> None:
+        pass
 
 
 # Spec: TC-03-01
@@ -135,7 +158,7 @@ def test_approve_raises_when_track_paths_missing(
     a.select(real)
     a.select(tmp_path / "ghost.mp3")  # does not exist
     with pytest.raises(FileNotFoundError) as exc:
-        store.approve(a.id)
+        store.approve(a.id, library=_FakeLibrary())
     assert "ghost.mp3" in str(exc.value)
 
 
@@ -176,14 +199,22 @@ def test_approve_then_unapprove_round_trip(
     a.select(tagged_track("first.mp3"))
     folder = store.folder_for(a.id)
 
-    store.approve(a.id)
+    store.approve(a.id, library=_FakeLibrary())
     assert a.status == AlbumStatus.APPROVED
     assert (folder / ".approved").exists()
+    # Approve runs the full Phase 4 pipeline: symlinks + M3U + reports.
+    assert (folder / "playlist.m3u8").exists()
+    assert any(p.is_symlink() for p in folder.iterdir())
+    assert any((folder / "reports").glob("*.pdf"))
+    assert any((folder / "reports").glob("*.html"))
 
     store.unapprove(a.id)
     assert a.status == AlbumStatus.DRAFT
     assert a.approved_at is None
     assert not (folder / ".approved").exists()
+    # Spec 02 §unapprove: symlinks + m3u kept; reports/ deleted.
+    assert (folder / "playlist.m3u8").exists()
+    assert not (folder / "reports").exists()
 
 
 # Indie-review L4-C1: delete() must move-then-mutate, not mutate-then-move,

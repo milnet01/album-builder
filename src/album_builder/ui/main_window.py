@@ -4,6 +4,8 @@ AlbumStore + LibraryWatcher + AppState (Phase 2) + Player (Phase 3A)."""
 from __future__ import annotations
 
 import logging
+import shutil
+import subprocess
 from pathlib import Path
 from uuid import UUID
 
@@ -26,18 +28,28 @@ from PyQt6.QtWidgets import (
 
 from album_builder.domain.track import Track
 from album_builder.persistence.lrc_io import read_lrc
-from album_builder.persistence.settings import AudioSettings, read_audio, write_audio
+from album_builder.persistence.settings import (
+    AudioSettings,
+    read_audio,
+    read_ui,
+    write_audio,
+)
 from album_builder.persistence.state_io import AppState, WindowState, save_state
-from album_builder.services.album_store import AlbumStore
+from album_builder.services.album_store import (
+    AlbumStore,
+    ReportsCleanupFailed,
+)
 from album_builder.services.alignment_service import AlignmentService
 from album_builder.services.alignment_status import AlignmentStatus, compute_status
+from album_builder.services.export import ExportFailed
 from album_builder.services.library_watcher import LibraryWatcher
 from album_builder.services.lyrics_tracker import LyricsTracker
 from album_builder.services.player import Player
+from album_builder.services.report import list_warnings, report_paths_for
 from album_builder.ui.album_order_pane import AlbumOrderPane
 from album_builder.ui.library_pane import LibraryPane
 from album_builder.ui.now_playing_pane import NowPlayingPane
-from album_builder.ui.theme import Palette, qt_stylesheet
+from album_builder.ui.theme import Glyphs, Palette, qt_stylesheet
 from album_builder.ui.toast import Toast
 from album_builder.ui.top_bar import TopBar
 
@@ -139,6 +151,12 @@ class MainWindow(QMainWindow):
         self._player.set_volume(audio.volume)
         self._player.set_muted(audio.muted)
         self._player.error.connect(self._on_player_error)
+
+        # UI-tier settings cached at startup (Spec 09 §The approve flow
+        # step 6 + Spec 10 §`settings.json` schema). Re-reading on every
+        # approve would add disk I/O to a hot path; if the user changes
+        # the setting at runtime, the next app launch picks it up.
+        self._ui_settings = read_ui()
 
         # Lyrics tracker + alignment service (Spec 07). The tracker
         # subscribes to player.position_changed and pushes the current
@@ -257,20 +275,100 @@ class MainWindow(QMainWindow):
             self.top_bar.set_current(album_id)  # revert UI
             return
         self._store.schedule_save(album_id)
+        self._store.schedule_export(album_id, self._library_watcher.library())
         self.top_bar.set_current(album_id)
 
     def _on_approve(self, album_id: UUID) -> None:
-        if QMessageBox.question(
-            self, "Approve album",
-            "Approve this album? It will be locked from edits until you "
-            "reopen it. (Export to symlinks + a printable report will run "
-            "automatically once that feature ships.)",
-        ) != QMessageBox.StandardButton.Yes:
+        album = self._store.get(album_id)
+        if album is None:
+            return
+        # Pre-flight summary (Spec 09 §The approve flow step 2).
+        warnings = list(list_warnings(album, self._library_watcher.library()))
+        warn_text = "\n".join(f"  - {w}" for w in warnings) if warnings else ""
+        body = (
+            f"Approve '{album.name}'?\n\n"
+            f"This will export symlinks + a printable PDF + HTML report, "
+            f"then lock the album from edits until you reopen it.\n\n"
+            f"{len(album.track_paths)} of {album.target_count} tracks selected."
+        )
+        if warn_text:
+            body += "\n\nWarnings:\n" + warn_text
+        # Custom dialog: Spec 09 §The approve flow step 3 mandates literal
+        # button labels ("Approve and generate report" / "Cancel") with
+        # default-Cancel for destructive UI. Qt's `question()` shorthand
+        # localises to "Yes/No" with default-Yes - wrong on both counts.
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Approve album")
+        msg.setText(body)
+        msg.setIcon(QMessageBox.Icon.Question)
+        approve_btn = msg.addButton(
+            "Approve and generate report", QMessageBox.ButtonRole.AcceptRole,
+        )
+        cancel_btn = msg.addButton(QMessageBox.StandardButton.Cancel)
+        msg.setDefaultButton(cancel_btn)
+        msg.exec()
+        if msg.clickedButton() is not approve_btn:
+            return
+        # Disable the approve button for the duration so a re-entrant click
+        # is dropped (Spec 09 §The approve flow step 3).
+        self.top_bar.btn_approve.setEnabled(False)
+        approve_failed = False
+        try:
+            try:
+                self._store.approve(album_id, library=self._library_watcher.library())
+            except (FileNotFoundError, ValueError, OSError, ExportFailed) as exc:
+                approve_failed = True
+                # Spec 09 §Errors: surface via toast + modal warning.
+                self._show_toast(f"Approve failed: {exc}")
+                QMessageBox.warning(self, "Cannot approve", str(exc))
+                return
+        finally:
+            # Re-enable on failure paths; success path hides the button via
+            # TopBar.set_current below.
+            self.top_bar.btn_approve.setEnabled(True)
+        if approve_failed:
+            return
+        self.top_bar.set_current(album_id)
+        self.library_pane.set_current_album(self._store.get(album_id))
+        self.album_order_pane.set_album(
+            self._store.get(album_id), list(self._library_watcher.library().tracks)
+        )
+        # Success toast (Spec 09 §The approve flow step 5).
+        try:
+            folder = self._store.folder_for(album_id)
+            _, pdf = report_paths_for(album, folder / "reports")
+            self._show_toast(f"Approved {Glyphs.MIDDOT} report at {pdf}")
+            # xdg-open the reports folder (Spec 09 §The approve flow step 6).
+            if self._ui_settings.open_report_folder_on_approve:
+                self._open_in_file_manager(folder / "reports")
+        except (OSError, AttributeError) as exc:
+            logger.warning("post-approve niceties failed: %s", exc)
+
+    def _on_reopen(self, album_id: UUID) -> None:
+        album = self._store.get(album_id)
+        if album is None:
+            return
+        folder = self._store.folder_for(album_id)
+        html, pdf = report_paths_for(album, folder / "reports")
+        confirm = (
+            f"Reopening will delete the approved report ({pdf.name} + {html.name}). "
+            "The symlink folder and playlist are kept. Continue?"
+        )
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Reopen for editing")
+        msg.setText(confirm)
+        msg.setIcon(QMessageBox.Icon.Warning)
+        continue_btn = msg.addButton("Continue", QMessageBox.ButtonRole.DestructiveRole)
+        cancel_btn = msg.addButton(QMessageBox.StandardButton.Cancel)
+        msg.setDefaultButton(cancel_btn)
+        msg.exec()
+        if msg.clickedButton() is not continue_btn:
             return
         try:
-            self._store.approve(album_id)
-        except (FileNotFoundError, ValueError) as exc:
-            QMessageBox.warning(self, "Cannot approve", str(exc))
+            self._store.unapprove(album_id)
+        except ReportsCleanupFailed as exc:
+            self._show_toast(f"Reopen partial: {exc}")
+            QMessageBox.warning(self, "Reopen failed", str(exc))
             return
         self.top_bar.set_current(album_id)
         self.library_pane.set_current_album(self._store.get(album_id))
@@ -278,18 +376,28 @@ class MainWindow(QMainWindow):
             self._store.get(album_id), list(self._library_watcher.library().tracks)
         )
 
-    def _on_reopen(self, album_id: UUID) -> None:
-        if QMessageBox.question(
-            self, "Reopen for editing",
-            "Reopening will delete the approved report. Continue?",
-        ) != QMessageBox.StandardButton.Yes:
+    def _show_toast(self, message: str) -> None:
+        """Surface a message via the toast widget. The toast is constructed
+        in `__init__` as `self._toast`, so the attribute is always present
+        in normal init; the hasattr guard remains for test-isolation
+        contexts that might bypass `__init__`."""
+        toast = getattr(self, "_toast", None)
+        if toast is not None and hasattr(toast, "show_message"):
+            toast.show_message(message)
+        else:
+            logger.info("toast: %s", message)
+
+    def _open_in_file_manager(self, folder: Path) -> None:
+        """xdg-open the given folder; best-effort, failure is silent."""
+        if shutil.which("xdg-open") is None:
             return
-        self._store.unapprove(album_id)
-        self.top_bar.set_current(album_id)
-        self.library_pane.set_current_album(self._store.get(album_id))
-        self.album_order_pane.set_album(
-            self._store.get(album_id), list(self._library_watcher.library().tracks)
-        )
+        try:
+            subprocess.Popen(
+                ["xdg-open", str(folder)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+        except OSError as exc:
+            logger.warning("xdg-open failed: %s", exc)
 
     def _on_new_album(self) -> None:
         name, ok = QInputDialog.getText(self, "New album", "Album name (1-80 chars):")
@@ -332,6 +440,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Cannot toggle", str(exc))
             return
         self._store.schedule_save(album.id)
+        self._store.schedule_export(album.id, self._library_watcher.library())
         self.top_bar.set_current(album.id)
         self.library_pane.set_current_album(album)
         self.album_order_pane.set_album(album, list(self._library_watcher.library().tracks))
@@ -341,6 +450,7 @@ class MainWindow(QMainWindow):
         if album is None:
             return
         self._store.schedule_save(album.id)
+        self._store.schedule_export(album.id, self._library_watcher.library())
 
     def _wire_shortcuts(self) -> None:
         """Spec 00 keyboard table — wired in Phase 3A.

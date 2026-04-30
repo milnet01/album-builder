@@ -1,6 +1,6 @@
 # 10 — Persistence & Live Save
 
-**Status:** Draft · **Last updated:** 2026-04-28 · **Depends on:** 00 · **Used by:** 02, 03, 04, 05, 06, 07, 08, 09 · **Canonical for:** every JSON schema in this app (`album.json`, `state.json`, `settings.json`)
+**Status:** Draft · **Last updated:** 2026-04-30 · **Depends on:** 00 · **Used by:** 02, 03, 04, 05, 06, 07, 08, 09 · **Canonical for:** every JSON schema in this app (`album.json`, `state.json`, `settings.json`) + the atomic-pair invariant for multi-file transactions
 
 ## Purpose
 
@@ -53,6 +53,61 @@ def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> N
 
 For binary content (PDF, embedded images): same shape, `wb`. For symlinks (no content): create with a unique tmp name then `os.replace` (which works for symlinks). The on-failure cleanup pass removes the tmp so a half-written file doesn't accumulate across retries.
 
+### Atomic write — staging-folder exception
+
+Writes inside a transactional **staging directory** that itself promotes atomically (Spec 08 `Albums/<slug>/.export.new/`) are **exempt** from the per-file `atomic_write_text` protocol — the staging directory is the unit of crash recovery, so the per-file tmp+rename inside it would be redundant. The exception applies only when both of these hold:
+
+1. The staging directory's parent is the same filesystem as the staging directory (asserted in Spec 08 §Generation algorithm — `staging.parent == folder`).
+2. The promotion step uses POSIX `os.replace` to move staging contents into the live folder.
+
+Any other write site MUST use `atomic_write_text` (or its binary counterpart `atomic_write_bytes`).
+
+### Atomic pair (multi-file transactions)
+
+Some on-disk transactions span **two files** (the canonical instance is Spec 09 §canonical approve sequence — the `(report.html, report.pdf)` pair). The `atomic_write_text` primitive is per-file; this section names the higher-level invariant a multi-file transaction enforces on top of it.
+
+`album.sanitised_name` (referenced in the load-time scan below) is `sanitise_title(album.name)` — the canonical helper defined in Spec 08 §Symlink filenames and re-used by Spec 09 §File naming. Source-of-truth lives in Spec 08; this spec only consumes it.
+
+**Album-name constraint (UI-side validation, owned by Spec 02 §rename):** an album name MUST NOT match the regex `.* - \d{4}-\d{2}-\d{2}$` after `sanitise_title()`. This forbids names like `"Daily - 2026-04-30"` whose sanitised form would collide with the report-filename pattern `<sanitised-name> - YYYY-MM-DD.html`, allowing the load-time scan glob to false-match. The UI rejects such names with a validation error at create + rename time; on-disk hand-edits violating the constraint surface as `AlbumDirCorrupt` on load.
+
+**Invariant:** for an atomic pair `(A, B)` with final paths `path_a` and `path_b`:
+
+1. **Phase 1 — both writes complete.** Both `path_a.tmp` and `path_b.tmp` are written to disk in full (each via the standard tmp-flush-fsync sequence; the staging-folder exception above does **not** apply to atomic pairs — they live in the final directory).
+2. **Phase 2 — both renames sequenced.** `os.replace(path_a.tmp, path_a)` runs first; on success, `os.replace(path_b.tmp, path_b)` runs.
+
+**Crash windows and recovery** (executed by the load-time scan, see below):
+
+| Window | On-disk state | Recovery |
+|---|---|---|
+| Mid-Phase-1 | One or both `.tmp` files exist; neither final exists. | Load-time scan deletes both `.tmp` siblings. |
+| Between rename-A and rename-B | `path_a` final + `path_b.tmp` (no `path_b` final). | Load-time scan deletes both: the renamed `path_a` AND the leftover `path_b.tmp`. |
+| Post-Phase-2 | Both finals exist; no `.tmp`. | Clean state; no recovery. |
+
+**Load-time scan trigger and scope.** `AlbumStore.load(album)` runs the atomic-pair scan on every album that has a `reports/` subdirectory:
+
+```
+for stem in distinct_date_stems(album.reports_dir):
+    html_final = album.reports_dir / f"{album.sanitised_name} - {stem}.html"
+    pdf_final  = album.reports_dir / f"{album.sanitised_name} - {stem}.pdf"
+    html_tmp   = html_final.with_suffix(html_final.suffix + ".tmp")  # actually a unique-pid tmp; sketch
+    pdf_tmp    = pdf_final.with_suffix(pdf_final.suffix + ".tmp")
+
+    has_html = html_final.exists()
+    has_pdf  = pdf_final.exists()
+    has_html_tmp = any(album.reports_dir.glob(f"{album.sanitised_name} - {stem}.html.*.tmp"))
+    has_pdf_tmp  = any(album.reports_dir.glob(f"{album.sanitised_name} - {stem}.pdf.*.tmp"))
+
+    if has_html != has_pdf:                 # exactly one final exists
+        unlink_if_exists(html_final, pdf_final)   # delete the one that did rename
+        unlink_all_matching(html_tmp_pattern, pdf_tmp_pattern)
+    elif has_html_tmp or has_pdf_tmp:       # tmps from a phase-1 crash
+        unlink_all_matching(html_tmp_pattern, pdf_tmp_pattern)
+```
+
+The scan is idempotent: a clean `reports/` (both finals, no tmps) is a no-op.
+
+For PDF/HTML cleanup specifically, the load-time scan operates at the directory level and does **not** rely on `json.load`-style parse checks; the JSON-shape sanity check in §Errors & edge cases applies to JSON files only.
+
 ## Debounce
 
 UI mutations are bursty (rapid toggles, arrow-key target changes, drag-reorder). We debounce JSON writes to **250 ms** of idle. The model-in-memory is updated immediately; the disk write is scheduled.
@@ -80,6 +135,8 @@ On load:
 - `schema_version > current` → refuse. Show "This file was written by a newer version of Album Builder. Please update." Don't crash, don't overwrite.
 
 Every migration step is unit-tested with a sample old-version JSON.
+
+(The `.v<old>.bak` here is migration-only — a versioned snapshot of the pre-migration bytes. It is unrelated to `.tmp` siblings, which are the per-write crash-recovery artefacts swept up by §Atomic pair (multi-file transactions) for paired writes and by §Errors & edge cases for single-file writes.)
 
 ## Encoding rules (canonical)
 
@@ -224,7 +281,7 @@ Spec 12 owns *what settings exist*; this spec owns the bytes. Lives at `~/.confi
 | Concurrent processes (two app instances) | Last writer wins. We don't use file locks for v1; the app is single-instance via QSingleApplication (Spec 12). |
 | Partial JSON (corrupt previous write) | `json.load` raises → file is treated as missing for that album → that album is skipped on load with a warning toast and a `.bak` is preserved. |
 | User hand-edits `album.json` while app is running | The file watcher (Spec 01 doesn't cover this, but we extend it for `Albums/`) picks up the change and reloads the album. If the user's edit is invalid, we revert to in-memory state and warn. |
-| `.tmp` file left over from a crash | On startup, scan for stale `.tmp` siblings and remove them after a sanity check (the corresponding final file is present and parses). |
+| `.tmp` file left over from a crash (single-file write) | On startup, scan for stale `.tmp` siblings of JSON files (`album.json`, `state.json`, `settings.json`) and remove them after a sanity check that the corresponding final file is present and `json.load`s. For paired-file `.tmp`s in `reports/`, the §Atomic pair (multi-file transactions) load-time scan handles them at the directory level (no JSON parse). |
 
 ## Test contract
 
@@ -250,6 +307,10 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-10-18** — Crash injection (kill between `flush()` and `os.replace`): on restart, `.tmp` siblings are detected and removed; the original file is intact.
 - **TC-10-19** — `settings.json` missing → load returns defaults; first save creates the directory tree (`~/.config/album-builder/`).
 - **TC-10-20** — `settings.json` partial (missing `audio` block) → fields default; existing fields preserved on round-trip.
+- **TC-10-21** — Atomic pair (Phase 4): the `(report.html, report.pdf)` load-time scan deletes both members when exactly one final exists for a given date stem; deletes any `.tmp` siblings; is a no-op on a clean `reports/` (both finals, no tmps). Idempotent across repeated load calls.
+- **TC-10-22** (Phase 4) — Atomic pair Phase-1-mid-crash (both `.tmp` exist, no finals): load-time scan deletes both `.tmp` siblings; album status remains draft per Spec 02 self-heal.
+- **TC-10-23** (Phase 4) — Atomic pair Phase-2-mid-crash (one final renamed, one `.tmp` remaining): load-time scan deletes both the renamed final AND the leftover `.tmp`; album status remains draft per Spec 02 self-heal (no marker → not approved).
+- **TC-10-24** (Phase 4) — Album-name validation rejects names matching `.* - \d{4}-\d{2}-\d{2}$` after `sanitise_title()`; the rejection surfaces at create + rename time, not at approve time.
 
 ## Out of scope (v1)
 

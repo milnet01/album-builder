@@ -6,6 +6,7 @@ in album_io.py (load/save) and AlbumStore (debounced disk writes).
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -22,10 +23,31 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+# Spec 10 §Atomic pair (multi-file transactions): album names ending in a
+# date suffix collide with the report-filename pattern
+# `<sanitised-name> - YYYY-MM-DD.{html,pdf}`, breaking the load-time
+# atomic-pair scan glob. Rejected at create + rename time.
+#
+# Spec 10 mandates the constraint be evaluated AFTER `sanitise_title()`.
+# We match against the raw (pre-sanitise) name here because `sanitise_title`
+# is a contraction for the v1 sanitiser - it never INTRODUCES a ` - YYYY-`
+# pattern that wasn't already in the input (forbidden chars `*?:` etc. only
+# get replaced with `_`, never `-`). Pre-match is therefore a strict
+# superset of post-match for the regex-rejection set; the equivalence
+# would only break if a future sanitiser version started rewriting unicode
+# dashes to ASCII `-`, in which case this site needs revisiting.
+_DATE_SUFFIX_RE = re.compile(r".* - \d{4}-\d{2}-\d{2}$")
+
+
 def _validate_name(name: str) -> str:
     n = name.strip()
     if not (1 <= len(n) <= 80):
         raise ValueError(f"name must be 1-80 chars after trim, got {len(n)}")
+    if _DATE_SUFFIX_RE.match(n):
+        raise ValueError(
+            "name must not end in a date suffix (' - YYYY-MM-DD'); "
+            "would collide with report-filename pattern (Spec 10 §Atomic pair)"
+        )
     return n
 
 

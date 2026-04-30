@@ -1,10 +1,12 @@
 # 02 — Album Lifecycle
 
-**Status:** Draft · **Last updated:** 2026-04-28 · **Depends on:** 00, 01, 10 · **Blocks:** 03, 04, 05, 08, 09
+**Status:** Draft · **Last updated:** 2026-04-30 · **Depends on:** 00, 01, 10 · **Blocks:** 03, 04, 05, 08, 09
 
 ## Purpose
 
 Define the states an album can be in, the transitions between them, and what each state allows the user to do.
+
+> **Path convention.** Throughout this spec, `Albums/<slug>/` is shorthand for `<settings.albums_folder>/<slug>/` (Spec 10 §`settings.json` schema). The literal `Albums/` is **never** resolved against CWD; the canonical source is always `settings.albums_folder`.
 
 ## States
 
@@ -34,9 +36,9 @@ Define the states an album can be in, the transitions between them, and what eac
 
 Trigger: user clicks "+ New album" in the album switcher (Spec 03).
 Behavior:
-1. A modal asks for **Album name** (required, 1–80 chars) and **Target song count** (required, integer ≥ 1; default 12).
+1. A modal asks for **Album name** (required, 1–80 chars after trim; reject names matching the regex `.* - \d{4}-\d{2}-\d{2}$` after `sanitise_title()` — see Spec 10 §Atomic pair for the rationale: such a name would collide with the report-filename pattern and break the load-time atomic-pair scan glob) and **Target song count** (required, integer ≥ 1; default 12).
 2. On confirm: a new `Album` is created with a fresh UUID, status = `draft`, `track_paths = []`, `created_at = now`.
-3. The album folder is created at `Albums/<slug>/` (slug = lower-kebab-case of name with collisions resolved by appending ` (2)`, ` (3)`, etc.).
+3. The album folder is created at `<settings.albums_folder>/<slug>/` (slug = lower-kebab-case of name with collisions resolved by appending ` (2)`, ` (3)`, etc.). `settings.albums_folder` is the canonical source of truth for the albums root (Spec 10 §`settings.json` schema); it is never resolved against CWD.
 4. `album.json` is written immediately.
 5. The new album becomes the current selection in the switcher.
 
@@ -45,7 +47,7 @@ Behavior:
 Trigger: user double-clicks the album name in the top bar, or uses the rename action in the switcher's context menu.
 Behavior:
 1. Inline edit with the current name pre-filled.
-2. On confirm: validate (1–80 chars, not empty after trim).
+2. On confirm: validate (1–80 chars after trim, not empty; reject names matching `.* - \d{4}-\d{2}-\d{2}$` after `sanitise_title()` per the §create constraint).
 3. The on-disk folder is renamed to match the new slug. M3U + reports paths inside the folder are unaffected (relative paths inside the album folder).
 4. `album.json` is updated with the new name and a fresh `updated_at`.
 
@@ -60,13 +62,13 @@ Trigger: user clicks **✓ Approve…** in the top bar.
 - **Every selected track exists on disk.** If any `track_path` is missing, approve **raises `FileNotFoundError`** listing the missing paths; the pre-flight dialog surfaces them and offers a "Remove missing references" button to clean up first. The user must resolve before approve can proceed. *This is the one place in the app where missing tracks are an error rather than a skip-with-warning — Spec 08's missing-track skip-with-warning applies only to draft live re-export, never to approve.*
 - (Optional warning, not blocking) `selected_count != target_count`. Confirm dialog: "You have 8 of 12 target. Approve anyway?"
 
-**Behavior** (the canonical approve sequence is owned by Spec 09 §approve sequence; this section summarises). On confirm:
-1. Re-verify all `track_paths` exist (race-window check).
-2. Regenerate symlinks + `playlist.m3u8` (Spec 08).
-3. Render PDF + HTML report (Spec 09).
-4. Write the `.approved` marker file.
-5. Update `album.json`: `status = "approved"`, `approved_at = now`.
-6. UI disables all edit affordances for this album.
+**Behavior** (the canonical approve sequence is owned by Spec 09 §canonical approve sequence with named step anchors; this section summarises in matching order). On confirm:
+1. `step:verify-paths` — verify all `track_paths` exist on disk (single check; the §Preconditions snapshot above counts paths but does not stat them, so this is the authoritative existence check).
+2. `step:export-staging` + `step:export-commit` — regenerate symlinks + `playlist.m3u8` via Spec 08 `regenerate_album_exports(album, library, strict=True)`. Strict mode converts Spec 08's skip-with-warning into `FileNotFoundError` for any track deleted in the race window between `step:verify-paths` and `step:export-staging`.
+3. `step:render-tmp` + `step:render-rename-html` + `step:render-rename-pdf` — render PDF + HTML report (Spec 09); both `.tmp` files written before either rename; atomic-pair semantics per Spec 10 §Atomic pair (multi-file transactions).
+4. `step:write-marker` — write the `.approved` marker file.
+5. `step:flip-status` — update `album.json`: `status = "approved"`, `approved_at = now`.
+6. `step:ui-relock` — UI disables all edit affordances for this album.
 
 The progress dialog is **non-cancellable** once the user clicks "Approve and generate report" — cancellation mid-render leaves either the export or the report half-written and complicates the on-disk invariant. (Phase 4 may revisit; for now: approve is a commit, not a tentative.)
 
@@ -84,7 +86,7 @@ Trigger: user clicks **Reopen for editing** (visible only on approved albums) in
    3. Update `album.json`: `status = "draft"`, `approved_at = null` — atomic write per Spec 10.
 3. UI re-enables edit affordances.
 
-The order matters: deleting `reports/` first means a crash between steps 2.i and 2.ii leaves an "approved album with no report" — Spec 09 self-heals this on next load by regenerating the report. Deleting the marker before the JSON status flip would leave "draft on disk + reports present" — recoverable but messy. Symlink folder and M3U are intentionally **kept** on unapprove (they reflect current selection, not approval state, and get regenerated on next mutation).
+The order matters: deleting `reports/` first means a crash between steps 2.i and 2.ii leaves an "approved-marker-without-reports" state. The marker is the source of truth (§Errors table self-heal: marker presence wins), so on next load the album is treated as approved despite the missing reports; a load-time toast surfaces the inconsistency and prompts the user to either re-approve (regenerates the reports) or click "Reopen for editing" again (completes the unapprove). The reports are **not** silently regenerated on load — that would skip the user's signed-off content snapshot. Deleting the marker before the JSON status flip would leave "draft on disk + reports present" — recoverable but messy. Symlink folder and M3U are intentionally **kept** on unapprove (they reflect current selection, not approval state, and get regenerated on next mutation).
 
 ### delete
 
@@ -147,6 +149,7 @@ Album-folder companions to `album.json`:
 | Approve empty album | Approve button disabled; tooltip "Select at least one track." |
 | Approve with any selected track missing on disk | `FileNotFoundError`; pre-flight dialog lists missing paths and offers "Remove missing references." Approve does not proceed until resolved. (Spec 08's skip-with-warning applies only to draft live re-export, never to approve.) |
 | Rename to empty / whitespace | Validation error inline; rename blocked. |
+| Name matches `.* - \d{4}-\d{2}-\d{2}$` after `sanitise_title()` (e.g., "Daily - 2026-04-30") | Validation error inline at create + rename time: "Album name cannot end with a date suffix; this would collide with the report-filename pattern." (See Spec 10 §Atomic pair.) |
 | Rename collision (slug taken) | Auto-append ` (2)`, ` (3)`, … and proceed. |
 | Crash mid-rename (folder moved on disk but `album.json.name` not yet rewritten) | On next load the folder slug and the in-JSON `name` disagree. **Self-heal:** the on-disk folder slug wins (it is what the user sees in their file manager); the in-memory Album re-derives `name` ← reverse-derived from slug (replace `-` with space, title-case), then bumps `updated_at` and writes back. The user can rename again to refine. |
 | Delete current album | Switch current to alphabetically-first remaining; if none, app shows "no album selected" empty state. Sort uses **case-insensitive locale-aware** comparison (`str.casefold()` + locale collator). |
@@ -172,13 +175,13 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-02-10** — `Album.approve()` raises `FileNotFoundError` (or equivalent) if any `track_path` does not exist on disk; lists all missing.
 - **TC-02-11** — `Album.approve()` is a no-op (or rejects) when `status == APPROVED`; only `DRAFT → APPROVED` and `APPROVED → DRAFT` transitions are valid.
 - **TC-02-12** — Successful `Album.approve()` writes `.approved` marker, sets `status = APPROVED`, sets `approved_at = now`, persists `album.json`.
-- **TC-02-13** — `Album.approve()` synchronously regenerates symlinks + M3U (Spec 08) and report (Spec 09); on completion all four artefacts are on disk.
+- **TC-02-13** — `Album.approve()` synchronously regenerates symlinks + M3U (Spec 08) and report (Spec 09); on completion **five artefacts** exist on disk with non-zero size: `playlist.m3u8`, the symlink set (≥ 1 entry per non-missing track), `reports/<sanitised-name> - YYYY-MM-DD.pdf`, `reports/<sanitised-name> - YYYY-MM-DD.html`, and the `.approved` zero-byte marker. (Marker is zero-byte by design; the size assertion targets the other four.)
 - **TC-02-14** — `Album.unapprove()` deletes `.approved` marker and `reports/`; leaves the symlink folder + M3U intact; sets `status = DRAFT`, `approved_at = None`.
 - **TC-02-15** — `Album.delete()` moves `Albums/<slug>/` to `Albums/.trash/<slug>-YYYYMMDD-HHMMSS/` (no `rm -rf`).
 - **TC-02-16** — Deleting the *current* album switches the current selection to the alphabetically-first remaining album, or to `None` if none remain.
 - **TC-02-17** — Self-heal on load: `.approved` marker present + `album.json.status == "draft"` → fix `album.json.status` to `"approved"` and write back.
 - **TC-02-18** — Self-heal on load: `album.json.status == "approved"` + `.approved` missing → write `.approved` marker.
-- **TC-02-19** — `Album.approve()` is idempotent: re-running after a partial-crash mid-approval produces a consistent on-disk state with no duplicates / leftover tmp files.
+- **TC-02-19** — `Album.approve()` is idempotent across the three named crash points in Spec 09 §canonical approve sequence: (a) crash after `step:export-commit` — re-approve regenerates report from scratch, no stale `.tmp` files remain; (b) crash after `step:render-rename-pdf` (both reports renamed, marker not yet written, status still draft per Spec 02 self-heal) — re-approve overwrites the reports + writes marker + flips status; (c) crash after `step:write-marker` (marker present, status still draft) — Spec 10 self-heal flips status on next load; subsequent re-approve is a no-op. No duplicates / leftover `.tmp` files survive any path.
 - **TC-02-20** — `album.json` schema has `schema_version == 1` and the field set listed in §Persistence; round-trip (load → save → load) preserves every field byte-for-byte except `updated_at`.
 
 ## Out of scope (v1)

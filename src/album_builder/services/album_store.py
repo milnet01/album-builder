@@ -19,10 +19,35 @@ from album_builder.persistence.album_io import (
     save_album_for_approve,
     save_album_for_unapprove,
 )
+from album_builder.persistence.atomic_pair import scan_reports_dir
 from album_builder.persistence.debounce import DebouncedWriter
+from album_builder.services.export import (
+    ExportFailed,
+    cleanup_stale_staging,
+    regenerate_album_exports,
+    sanitise_title,
+)
+from album_builder.services.report import render_report
 
 logger = logging.getLogger(__name__)
 TRASH_DIRNAME = ".trash"
+
+
+def _symlink_count_matches(album: Album, folder: Path) -> bool:
+    """Drift-detection heuristic for `rescan()` self-heal.
+
+    Returns True iff the live folder's symlink count equals the album's
+    declared track_paths length. Library-free check; over-flags missing
+    tracks (counts them toward "expected") but never under-flags. A False
+    return tells `rescan()` to mark the album `needs_regen` so the next
+    mutation triggers a fresh export pass (Spec 08 §`_commit_export`
+    drift-detection invariant).
+    """
+    try:
+        actual = sum(1 for p in folder.iterdir() if p.is_symlink())
+    except OSError:
+        return True  # can't check — don't false-flag
+    return actual == len(album.track_paths)
 
 
 class AlbumStore(QObject):
@@ -44,6 +69,14 @@ class AlbumStore(QObject):
         self._folders: dict[UUID, Path] = {}
         self._current_id: UUID | None = None
         self._writer = DebouncedWriter(parent=self)
+        # Spec 08 §`_commit_export` drift-detection: albums flagged
+        # `needs_regen` get a fresh export pass on the next mutation.
+        # Set in `rescan()` self-heal when staging was wiped or symlink
+        # count differs from non-missing track_paths length.
+        self._needs_regen: set[UUID] = set()
+        # Spec 09 §The approve flow step 3 + TC-09-25 second clause:
+        # re-entrant approve must drop on the floor at the service layer.
+        self._approve_in_flight: set[UUID] = set()
         # L5-M1: cross-FS check is now triggered on first lazy `.trash`
         # creation inside delete() rather than at construction (where the
         # `.trash` directory typically doesn't exist yet so the check
@@ -125,6 +158,32 @@ class AlbumStore(QObject):
                 # _deserialize bug) shouldn't abort the whole rescan.
                 logger.exception("unexpected error loading %s: %s", entry, exc)
                 continue
+            # Phase 4 self-heal: wipe stale .export.new/ + sweep half-pair
+            # reports/ entries + flag drift for next-mutation regen. Each
+            # step is idempotent and silent on clean dirs. The OSError-only
+            # catch is deliberate: `scan_reports_dir` and other helpers
+            # raise OSError on filesystem trouble; logic errors (regex
+            # bugs, ValueError on bad input) MUST propagate so we surface
+            # them rather than silently degrade.
+            try:
+                staging_wiped = cleanup_stale_staging(entry)
+                reports_dir = entry / "reports"
+                if reports_dir.exists():
+                    scan_reports_dir(
+                        reports_dir,
+                        sanitised_name=sanitise_title(album.name) or "album",
+                    )
+                # Library isn't available at rescan() time (LibraryWatcher
+                # owns it); skip the missing-track delta check and use the
+                # simpler "symlink count vs track_paths length" heuristic.
+                # A missing track in track_paths still counts towards the
+                # expected total, so the heuristic over-flags rather than
+                # under-flags — safe direction for an "eventually consistent
+                # within bounded time" repair.
+                if staging_wiped or not _symlink_count_matches(album, entry):
+                    self._needs_regen.add(album.id)
+            except OSError as exc:
+                logger.warning("rescan: self-heal failed for %s: %s", entry, exc)
             new_albums[album.id] = album
             new_folders[album.id] = entry
         # Atomic-ish swap: only replace in-memory state once the full read
@@ -164,6 +223,32 @@ class AlbumStore(QObject):
         if folder is None or album is None:
             return
         self._writer.schedule(album_id, lambda: save_album(folder, album))
+
+    def schedule_export(self, album_id: UUID, library: object) -> None:
+        """Caller mutated `self.get(id)` in memory; queue a draft export pass.
+
+        Spec 08 §`_commit_export` Drift-detection: a draft mutation should
+        also regenerate the live symlinks + M3U so external tools (file
+        manager, VLC, mpv) see the canonical state. Errors during
+        non-strict export are logged-not-raised; Spec 09 §step:export-staging
+        runs strict mode separately as part of `approve()`.
+
+        If `_needs_regen` was set by `rescan()` self-heal, this call closes
+        the drift-detection loop for that album.
+        """
+        folder = self._folders.get(album_id)
+        album = self._albums.get(album_id)
+        if folder is None or album is None:
+            return
+        try:
+            regenerate_album_exports(album, library, folder, strict=False)
+            self._needs_regen.discard(album_id)
+        except (ExportFailed, OSError) as exc:
+            logger.warning("schedule_export(%s) failed: %s", album_id, exc)
+
+    def needs_regen(self, album_id: UUID) -> bool:
+        """Spec 08 drift-detection: was this album flagged on load?"""
+        return album_id in self._needs_regen
 
     def flush(self) -> None:
         self._writer.flush_all()
@@ -244,6 +329,11 @@ class AlbumStore(QObject):
         was_current = self._current_id == album_id
         self._folders.pop(album_id, None)
         self._albums.pop(album_id, None)
+        # Hygiene: drop drift / in-flight state for the deleted album so
+        # `_needs_regen` and `_approve_in_flight` don't accumulate stale
+        # ids across long delete-heavy sessions.
+        self._needs_regen.discard(album_id)
+        self._approve_in_flight.discard(album_id)
         if was_current:
             # TC-02-16: deleting the current album re-points current at the
             # alphabetically-first remaining album (or None).
@@ -268,34 +358,103 @@ class AlbumStore(QObject):
         self._current_id = album_id
         self.current_album_changed.emit(album_id)
 
-    def approve(self, album_id: UUID) -> None:
-        """Service-level approve. Implements Spec 09 canonical approve
-        sequence steps 1, 4, 5 (Phase 2 scope). Steps 2 (export pipeline)
-        and 3 (PDF/HTML render) are Phase 4 backfill - they slot in between
-        step 1 and step 4 here when Phase 4 lands. TC-02-10."""
-        album = self._albums[album_id]
+    def approve(self, album_id: UUID, *, library: object) -> None:
+        """Service-level approve. Implements Spec 09 canonical approve sequence.
 
-        # Step 1 - verify all paths exist on disk
+        Step anchors mirror the spec: step:verify-paths, step:export-staging,
+        step:export-commit (both inside `regenerate_album_exports`),
+        step:render-tmp + step:render-rename-html + step:render-rename-pdf
+        (inside `render_report`), step:write-marker, step:flip-status.
+
+        `library` is REQUIRED — the export pipeline cannot run without it.
+        Earlier drafts allowed `library=None` for legacy test compatibility;
+        that produced "approved album with no artefacts" (the exact
+        invariant the spec forbids), so it is now mandatory. Tests that
+        only exercise the domain-level state-flip should call
+        `Album.approve()` directly rather than the service method.
+
+        Re-entrancy: `_approve_in_flight` set guards against a re-entrant
+        call from a Qt signal slot; a second call for the same album_id
+        while the first is mid-render is dropped silently (Spec 09
+        §The approve flow step 3 + TC-09-25 second clause).
+        """
+        if album_id in self._approve_in_flight:
+            logger.warning("approve(%s): already in flight; dropping re-entry", album_id)
+            return
+        album = self._albums[album_id]
+        folder = self._folders[album_id]
+
+        # step:verify-paths — single existence check (UX pre-flight; the
+        # authoritative check is `regenerate_album_exports(strict=True)`
+        # below, which closes the TOCTOU window).
         missing = [p for p in album.track_paths if not Path(p).exists()]
         if missing:
             paths = ", ".join(str(p) for p in missing)
             raise FileNotFoundError(f"missing tracks: {paths}")
 
-        # Step 2 - Phase 4 (export pipeline)
-        # Step 3 - Phase 4 (PDF/HTML render)
+        self._approve_in_flight.add(album_id)
+        try:
+            # step:export-staging + step:export-commit (Spec 08 strict mode).
+            _, export_warnings = regenerate_album_exports(
+                album, library, folder, strict=True,
+            )
+            if export_warnings:
+                # Surface in-process warnings (control-char rejection,
+                # zero-byte sanity check) via the logger; the caller can
+                # subscribe to log handlers to surface a toast.
+                logger.info(
+                    "approve(%s) export warnings: %s",
+                    album_id, "; ".join(export_warnings),
+                )
+            # step:render-tmp + render-rename-html + render-rename-pdf.
+            reports_dir = folder / "reports"
+            render_report(album, library, reports_dir=reports_dir)
 
-        # Step 4 + 5 (Phase 2 scope): marker BEFORE status flip on disk
-        album.approve()  # in-memory state flip
-        folder = self._folders[album_id]
-        save_album_for_approve(folder, album)
+            # step:write-marker + step:flip-status.
+            album.approve()
+            save_album_for_approve(folder, album)
+            self._needs_regen.discard(album_id)
+        finally:
+            self._approve_in_flight.discard(album_id)
 
     def unapprove(self, album_id: UUID) -> None:
-        """Service-level unapprove. Implements Spec 02 unapprove strict
-        ordering. In Phase 2: marker delete BEFORE status flip on disk.
-        Phase 4 will add reports/ deletion as step 1 (before marker)."""
+        """Service-level unapprove (Spec 02 §unapprove strict ordering).
+
+        Order: (i) delete reports/ recursively, (ii) delete .approved
+        marker, (iii) atomic-write album.json with status="draft".
+        Mirrors approve in reverse so a crash at any sub-step leaves a
+        recoverable on-disk state.
+
+        If step (i) raises (e.g. EBUSY on a file held open by an external
+        viewer), we surface a `ReportsCleanupFailed` so the caller can
+        toast a "manual cleanup may be needed" message; the album stays
+        APPROVED both in memory and on disk (no half-state).
+        """
         album = self._albums[album_id]
-        # Step 1 - Phase 4 (delete reports/)
-        # Steps 2 + 3 (Phase 2 scope): marker delete before status flip
-        album.unapprove()  # in-memory state flip
         folder = self._folders[album_id]
+
+        # (i) delete reports/ recursively. Two-phase: if the first attempt
+        # raises, retry once with `ignore_errors=True` to clear what we can,
+        # then verify-empty. If still non-empty, surface to caller.
+        reports_dir = folder / "reports"
+        if reports_dir.exists():
+            try:
+                shutil.rmtree(reports_dir, ignore_errors=False)
+            except OSError as exc:
+                logger.warning("unapprove(%s): rmtree retry after %s", album_id, exc)
+                shutil.rmtree(reports_dir, ignore_errors=True)
+                if reports_dir.exists():
+                    raise ReportsCleanupFailed(
+                        f"could not fully delete {reports_dir}; "
+                        f"manual cleanup may be needed"
+                    ) from exc
+
+        # (ii) + (iii) flip in-memory + write JSON, marker delete inside helper.
+        album.unapprove()
         save_album_for_unapprove(folder, album)
+
+
+class ReportsCleanupFailed(Exception):
+    """Raised by `unapprove()` when reports/ cannot be fully removed; the
+    album stays APPROVED. Caller surfaces a user-friendly toast prompting
+    manual cleanup."""

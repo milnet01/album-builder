@@ -354,3 +354,7 @@ class Glyphs:
     # convention for close-button affordances (matches macOS, GTK, web UIs)
     # and renders identically across all font stacks. (Theme J closure.)
     CLOSE = "x"                 # Spec 06 toast close button
+    # Middle-dot separator (U+00B7) used in Spec 09 §The approve flow step 5
+    # success toast format ("Approved · report at <path>") and similar
+    # "key1 · key2" UI strings. Widely available in system fonts.
+    MIDDOT = "·"

@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ name }} - Album Builder report</title>
+<style>
+  :root {
+    --bg-base: #15161c;
+    --bg-pane: #1a1b22;
+    --bg-elevated: #1f2029;
+    --text-primary: #e8e9ee;
+    --text-secondary: #8a8d9a;
+    --text-tertiary: #6e717c;
+    --accent-1: #6e3df0;
+    --accent-2: #c635a6;
+    --accent-warm: #f6c343;
+    --border: #262830;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: "Inter", "SF Pro Text", "Segoe UI", "Cantarell", "Noto Sans", system-ui, sans-serif;
+    font-size: 11.5pt;
+    line-height: 1.45;
+    margin: 0;
+    padding: 0;
+  }
+  .cover {
+    text-align: center;
+    padding: 60px 40px 30px 40px;
+    border-bottom: 1px solid var(--border);
+  }
+  .cover-art {
+    width: 60%;
+    max-width: 480px;
+    aspect-ratio: 1 / 1;
+    margin: 0 auto 24px auto;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 50%, var(--accent-warm) 100%);
+    display: block;
+    object-fit: cover;
+  }
+  h1.album-name {
+    font-size: 32px;
+    font-weight: 700;
+    margin: 0 0 8px 0;
+  }
+  .album-artist {
+    font-size: 18px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+  }
+  .status-row {
+    color: var(--text-tertiary);
+    font-size: 13px;
+  }
+  .all-author-line {
+    color: var(--text-secondary);
+    font-style: italic;
+    margin: 8px 0 16px 0;
+  }
+  .listing {
+    padding: 30px 40px;
+    border-bottom: 1px solid var(--border);
+  }
+  table.tracks {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  table.tracks th, table.tracks td {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  table.tracks th {
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  table.tracks td.num, table.tracks td.dur {
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    width: 1%;
+    white-space: nowrap;
+  }
+  table.tracks tr.total td {
+    border-bottom: none;
+    border-top: 2px solid var(--border);
+    font-weight: 700;
+  }
+  .per-track {
+    padding: 24px 40px;
+  }
+  .track-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+    margin: 0 0 24px 0;
+    background: var(--bg-pane);
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 18px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .track-cover {
+    width: 120px;
+    height: 120px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+    object-fit: cover;
+  }
+  .track-meta h3 {
+    margin: 0 0 4px 0;
+    font-size: 18px;
+  }
+  .track-sub {
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+  .track-comment {
+    color: var(--text-tertiary);
+    font-style: italic;
+    margin-bottom: 12px;
+    font-size: 12px;
+  }
+  .track-lyrics {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: var(--bg-elevated);
+    padding: 12px;
+    border-radius: 6px;
+    border-left: 3px solid var(--accent-1);
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
+  .track-lyrics.empty {
+    color: var(--text-tertiary);
+    font-style: italic;
+    border-left-color: var(--border);
+  }
+  .track-lyrics .truncated {
+    color: var(--text-secondary);
+    font-style: italic;
+  }
+  footer.report-footer {
+    padding: 20px 40px 40px 40px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    border-top: 1px solid var(--border);
+  }
+  footer.report-footer .disclaimer {
+    margin-top: 6px;
+    color: var(--text-secondary);
+  }
+  @media print {
+    @page {
+      size: A4;
+      margin: 18mm 14mm;
+      background: var(--bg-base);
+    }
+    body { font-size: 10.5pt; }
+    .cover { padding: 30px 0 20px 0; border-bottom: none; }
+    .listing, .per-track { padding: 20px 0; }
+    .track-card { break-before: auto; }
+    .track-card.first-on-page { break-before: page; }
+    footer.report-footer { padding: 20px 0; }
+  }
+</style>
+</head>
+<body>
+
+<section class="cover">
+  {% if cover_uri %}
+    <img class="cover-art" src="{{ cover_uri }}" alt="Album cover">
+  {% else %}
+    <div class="cover-art" role="img" aria-label="Album cover placeholder"></div>
+  {% endif %}
+  <h1 class="album-name">{{ name }}</h1>
+  {% if artist %}<div class="album-artist">{{ artist }}</div>{% endif %}
+  <div class="status-row">
+    Approved {{ approved_date_human }} · {{ track_count }} of {{ target_count }} tracks · {{ total_duration }} total runtime
+  </div>
+</section>
+
+<section class="listing">
+  {% if all_composer %}<div class="all-author-line">All tracks composed by {{ all_composer }}</div>{% endif %}
+  <table class="tracks">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Title</th>
+        {% if show_artist %}<th>Artist</th>{% endif %}
+        {% if show_composer %}<th>Composer</th>{% endif %}
+        <th class="dur">Duration</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tracks %}
+      <tr>
+        <td class="num">{{ t.position }}</td>
+        <td>{{ t.title }}</td>
+        {% if show_artist %}<td>{{ t.artist or "—" }}</td>{% endif %}
+        {% if show_composer %}<td>{{ t.composer or "—" }}</td>{% endif %}
+        <td class="dur">{{ t.duration }}</td>
+      </tr>
+      {% endfor %}
+      <tr class="total">
+        <td></td>
+        <td>Total</td>
+        {% if show_artist %}<td></td>{% endif %}
+        {% if show_composer %}<td></td>{% endif %}
+        <td class="dur">{{ total_duration }}</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="per-track">
+  {% for t in tracks %}
+    <article class="track-card">
+      {% if t.cover_uri %}
+        <img class="track-cover" src="{{ t.cover_uri }}" alt="">
+      {% else %}
+        <div class="track-cover" role="img" aria-label="Track cover placeholder"></div>
+      {% endif %}
+      <div class="track-meta">
+        <h3>{{ "%02d"|format(t.position) }} &middot; {{ t.title }}</h3>
+        <div class="track-sub">
+          {% if t.artist %}{{ t.artist }} · {% endif %}
+          {% if t.composer %}composed by {{ t.composer }} · {% endif %}
+          {{ t.duration }}
+        </div>
+        {% if t.comment %}<div class="track-comment">{{ t.comment }}</div>{% endif %}
+        {% if t.lyrics %}
+          <div class="track-lyrics">{{ t.lyrics }}</div>
+        {% else %}
+          <div class="track-lyrics empty">No lyrics provided</div>
+        {% endif %}
+      </div>
+    </article>
+  {% endfor %}
+</section>
+
+<footer class="report-footer">
+  <div>Generated by Album Builder · v{{ version }}</div>
+  <div>Generated at {{ approved_date }} · source playlist at <code>{{ name }}/playlist.m3u8</code></div>
+  <div class="disclaimer">This report was generated automatically from the curated album state.</div>
+</footer>
+
+</body>
+</html>

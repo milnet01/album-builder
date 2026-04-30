@@ -41,6 +41,19 @@ class AlignmentSettings:
     model_size: str = DEFAULT_MODEL_SIZE
 
 
+@dataclass(frozen=True)
+class UiSettings:
+    """Spec 09 §The approve flow + Spec 10 §`settings.json` schema.
+
+    `open_report_folder_on_approve` defaults True so a fresh install opens
+    the reports folder after the first approve; users who find that
+    intrusive flip it off and the post-approve flow stays silent.
+    """
+
+    open_report_folder_on_approve: bool = True
+    theme: str = "dark-colourful"
+
+
 def settings_dir() -> Path:
     """Return the directory that holds settings.json.
 
@@ -168,6 +181,46 @@ def write_alignment(alignment: AlignmentSettings) -> None:
     data["alignment"] = {
         "auto_align_on_play": alignment.auto_align_on_play,
         "model_size": alignment.model_size,
+    }
+    path = settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(path, json.dumps(data, indent=2, sort_keys=True))
+
+
+ALLOWED_THEMES = frozenset({"dark-colourful"})
+"""Spec 10 §`settings.json` schema row `ui.theme`: only `"dark-colourful"`
+is valid in v1. A hand-edited `"theme": "light"` falls back to the
+default rather than propagating an unknown value into the UI layer."""
+
+
+def read_ui() -> UiSettings:
+    """Return UI block (open_report_folder_on_approve, theme), defaults if absent.
+
+    Spec 10 §`settings.json` schema. `open_report_folder_on_approve`
+    defaults True; `theme` defaults to `"dark-colourful"` (only valid v1).
+    Bool guard on `open_report_folder_on_approve` (rejects 0/1 sneaking in);
+    whitelist guard on `theme` via `ALLOWED_THEMES`.
+    """
+    data = _read_settings_dict()
+    block = data.get("ui")
+    if not isinstance(block, dict):
+        return UiSettings()
+    raw_open = block.get("open_report_folder_on_approve", True)
+    open_flag = raw_open if isinstance(raw_open, bool) else True
+    raw_theme = block.get("theme", "dark-colourful")
+    if isinstance(raw_theme, str) and raw_theme in ALLOWED_THEMES:
+        theme = raw_theme
+    else:
+        theme = "dark-colourful"
+    return UiSettings(open_report_folder_on_approve=open_flag, theme=theme)
+
+
+def write_ui(ui: UiSettings) -> None:
+    """Write UI block to settings.json, preserving other top-level keys."""
+    data = _read_settings_dict()
+    data["ui"] = {
+        "open_report_folder_on_approve": ui.open_report_folder_on_approve,
+        "theme": ui.theme,
     }
     path = settings_path()
     path.parent.mkdir(parents=True, exist_ok=True)
