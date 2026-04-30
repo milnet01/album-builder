@@ -196,3 +196,178 @@ def test_state_last_played_missing_track_does_nothing(
     assert win._player.source() is None
     # No track loaded means metadata labels are blank.
     assert win.now_playing_pane.title_label.text() == ""
+
+
+# ----- Spec 07 lyrics integration ---------------------------------------
+
+# Spec: TC-07-14 — fresh LRC at startup loads "ready" + populates the panel.
+def test_main_window_loads_fresh_lrc_on_preview_play(
+    qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    store = AlbumStore(tmp_path / "Albums")
+    watcher = LibraryWatcher(tracks_dir)
+    track = next(iter(watcher.library().tracks))
+    # Seed a fresh LRC next to the audio
+    lrc = track.path.with_suffix(".lrc")
+    lrc.write_text(
+        "[00:00.00]hi\n[00:01.50]there\n", encoding="utf-8",
+    )
+    import os as _os
+    _os.utime(track.path, (track.path.stat().st_atime, lrc.stat().st_mtime - 10))
+
+    state = AppState()
+    win = MainWindow(store, watcher, state, tmp_path)
+    qtbot.addWidget(win)
+
+    win._on_preview_play(track.path)
+
+    assert "ready" in win.now_playing_pane.lyrics_panel.status_label.text().lower()
+    assert win.now_playing_pane.lyrics_panel.list.count() == 2
+    assert win._tracker.lyrics() is not None
+
+
+# Spec: TC-07-06 — track with no lyrics-eng tag → "no lyrics text" status.
+def test_main_window_no_lyrics_text_status(
+    qtbot, tmp_path: Path, tracks_dir: Path, tagged_track, monkeypatch,
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    # Add a track with empty lyrics-eng
+    bare = tagged_track("04-no-lyrics.mp3", title="bare", lyrics="")
+    store = AlbumStore(tmp_path / "Albums")
+    watcher = LibraryWatcher(tracks_dir)
+    state = AppState()
+    win = MainWindow(store, watcher, state, tmp_path)
+    qtbot.addWidget(win)
+
+    win._on_preview_play(bare)
+    assert (
+        "no lyrics text"
+        in win.now_playing_pane.lyrics_panel.status_label.text().lower()
+    )
+    assert win.now_playing_pane.lyrics_panel.is_align_button_visible() is False
+
+
+# Spec: TC-07-13 — auto_align_on_play default off → no worker started.
+def test_main_window_auto_align_off_by_default_does_not_start_worker(
+    qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    store = AlbumStore(tmp_path / "Albums")
+    watcher = LibraryWatcher(tracks_dir)
+    track = next(iter(watcher.library().tracks))
+    state = AppState()
+    win = MainWindow(store, watcher, state, tmp_path)
+    qtbot.addWidget(win)
+
+    started: list = []
+    monkeypatch.setattr(
+        win._alignment, "start_alignment", lambda t: started.append(t),
+    )
+    win._on_preview_play(track.path)
+    # Track has lyrics text but no LRC → should NOT auto-start by default.
+    assert started == []
+    assert (
+        "not yet aligned"
+        in win.now_playing_pane.lyrics_panel.status_label.text().lower()
+    )
+
+
+# Spec: TC-07-13 — opt-in auto_align_on_play → worker IS started on play.
+def test_main_window_auto_align_on_starts_worker(
+    qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
+) -> None:
+    from album_builder.persistence.settings import AlignmentSettings
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    store = AlbumStore(tmp_path / "Albums")
+    watcher = LibraryWatcher(tracks_dir)
+    track = next(iter(watcher.library().tracks))
+    state = AppState()
+    win = MainWindow(store, watcher, state, tmp_path)
+    qtbot.addWidget(win)
+    win._alignment.update_settings(
+        AlignmentSettings(auto_align_on_play=True, model_size="medium.en")
+    )
+
+    started: list = []
+    monkeypatch.setattr(
+        win._alignment, "start_alignment", lambda t: started.append(t),
+    )
+    win._on_preview_play(track.path)
+    assert len(started) == 1
+
+
+def test_main_window_align_now_confirms_download(
+    qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
+) -> None:
+    """Clicking Align now first opens the ~1 GB download confirmation;
+    declining must NOT call start_alignment."""
+    from PyQt6.QtWidgets import QMessageBox
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    store = AlbumStore(tmp_path / "Albums")
+    watcher = LibraryWatcher(tracks_dir)
+    track = next(iter(watcher.library().tracks))
+    state = AppState(last_played_track_path=track.path)
+    win = MainWindow(store, watcher, state, tmp_path)
+    qtbot.addWidget(win)
+
+    started: list = []
+    monkeypatch.setattr(
+        win._alignment, "start_alignment", lambda t: started.append(t),
+    )
+    # Decline
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.No,
+    )
+    win._on_align_now_clicked()
+    assert started == []
+
+    # Confirm
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes,
+    )
+    win._on_align_now_clicked()
+    assert len(started) == 1
+
+
+def test_main_window_alignment_progress_updates_panel(
+    qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    store = AlbumStore(tmp_path / "Albums")
+    watcher = LibraryWatcher(tracks_dir)
+    track = next(iter(watcher.library().tracks))
+    state = AppState(last_played_track_path=track.path)
+    win = MainWindow(store, watcher, state, tmp_path)
+    qtbot.addWidget(win)
+
+    win._alignment.progress.emit(track.path, 33)
+    assert "33%" in win.now_playing_pane.lyrics_panel.status_label.text()
+
+
+# Spec: TC-07-11 — switching tracks rewires the tracker; old lyrics drop.
+def test_main_window_track_switch_clears_old_lyrics(
+    qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    store = AlbumStore(tmp_path / "Albums")
+    watcher = LibraryWatcher(tracks_dir)
+    tracks = list(watcher.library().tracks)
+    # Seed a fresh LRC for track 0 only
+    lrc = tracks[0].path.with_suffix(".lrc")
+    lrc.write_text("[00:00.00]first\n", encoding="utf-8")
+    import os as _os
+    _os.utime(
+        tracks[0].path, (tracks[0].path.stat().st_atime, lrc.stat().st_mtime - 10),
+    )
+
+    state = AppState()
+    win = MainWindow(store, watcher, state, tmp_path)
+    qtbot.addWidget(win)
+
+    win._on_preview_play(tracks[0].path)
+    assert win._tracker.lyrics() is not None
+    win._on_preview_play(tracks[1].path)
+    # Track 1 has no LRC → tracker reset to None
+    assert win._tracker.lyrics() is None
+    assert win.now_playing_pane.lyrics_panel.list.count() == 0

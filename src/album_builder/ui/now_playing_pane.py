@@ -1,8 +1,8 @@
-"""Right pane - cover + metadata + lyrics-panel placeholder + transport.
+"""Right pane - cover + metadata + lyrics panel + transport.
 
-The lyrics panel area is a placeholder ``QFrame#LyricsPlaceholder``;
-Phase 3B (Spec 07) will replace it with the synchronized scrolling
-lyrics widget.
+The lyrics panel was a placeholder ``QFrame#LyricsPlaceholder`` through
+v0.3.0 (Phase 3A); v0.4.0 replaces it with the synchronised scrolling
+``LyricsPanel`` widget owned by Spec 07.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout
 
 from album_builder.domain.track import Track
 from album_builder.services.player import Player
+from album_builder.ui.lyrics_panel import LyricsPanel
 from album_builder.ui.transport_bar import TransportBar
 
 
@@ -59,10 +60,9 @@ class NowPlayingPane(QFrame):
         self.placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.placeholder_label)
 
-        # Lyrics panel goes here - Phase 3B replaces it.
-        self.lyrics_placeholder = QFrame(objectName="LyricsPlaceholder")
-        self.lyrics_placeholder.setFixedHeight(120)
-        layout.addWidget(self.lyrics_placeholder)
+        # Spec 07 lyrics panel — replaces the v0.3.0 LyricsPlaceholder.
+        self.lyrics_panel = LyricsPanel()
+        layout.addWidget(self.lyrics_panel)
 
         layout.addStretch(1)
 

@@ -22,10 +22,15 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from album_builder.domain.track import Track
+from album_builder.persistence.lrc_io import read_lrc
 from album_builder.persistence.settings import AudioSettings, read_audio, write_audio
 from album_builder.persistence.state_io import AppState, WindowState, save_state
 from album_builder.services.album_store import AlbumStore
+from album_builder.services.alignment_service import AlignmentService
+from album_builder.services.alignment_status import AlignmentStatus, compute_status
 from album_builder.services.library_watcher import LibraryWatcher
+from album_builder.services.lyrics_tracker import LyricsTracker
 from album_builder.services.player import Player
 from album_builder.ui.album_order_pane import AlbumOrderPane
 from album_builder.ui.library_pane import LibraryPane
@@ -82,6 +87,20 @@ class MainWindow(QMainWindow):
         self._player.set_muted(audio.muted)
         self._player.error.connect(self._on_player_error)
 
+        # Lyrics tracker + alignment service (Spec 07). The tracker
+        # subscribes to player.position_changed and pushes the current
+        # line index to the LyricsPanel via the wiring below; the service
+        # owns the QThread workers that produce .lrc files on demand.
+        self._tracker = LyricsTracker(self._player, self)
+        self._alignment = AlignmentService(parent=self)
+        self._alignment.status_changed.connect(self._on_alignment_status)
+        self._alignment.progress.connect(self._on_alignment_progress)
+        self._alignment.lyrics_ready.connect(self._on_lyrics_ready)
+        self._alignment.error.connect(self._on_alignment_error)
+        # Surface a single helpful dialog the first time WhisperX is
+        # missing — same shape as the codec-class dialog for Spec 06.
+        self._whisperx_dialog_shown = False
+
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setChildrenCollapsible(False)
         self.library_pane = LibraryPane()
@@ -117,6 +136,13 @@ class MainWindow(QMainWindow):
         self.album_order_pane.reordered.connect(self._on_reorder_done)
         self.album_order_pane.preview_play_requested.connect(self._on_preview_play)
         library_watcher.tracks_changed.connect(self.library_pane.set_library)
+        # Lyrics: tracker → panel (current-line index); panel → service (Align-now)
+        self._tracker.current_line_changed.connect(
+            self.now_playing_pane.lyrics_panel.set_current_line
+        )
+        self.now_playing_pane.lyrics_panel.align_now_requested.connect(
+            self._on_align_now_clicked
+        )
         self.splitter.splitterMoved.connect(lambda *_: self._state_save_timer.start())
 
         # Spec 00 keyboard shortcuts (closes indie-review Theme E).
@@ -132,6 +158,9 @@ class MainWindow(QMainWindow):
             if track is not None:
                 self._player.set_source(track.path)
                 self.now_playing_pane.set_track(track)
+                # Spec 07 cache-hit at startup: if the LRC is fresh, show
+                # the lyrics paused at zero alongside the track.
+                self._sync_lyrics_for_track(track)
 
         # Restore current album from state (TC-03-07) with fallback (TC-03-09)
         if state.current_album_id and store.get(state.current_album_id):
@@ -322,8 +351,114 @@ class MainWindow(QMainWindow):
         self._player.set_source(path)
         self._player.play()
         self.now_playing_pane.set_track(track)
+        self._sync_lyrics_for_track(track)
         self._state.last_played_track_path = path
         self._state_save_timer.start()
+
+    def _sync_lyrics_for_track(self, track: Track) -> None:
+        """Spec 07: cache hit → READY + load LRC + tracker takes over;
+        cache miss → status from compute_status; auto-align if opt-in.
+
+        On every track change the tracker's lyrics are reset (None ⇒ -1)
+        before any new Lyrics arrive, so a residual current-line index
+        from the previous track can't render against the new track.
+        """
+        panel = self.now_playing_pane.lyrics_panel
+        self._tracker.set_lyrics(None)
+        panel.set_lyrics(None)
+        status = compute_status(track)
+        if status == AlignmentStatus.READY:
+            lyrics = read_lrc(track.path)
+            if lyrics is not None:
+                panel.set_lyrics(lyrics)
+                self._tracker.set_lyrics(lyrics)
+                panel.set_status(AlignmentStatus.READY)
+                return
+            # The freshness check passed but the parse just failed — read_lrc
+            # already moved the file to .bak; fall through to NOT_YET_ALIGNED.
+            status = AlignmentStatus.NOT_YET_ALIGNED
+        panel.set_status(status)
+        if status == AlignmentStatus.NOT_YET_ALIGNED:
+            self._alignment.auto_align_on_play(track)
+
+    def _current_track(self) -> Track | None:
+        path = self._state.last_played_track_path
+        if path is None:
+            return None
+        return next(
+            (t for t in self._library_watcher.library().tracks if t.path == path),
+            None,
+        )
+
+    def _on_align_now_clicked(self) -> None:
+        """User clicked "Align now" on the lyrics panel."""
+        track = self._current_track()
+        if track is None:
+            self._toast.show_message("No track loaded")
+            return
+        # Spec 07 §Alignment job: confirm the ~1 GB model download on the
+        # first opt-in, but only when we actually need to fetch it. We
+        # show the dialog every time alignment is started for a track
+        # whose LRC is missing — the user controls the cost explicitly.
+        if not self._confirm_alignment_download():
+            return
+        self._alignment.start_alignment(track)
+
+    def _confirm_alignment_download(self) -> bool:
+        # Open question: a "don't show again this session" affordance is
+        # tracked as v0.5+ polish; for v0.4.0 the explicit confirm is the
+        # contract.
+        button = QMessageBox.question(
+            self,
+            "Align lyrics — model download",
+            "Aligning lyrics uses local ML (Whisper + wav2vec2). On first "
+            "use, ~1 GB of model files will download to "
+            "~/.cache/album-builder/whisper-models/. Continue?",
+        )
+        return button == QMessageBox.StandardButton.Yes
+
+    def _on_alignment_status(self, path: Path, status: AlignmentStatus) -> None:
+        # Only mirror the state to the panel when the change is for the
+        # currently-loaded track — a stale worker emit on a no-longer-
+        # active track shouldn't redraw the visible pill.
+        active = self._state.last_played_track_path
+        if active is None or path != active:
+            return
+        self.now_playing_pane.lyrics_panel.set_status(status)
+
+    def _on_alignment_progress(self, path: Path, percent: int) -> None:
+        active = self._state.last_played_track_path
+        if active is None or path != active:
+            return
+        self.now_playing_pane.lyrics_panel.set_status(
+            AlignmentStatus.ALIGNING, percent=percent
+        )
+
+    def _on_lyrics_ready(self, path: Path, lyrics) -> None:
+        active = self._state.last_played_track_path
+        if active is None or path != active:
+            return
+        self.now_playing_pane.lyrics_panel.set_lyrics(lyrics)
+        self._tracker.set_lyrics(lyrics)
+
+    def _on_alignment_error(self, _path: Path, msg: str) -> None:
+        self._toast.show_message(f"Alignment failed: {msg}")
+        if self._looks_like_whisperx_missing(msg) and not self._whisperx_dialog_shown:
+            QMessageBox.warning(
+                self,
+                "WhisperX not installed",
+                "Lyrics alignment requires the optional WhisperX runtime.\n"
+                "Install it via:\n\n"
+                "    pip install whisperx\n\n"
+                "and restart the app. The first run downloads ~1 GB of model "
+                "files to ~/.cache/album-builder/whisper-models/.",
+            )
+            self._whisperx_dialog_shown = True
+
+    @staticmethod
+    def _looks_like_whisperx_missing(msg: str) -> bool:
+        m = msg.lower()
+        return "whisperx" in m and ("not installed" in m or "no module" in m)
 
     def _on_player_error(self, msg: str) -> None:
         self._toast.show_message(msg)

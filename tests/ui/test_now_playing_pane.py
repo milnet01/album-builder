@@ -84,12 +84,13 @@ def test_set_track_with_no_cover_shows_placeholder_text(pane, tmp_path: Path) ->
     assert p.cover_label.text() == "(no cover)"
 
 
-def test_lyrics_placeholder_present_for_phase_3b(pane) -> None:
-    """Phase 3B will replace this QFrame with the real lyrics panel.
-    Pin the contract so the next phase doesn't have to dig."""
+def test_lyrics_panel_present(pane) -> None:
+    """v0.4.0: the v0.3.0 LyricsPlaceholder QFrame is replaced by the
+    Spec 07 LyricsPanel widget. Pin the contract so MainWindow can rely
+    on the attribute when wiring tracker + alignment service."""
     p, _ = pane
-    assert p.lyrics_placeholder is not None
-    assert p.lyrics_placeholder.objectName() == "LyricsPlaceholder"
+    assert p.lyrics_panel is not None
+    assert p.lyrics_panel.objectName() == "LyricsPanel"
 
 
 def test_transport_bar_present(pane) -> None:
