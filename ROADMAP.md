@@ -106,6 +106,88 @@ Plan: [`docs/plans/2026-04-28-phase-2-albums.md`](docs/plans/2026-04-28-phase-2-
 
 ---
 
+## ✅ v0.4.0 — Phase 3B: Lyrics Alignment (2026-04-30)
+
+WhisperX + wav2vec2 forced-alignment pipeline behind the v0.3.0
+`LyricsPlaceholder` slot. Pure-domain LRC parser / formatter / `line_at`
+helper; cached-hint `LyricsTracker` subscribes to `Player.position_changed`
+and emits `current_line_changed` only when a line crosses; `LyricsPanel`
+widget renders status pill + 3-line scrolling list (past / now / future
+styling driven by the Palette's `text_disabled` / `accent_warm` /
+`text_tertiary` tokens). Alignment is opt-in (`alignment.auto_align_on_play`
+defaults to False); the user's "Align now" click confirms the ~1 GB model
+download before spawning the QThread worker. WhisperX is an optional
+runtime dep — the venv ships without ~3 GB of PyTorch; the worker
+lazy-imports `whisperx` inside `run()` and surfaces a one-shot
+`pip install whisperx` dialog on `ImportError`.
+
+**Shipped (Tasks 1-11 from `docs/plans/2026-04-30-phase-3b-lyrics.md`):**
+
+- **Domain:** `LyricLine` + `Lyrics` frozen dataclasses (TC-07-12); `parse_lrc`
+  handles tag headers, multi-stamp lines, 1-3 digit minute fields, 2-3 digit
+  centisecond fractions, section-marker detection (TC-07-01); `format_lrc`
+  half-up centisecond rounding round-trips byte-identically (TC-07-02);
+  `line_at` boundary cases (TC-07-03).
+- **Persistence:** `lrc_io.{read,write,is_lrc_fresh,lrc_path_for}`; malformed
+  LRC ⇒ `<stem>.lrc.bak` (TC-07-10) + freshness comparison via mtime
+  (TC-07-14); `settings.{read,write}_alignment` with `AlignmentSettings`
+  (default `auto_align_on_play=False`, `model_size="medium.en"`); bool
+  guard on `auto_align_on_play`; whitelist guard on `model_size`
+  (TC-07-13).
+- **Services:** `AlignmentStatus` enum + `compute_status` + `status_label`
+  (TC-07-06); `LyricsTracker` cached-hint forward O(1), backward seek
+  resets hint (TC-07-04, 05, 11); `AlignmentService` orchestrates per-path
+  worker jobs, rejects empty-lyrics / fresh-LRC / sub-2-s-audio
+  preconditions (TC-07-07), cancellable via `QThread.requestInterruption`
+  with no `.lrc` written (TC-07-08); `AlignmentWorker` lazy-imports WhisperX,
+  emits per-stage progress, maps WhisperX segments back to user lyrics text
+  via `_segments_to_lyrics`.
+- **UI:** `LyricsPanel` (status pill + scrolling 3-line `QListWidget` +
+  Align-now button; per-line styling via `setForeground`/`setFont` keyed
+  on Palette tokens — TC-07-15); replaces the v0.3.0 `LyricsPlaceholder`
+  in `NowPlayingPane`; `MainWindow` wires tracker + service signals,
+  loads fresh LRC at preview-play, gates auto-align via opt-in setting,
+  shows download-confirmation dialog on first Align-now, surfaces
+  WhisperX-missing one-shot dialog on `ImportError`.
+- **Theme:** QSS rules for `QFrame#LyricsPanel`, `QLabel#LyricsStatus`,
+  `QListWidget#LyricsList`, `QPushButton#LyricsAlignNow` replace the
+  dashed-border placeholder rule.
+
+**Test count:** 264 → 347 passing (+83 across `domain/test_lyrics.py`,
+`persistence/test_lrc_io.py`, `persistence/test_settings.py` extension,
+`services/test_alignment_status.py`, `services/test_lyrics_tracker.py`,
+`services/test_alignment_service.py`, `services/test_alignment_worker.py`,
+`ui/test_lyrics_panel.py`, `ui/test_main_window.py` extension). 11
+integration tests skipped (10 audio + 1 lyrics, gated on
+`AB_INTEGRATION_AUDIO=1` / `AB_INTEGRATION_LYRICS=1`). Ruff clean.
+
+**TC-07 deferrals:** TC-07-09 (model-download interruption resume) is
+gated behind a real WhisperX install — `huggingface_hub` already handles
+partial-download resume via etag at the library level, so the v0.4.0
+implementation does not add a project-side resume layer; the integration
+tier covers the on-disk happy path. Tracked as a v0.5+ harden item if the
+huggingface behaviour proves unreliable in practice.
+
+**Manual smoke checklist** (per the Phase 3B plan §Manual smoke):
+
+1. Cold launch — preview-play a track with `lyrics-eng` ID3 tag and no
+   LRC; pill shows "not yet aligned"; Align-now visible. (Manual.)
+2. Click Align now — first time: download confirmation dialog; on
+   confirm: progress updates flow. (Manual; needs `pip install whisperx`.)
+3. After alignment completes — pill shows "✓ ready"; lyrics scroll in
+   sync with playback. (Manual.)
+4. Quit + relaunch + preview-play same track — status "✓ ready"
+   instantly (cache hit). ✓ (`test_main_window_loads_fresh_lrc_on_preview_play`.)
+5. Manually corrupt the LRC (`echo zzz > Tracks/song.lrc`); preview-play
+   — status reverts to "not yet aligned"; `.bak` file exists. ✓
+   (`test_read_lrc_backs_up_malformed_to_bak`.)
+6. Track with no `lyrics-eng` ID3 tag — pill "no lyrics text"; Align-now
+   hidden. ✓ (`test_main_window_no_lyrics_text_status`.)
+7. Track with audio < 2 s — pill "audio too short to align". ✓
+   (`test_start_alignment_rejects_short_audio`.)
+
+---
+
 ## ✅ v0.3.0 — Phase 3A: Audio Playback (2026-04-28)
 
 `QMediaPlayer` integration with transport bar, per-row preview-play on both library + order panes, Spec 06 signal API normalised to seconds + `PlayerState` enum, `last_played_track_path` round-trip via `state.json`, volume + mute persistence via `settings.json`, all Spec 00 keyboard shortcuts wired with focus suppression. Lyrics alignment (Spec 07) carries forward to v0.4.0 — `LyricsPlaceholder` `QFrame` reserves the panel space; `Player.position_changed` is fully exposed for the future `LyricsTracker` to subscribe.
@@ -306,10 +388,6 @@ One item accepted as v1 acceptance: stale-segment-recovery TOCTOU (microsecond r
 ---
 
 ## 🔭 Upcoming phases
-
-### 📋 v0.4.0 — Phase 3B: Lyrics Alignment (planned)
-
-WhisperX / wav2vec2 forced-alignment pipeline, on-demand model download (~1 GB total), `LyricsTracker` subscribing to `Player.position_changed`, scrolling 3-line lyrics panel replacing the v0.3.0 `LyricsPlaceholder`, `.lrc` cache co-located with audio in `Tracks/`. Spec: 07.
 
 ### 📋 v0.5.0 — Phase 4: Export & Approval (planned)
 

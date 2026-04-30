@@ -123,7 +123,25 @@ Sung-vocal accuracy expectation: ~80–90% of lines aligned within ±0.5 s on fi
 
 Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-07-NN` marker.
 
-**Phase status — every TC below is Phase 3.** Lyrics alignment lands in Phase 3; no `tests/` file matches these IDs until that plan executes. The Phase 3 plan, when written, will map every TC here to its target test file.
+**Phase status — every TC below shipped in v0.4.0 (Phase 3B).** Coverage:
+
+| TC | Test |
+|---|---|
+| TC-07-01 | `tests/domain/test_lyrics.py::test_parse_lrc_basic` (+ centiseconds, headers, multi-stamp) |
+| TC-07-02 | `tests/domain/test_lyrics.py::test_format_lrc_round_trip` |
+| TC-07-03 | `tests/domain/test_lyrics.py::test_line_at_boundaries` |
+| TC-07-04 | `tests/services/test_lyrics_tracker.py::test_tracker_cached_hint_skips_search_for_forward_within_line` + `..._backward_seek_resets_hint` |
+| TC-07-05 | `tests/services/test_lyrics_tracker.py::test_tracker_emits_on_line_change_only` |
+| TC-07-06 | `tests/services/test_alignment_status.py::test_status_label_each_state` + `tests/ui/test_lyrics_panel.py::test_status_label_each_state` |
+| TC-07-07 | `tests/services/test_alignment_service.py::test_start_alignment_rejects_short_audio` |
+| TC-07-08 | `tests/services/test_alignment_service.py::test_cancel_no_lrc_written` |
+| TC-07-09 | deferred — `huggingface_hub` handles partial-download resume at the library level; v0.4.0 does not add a project-side resume layer |
+| TC-07-10 | `tests/persistence/test_lrc_io.py::test_read_lrc_backs_up_malformed_to_bak` |
+| TC-07-11 | `tests/services/test_lyrics_tracker.py::test_tracker_set_lyrics_clears_old_state` + `tests/ui/test_main_window.py::test_main_window_track_switch_clears_old_lyrics` |
+| TC-07-12 | `tests/domain/test_lyrics.py::test_lyrics_frozen_and_hashable` |
+| TC-07-13 | `tests/services/test_alignment_service.py::test_auto_align_on_play_off_by_default` + `tests/ui/test_main_window.py::test_main_window_auto_align_off_by_default_does_not_start_worker` |
+| TC-07-14 | `tests/persistence/test_lrc_io.py::test_is_lrc_fresh_*` + `tests/ui/test_main_window.py::test_main_window_loads_fresh_lrc_on_preview_play` |
+| TC-07-15 | `tests/ui/test_lyrics_panel.py::test_visual_styling_uses_palette_tokens` |
 
 - **TC-07-01** — `parse_lrc(text)` returns `Lyrics` with line times in seconds and section markers flagged correctly.
 - **TC-07-02** — `format_lrc(Lyrics)` round-trips byte-identical text on a fixture LRC.
