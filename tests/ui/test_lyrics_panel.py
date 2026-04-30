@@ -123,6 +123,79 @@ def test_visual_styling_uses_palette_tokens(qtbot):
     assert future_color == QColor(palette.text_tertiary)
 
 
+# Indie-review L7-H1: _restyle_items must base its font off the list
+# widget's font (which inherits Spec 11 typography from QSS) rather than
+# constructing a default QFont() that drops the family/size and falls
+# back to whatever Qt's bare-default font happens to be on the platform.
+def test_restyle_inherits_list_font_family(qtbot):
+    panel = LyricsPanel()
+    qtbot.addWidget(panel)
+    # Pin a recognisable list font that the styling pass should preserve.
+    from PyQt6.QtGui import QFont
+    list_font = QFont("Inter", 14)
+    panel.list.setFont(list_font)
+    panel.set_lyrics(_lyrics("a", "b", "c"))
+    panel.set_current_line(1)
+    for i in range(3):
+        item_font = panel.list.item(i).font()
+        assert item_font.family() == "Inter", (
+            f"row {i} font family lost: {item_font.family()!r}"
+        )
+        assert item_font.pointSize() == 14, (
+            f"row {i} point size lost: {item_font.pointSize()}"
+        )
+    # And the bold property is still toggled correctly on the active row.
+    assert panel.list.item(1).font().bold() is True
+    assert panel.list.item(0).font().bold() is False
+
+
+# Indie-review L7-H4: _restyle_items must update only the affected items
+# on a line crossing (old current, new current, optional adjacent), not
+# walk every line in the list. Spec 07 perf budget claims O(1) tick.
+def test_restyle_updates_only_three_items_per_crossing(qtbot, monkeypatch):
+    panel = LyricsPanel()
+    qtbot.addWidget(panel)
+    panel.set_lyrics(_lyrics(*[chr(c) for c in range(ord("a"), ord("a") + 20)]))
+    panel.set_current_line(5)
+
+    # Count setForeground calls on a fresh crossing.
+    touched: list[int] = []
+    real_item = panel.list.item
+
+    def tracking_item(i):
+        item = real_item(i)
+        real_set_fg = item.setForeground
+
+        def track(brush):
+            touched.append(i)
+            return real_set_fg(brush)
+
+        item.setForeground = track  # type: ignore[assignment]
+        return item
+
+    monkeypatch.setattr(panel.list, "item", tracking_item)
+    panel.set_current_line(6)
+    # Old current (5) + new current (6) at minimum; bounded by a small
+    # constant — assert <= 4 to allow for adjacent-row repaints (e.g.
+    # past->past upstream).
+    assert len(set(touched)) <= 4, (
+        f"O(1) crossing should touch <= 4 rows; touched {sorted(set(touched))}"
+    )
+
+
+# Indie-review L7-M1: a panel constructed without an explicit palette
+# silently uses Palette.dark_colourful(); a future v2 theme switch would
+# leave LyricsPanel out of date. Document via assertion that the panel's
+# bound palette is reachable for inspection (so external code can verify
+# at construction).
+def test_lyrics_panel_exposes_bound_palette(qtbot):
+    panel = LyricsPanel()
+    qtbot.addWidget(panel)
+    p = panel.palette_for_lyrics()  # public accessor required by L7-M1
+    from album_builder.ui.theme import Palette
+    assert isinstance(p, Palette)
+
+
 def test_set_current_line_no_op_when_unchanged(qtbot):
     """Re-setting the same index shouldn't blow up."""
     panel = LyricsPanel()

@@ -132,9 +132,25 @@ def test_play_button_click_calls_toggle(player_and_bar, monkeypatch) -> None:
     assert called == [True]
 
 
-def test_scrubber_drag_calls_seek(player_and_bar, monkeypatch) -> None:
+# Indie-review L7-H3: scrubber must seek on `sliderReleased`, not on
+# every `sliderMoved` tick. The known-trap note in Spec 06 acknowledged
+# this but the wrong signal stayed wired — hundreds of seek() calls per
+# drag spam QMediaPlayer's positionChanged loop and produce audible
+# stutter on slow backends.
+def test_scrubber_drag_does_not_seek_until_release(player_and_bar, monkeypatch) -> None:
     p, b = player_and_bar
+    # Set a duration so scrubber values aren't clamped to 0.
+    b.scrubber.setRange(0, 100)
     seeks: list[float] = []
     monkeypatch.setattr(p, "seek", lambda s: seeks.append(s))
-    b.scrubber.sliderMoved.emit(45)
+    # Simulate a drag: many sliderMoved emissions with no release.
+    for value in (10, 20, 30, 40, 45):
+        b.scrubber.sliderMoved.emit(value)
+    assert seeks == [], (
+        "sliderMoved must NOT seek; only sliderReleased should "
+        f"(L7-H3). Got: {seeks}"
+    )
+    # On release the final value seeks once.
+    b.scrubber.setValue(45)
+    b.scrubber.sliderReleased.emit()
     assert seeks == [45.0]

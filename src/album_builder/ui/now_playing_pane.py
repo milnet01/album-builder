@@ -81,6 +81,9 @@ class NowPlayingPane(QFrame):
             self.composer_label.setText("")
             self.comment_label.setText("")
             self.placeholder_label.setVisible(True)
+            # L7-M5: stale lyrics from the prior track must not persist
+            # across track-cleared. Mirror the per-field clears above.
+            self.lyrics_panel.set_lyrics(None)
             return
         self.placeholder_label.setVisible(False)
         self._set_cover(track)

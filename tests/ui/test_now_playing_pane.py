@@ -103,3 +103,22 @@ def test_invalid_cover_data_shows_unavailable_text(pane, tmp_path: Path) -> None
     p, _ = pane
     p.set_track(_make_track(tmp_path, cover_data=b"\x00\x01not-an-image"))
     assert p.cover_label.text() == "(cover unavailable)"
+
+
+# Indie-review L7-M5: NowPlayingPane.set_track(None) must clear the
+# lyrics panel too — otherwise a track switch from "track A with
+# lyrics" to "no track" leaves the prior track's lyrics on screen.
+def test_set_track_none_clears_lyrics_panel(pane, tmp_path: Path) -> None:
+    from album_builder.domain.lyrics import LyricLine, Lyrics
+    p, _ = pane
+
+    # Seed lyrics from a previous track.
+    p.lyrics_panel.set_lyrics(Lyrics(lines=(
+        LyricLine(time_seconds=0.0, text="stale"),
+    )))
+    assert p.lyrics_panel.list.count() == 1
+
+    p.set_track(None)
+    assert p.lyrics_panel.list.count() == 0, (
+        "set_track(None) must clear the lyrics panel (L7-M5)"
+    )

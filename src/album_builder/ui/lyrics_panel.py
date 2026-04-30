@@ -39,6 +39,11 @@ class LyricsPanel(QFrame):
         super().__init__(parent)
         self.setObjectName("LyricsPanel")
         self.setFixedHeight(150)
+        # L7-M1: callers should pass an explicit palette so a v2 theme
+        # switch propagates here. The default fallback to
+        # `Palette.dark_colourful()` is retained for backwards-compat
+        # with construction-without-palette tests; production callsites
+        # in NowPlayingPane now thread the active palette explicitly.
         self._palette = palette or Palette.dark_colourful()
 
         outer = QVBoxLayout(self)
@@ -99,8 +104,18 @@ class LyricsPanel(QFrame):
     def set_current_line(self, index: int) -> None:
         if index == self._current_index:
             return
+        old_index = self._current_index
         self._current_index = index
-        self._restyle_items()
+        # L7-H4: every item whose past/now/future class flipped lies in
+        # the inclusive index range [min(old,new), max(old,new)]; restyle
+        # only those rows. For the hot forward-by-one tick this is two
+        # items; backward seeks scale with the jump distance, not the
+        # full list. Spec 07's "tick is O(1)" budget held downstream of
+        # an O(1) tracker by restyling only the affected rows here.
+        lo = max(0, min(old_index, index))
+        hi = max(old_index, index)
+        if hi >= 0:
+            self._restyle_at(set(range(lo, hi + 1)))
         if 0 <= index < self.list.count():
             self.list.scrollToItem(
                 self.list.item(index),
@@ -114,6 +129,12 @@ class LyricsPanel(QFrame):
         """Logical visibility — survives offscreen test widgets where Qt's
         own `isVisible()` returns False until the parent is `show()`-n."""
         return self._align_button_should_show
+
+    def palette_for_lyrics(self) -> Palette:
+        """Public accessor for the palette bound at construction. Lets
+        external callers (parent widget, tests) verify which palette
+        instance the panel is using before relying on its colour roles."""
+        return self._palette
 
     def line_state(self, index: int) -> str:
         """Return "past" / "now" / "future" for the item at `index`. Tests
@@ -129,6 +150,14 @@ class LyricsPanel(QFrame):
     # ---- Internal ---------------------------------------------------
 
     def _restyle_items(self) -> None:
+        # Full-list restyle path — used on initial population and when the
+        # whole row set has changed (set_lyrics). For the hot crossing path
+        # in set_current_line, prefer _restyle_at({...}) (L7-H4).
+        self._restyle_at(set(range(self.list.count())))
+
+    def _restyle_at(self, indices: set[int]) -> None:
+        if not indices:
+            return
         # Spec 07 TC-07-15: now → accent_warm bold; past → text_disabled;
         # future → text_tertiary. The Palette is the single source of these
         # tokens — no hex literals here.
@@ -137,19 +166,26 @@ class LyricsPanel(QFrame):
         future_brush = QBrush(QColor(p.text_tertiary))
         now_brush = QBrush(QColor(p.accent_warm))
 
-        normal_font = QFont()
-        bold_font = QFont()
-        bold_font.setBold(True)
+        # L7-H1: derive the per-item font from the list's font so Spec 11
+        # typography (font-family, point size) is preserved across the
+        # styling pass; the previous `QFont()` constructed a Qt-default
+        # font that dropped both. Only the bold property is mutated.
+        base_font = self.list.font()
 
-        for i in range(self.list.count()):
+        count = self.list.count()
+        for i in indices:
+            if not (0 <= i < count):
+                continue
             item = self.list.item(i)
+            f = QFont(base_font)
             if i < self._current_index:
                 item.setForeground(past_brush)
-                item.setFont(normal_font)
+                f.setBold(False)
             elif i == self._current_index:
                 item.setForeground(now_brush)
-                item.setFont(bold_font)
+                f.setBold(True)
             else:
                 item.setForeground(future_brush)
-                item.setFont(normal_font)
+                f.setBold(False)
+            item.setFont(f)
         self.list.viewport().update()

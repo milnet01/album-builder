@@ -31,7 +31,13 @@ class TransportBar(QWidget):
         self.scrubber = QSlider(Qt.Orientation.Horizontal, objectName="TransportScrubber")
         self.scrubber.setRange(0, 0)
         self.scrubber.setAccessibleName("Playback position")
-        self.scrubber.sliderMoved.connect(self._on_scrub)
+        # L7-H3: seek on release rather than on every sliderMoved tick.
+        # Hundreds of seek() calls during a drag flooded QMediaPlayer's
+        # positionChanged loop and produced audible stutter on slow
+        # backends. Reading self.scrubber.value() inside the slot picks
+        # up the final drag position (sliderReleased fires after the
+        # value is committed).
+        self.scrubber.sliderReleased.connect(self._on_scrub_released)
 
         self.lbl_duration = QLabel("0:00", objectName="TransportTime")
         self.lbl_duration.setAccessibleName("Track duration")
@@ -80,8 +86,8 @@ class TransportBar(QWidget):
         self._player.set_muted(not self._player.muted())
         self._sync_mute_glyph()
 
-    def _on_scrub(self, value: int) -> None:
-        self._player.seek(float(value))
+    def _on_scrub_released(self) -> None:
+        self._player.seek(float(self.scrubber.value()))
 
     def _on_position_changed(self, seconds: float) -> None:
         # Don't fight the user mid-drag.

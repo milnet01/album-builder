@@ -38,6 +38,18 @@ class Toast(QFrame):
 
     def show_message(self, msg: str) -> None:
         self.message_label.setText(msg)
+        # L7-H2 (Theme F / WCAG 2.2 §4.1.3 Status Messages): the canonical
+        # cure is QAccessible.updateAccessibility(QAccessibleEvent.Alert)
+        # but PyQt6 does not bind the QAccessible class. Fall back to
+        # threading the message into the toast's accessibleDescription —
+        # Qt auto-fires a DescriptionChange accessibility event which
+        # Orca / NVDA / VoiceOver pick up as a property update on a named
+        # widget. Combined with the existing setAccessibleName("Notification")
+        # this is the closest live-region announcement available in
+        # PyQt6 today.
+        self.setAccessibleName("Notification")
+        self.setAccessibleDescription(msg)
+        self.message_label.setAccessibleDescription(msg)
         self.show()
         self.raise_()
         self._timer.start(self._auto_dismiss_ms)
