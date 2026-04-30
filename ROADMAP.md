@@ -29,7 +29,7 @@ M3U + symlink folder per album, hard-lock approval state, PDF + HTML report gene
 
 Convergence trace: pre-implementation 4-round spec sweep (39 → 17 → 3 → 0 actionable findings); implementation; 3-round post-implementation `/audit` + `/indie-review` (40 → 3 → 0 findings); full-codebase audit clean. 415 → 467 passing tests (+52 TC-08/09/10 contracts).
 
-#### 📝 Phase 4 prep — Round 1 spec sweep (2026-04-30)
+#### ✅ Phase 4 prep — Round 1 spec sweep (2026-04-30)
 
 Pre-implementation cold-eyes review of the Phase 4 surface (Specs 02 §approve/§unapprove, 08, 09, 10 §atomic-write/§schemas, 11 §Glyphs/§Branding). 4 parallel review lanes (Spec 08 deep-dive, Spec 09 deep-dive, cross-spec consistency, test-contract coverage) returned 60 raw findings → 39 unique actionable items below after dedup. Goal: every BLOCKER + HIGH closes by spec edit before Phase 4 implementation begins.
 
@@ -90,7 +90,7 @@ Pre-implementation cold-eyes review of the Phase 4 surface (Specs 02 §approve/�
 - ✅ **L5 — `reports/` is a user-symlink (shenanigans).** Out of v1 threat model (single-user single-machine); explicitly out of scope per Spec 00.
 - ✅ **L6 — TC-11-10 ↔ TC-09-02 duplication.** Intentional cross-spec link per Spec 11's "mirror" wording. No change.
 
-#### 📝 Phase 4 prep — Round 2 spec sweep (2026-04-30)
+#### ✅ Phase 4 prep — Round 2 spec sweep (2026-04-30)
 
 Single consolidated cold-eyes pass against the round-1 fixed spec set. 18 issues, mostly drift-by-fix (named-anchor renumbering missed leftovers, undefined references introduced by the rename, mojibake from ASCII-only convention applied to a glyph-codepoint citation). Pattern matches expectations: round 1 introduced named anchors; round 2 catches the citations the rename missed.
 
@@ -124,7 +124,7 @@ Single consolidated cold-eyes pass against the round-1 fixed spec set. 18 issues
 - ✅ **B18 — Spec 11 §Album cover placeholder.** Confirmed clean.
 - ✅ **TC-09-04 / TC-09-11 / TC-09-23 tombstones.** Confirmed acceptable cleanup approach.
 
-#### 📝 Phase 4 prep — Round 3 spec sweep (2026-04-30)
+#### ✅ Phase 4 prep — Round 3 spec sweep (2026-04-30)
 
 Single consolidated cold-eyes pass against the round-2 fixed spec set. 3 issues found — **convergence indicator**: round 1 = 39 actionable; round 2 = 17; round 3 = 3.
 
