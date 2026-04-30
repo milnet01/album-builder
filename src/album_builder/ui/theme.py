@@ -331,16 +331,26 @@ class Glyphs:
     # stack is wanted later, swap to a custom-painted QStyledItemDelegate
     # rather than a heavier glyph - DejaVu's stacked variants are not
     # ubiquitous on user systems.
-    DRAG_HANDLE = "⋮⋮"  # U+22EE x2 - Spec 05 middle pane
-    UP = "▲"                  # black up-pointing triangle - Spec 04 target counter
-    DOWN = "▼"                # black down-pointing triangle - Spec 04 target counter
-    TOGGLE_ON = "●"           # black circle - Spec 04 selection
-    TOGGLE_OFF = "○"          # white circle - Spec 04 selection
-    LOCK = "\U0001f512"            # lock - Spec 03 approved-album prefix
-    CHECK = "✓"               # check mark - Spec 03 active-album prefix, Spec 04 at-target
-    CARET = "▾"               # black down-pointing small triangle - Spec 03 pill dropdown indicator
-    SEARCH = "\U0001f50d"          # left-pointing magnifying glass - Spec 01 library search box
-    PLAY = "▶"                # black right-pointing triangle - Spec 06 transport
-    PAUSE = "⏸"               # double vertical bar - Spec 06 transport
-    MUTE = "\U0001f507"            # speaker with cancellation stroke - Spec 06 mute
-    UNMUTE = "\U0001f50a"          # speaker with three sound waves - Spec 06 unmute
+    # Convention (CLAUDE.md ASCII-only source rule):
+    #   - BMP codepoints (U+0000..U+FFFF) live as literal characters; ruff's
+    #     RUF001/002/003 confusable rules cover the punctuation traps.
+    #   - Astral / emoji-range codepoints (U+1Fxxx) use \Uxxxxxxxx escapes
+    #     so the source remains 7-bit ASCII even when an editor or hook
+    #     can't render the emoji glyph.
+    DRAG_HANDLE = "⋮⋮"          # U+22EE x2 - Spec 05 middle pane drag handle
+    UP = "▲"                    # U+25B2 - Spec 04 target counter up
+    DOWN = "▼"                  # U+25BC - Spec 04 target counter down
+    TOGGLE_ON = "●"             # U+25CF - Spec 04 selection toggle (on)
+    TOGGLE_OFF = "○"            # U+25CB - Spec 04 selection toggle (off)
+    LOCK = "\U0001f512"         # U+1F512 - Spec 03 approved-album prefix
+    CHECK = "✓"                 # U+2713 - Spec 03/04/07 (active prefix, at-target, LRC ready)
+    CARET = "▾"                 # U+25BE - Spec 03 album-switcher dropdown indicator
+    SEARCH = "\U0001f50d"       # U+1F50D - Spec 01 library search-box placeholder
+    PLAY = "▶"                  # U+25B6 - Spec 06 transport play
+    PAUSE = "⏸"                 # U+23F8 - Spec 06 transport pause
+    MUTE = "\U0001f507"         # U+1F507 - Spec 06 mute
+    UNMUTE = "\U0001f50a"       # U+1F50A - Spec 06 unmute
+    # Spec 11 doesn't enumerate a close glyph; ASCII "x" is the long-standing
+    # convention for close-button affordances (matches macOS, GTK, web UIs)
+    # and renders identically across all font stacks. (Theme J closure.)
+    CLOSE = "x"                 # Spec 06 toast close button

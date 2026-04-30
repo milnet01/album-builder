@@ -10,6 +10,12 @@ from enum import Enum, auto
 
 from album_builder.domain.track import Track
 from album_builder.persistence.lrc_io import is_lrc_fresh
+from album_builder.ui.theme import Glyphs
+
+# `status_label` below returns user-visible strings, so it's already a UI
+# helper co-located with the service. Pulling Glyphs from ui.theme keeps
+# Spec 11 §Glyphs single-sourced rather than duplicating the literal here.
+# (Theme J closure.)
 
 
 class AlignmentStatus(Enum):
@@ -48,7 +54,7 @@ def status_label(status: AlignmentStatus, percent: int | None = None) -> str:
                 return "LRC: aligning..."
             return f"LRC: aligning... {percent}%"
         case AlignmentStatus.READY:
-            return "LRC: ✓ ready"
+            return f"LRC: {Glyphs.CHECK} ready"
         case AlignmentStatus.FAILED:
             return "LRC: alignment failed"
         case AlignmentStatus.AUDIO_TOO_SHORT:

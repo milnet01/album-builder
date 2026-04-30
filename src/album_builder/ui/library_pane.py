@@ -128,7 +128,7 @@ class TrackTableModel(QAbstractTableModel):
         if attr == "_toggle":
             selected = track.path in self._selected_paths
             if role == Qt.ItemDataRole.DisplayRole:
-                return "●" if selected else "○"
+                return Glyphs.TOGGLE_ON if selected else Glyphs.TOGGLE_OFF
             if role == Qt.ItemDataRole.AccessibleTextRole:
                 # Spec 11 / WCAG 2.2 §4.1.2: screen readers should hear
                 # "selected" / "not selected", not "black circle".
@@ -227,7 +227,7 @@ class LibraryPane(QFrame):
         layout.addWidget(title)
 
         self.search_box = QLineEdit(
-            placeholderText="\U0001f50d  search title, artist, album, composer…"
+            placeholderText=f"{Glyphs.SEARCH}  search title, artist, album, composer…",
         )
         self.search_box.textChanged.connect(self._on_search_changed)
         layout.addWidget(self.search_box)
