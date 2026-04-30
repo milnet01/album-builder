@@ -251,12 +251,38 @@ def qt_stylesheet(p: Palette) -> str:
         border: 1px solid {p.border};
         border-radius: 8px;
     }}
-    /* Phase 3B will replace this placeholder with the lyrics panel. The
-       dashed border is a visual cue that this region is reserved. */
-    QFrame#LyricsPlaceholder {{
+    /* Spec 07 §Lyrics panel — dark surface, accent-warm now-line, status
+       pill aligned to the top edge, "Align now" button compact + low-key.
+       Per-line foreground colours are set programmatically (QListWidgetItem
+       is painted by a delegate, not by QSS); the styles below cover the
+       widget chrome only. */
+    QFrame#LyricsPanel {{
         background-color: {p.bg_pane};
-        border: 1px dashed {p.border_strong};
+        border: 1px solid {p.border};
         border-radius: 6px;
+    }}
+    QLabel#LyricsStatus {{
+        color: {p.text_secondary};
+        font-size: 9pt;
+        padding: 2px 4px;
+    }}
+    QListWidget#LyricsList {{
+        background-color: transparent;
+        border: none;
+    }}
+    QListWidget#LyricsList::item {{
+        padding: 2px 8px;
+    }}
+    QPushButton#LyricsAlignNow {{
+        background-color: {p.bg_elevated};
+        border: 1px solid {p.border_strong};
+        border-radius: 4px;
+        padding: 2px 10px;
+        color: {p.text_primary};
+        font-size: 9pt;
+    }}
+    QPushButton#LyricsAlignNow:hover {{
+        border-color: {p.accent_primary_1};
     }}
     /* Spec 06 transient error notice. */
     QFrame#Toast {{
