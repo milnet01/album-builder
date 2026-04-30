@@ -113,7 +113,11 @@ class AlignmentService(QObject):
         if worker is None:
             return
         worker.requestInterruption()
-        # Don't block — the worker exits cleanly when it next checks the flag.
+        # The worker exits via _AlignmentInterrupted without firing
+        # finished_ok or failed, so the LyricsPanel's status pill would
+        # otherwise remain stuck at ALIGNING. Spec 07 §Errors mandates
+        # "status reverts to `not yet aligned`." L4-M5.
+        self.status_changed.emit(track_path, AlignmentStatus.NOT_YET_ALIGNED)
 
     # ---- Internal ----------------------------------------------------
 

@@ -200,6 +200,51 @@ def test_cancel_no_lrc_written(qtbot, tmp_path):
     assert not lrc.exists()
 
 
+# Spec: L4-M5 (Tier 1 indie-review 2026-04-30)
+def test_cancel_emits_status_revert_to_not_yet_aligned(qtbot, tmp_path):
+    """A cancelled worker exits via _AlignmentInterrupted without firing
+    finished_ok or failed. AlignmentService.cancel() must emit
+    status_changed(NOT_YET_ALIGNED) so the LyricsPanel pill leaves the
+    ALIGNING state — Spec 07 §Errors mandates the revert."""
+    audio = tmp_path / "song.mpeg"
+    audio.write_bytes(b"a")
+
+    def factory(p, t, m):
+        w = FakeWorker(p, t, m)
+        w.behavior = "interrupt"
+        return w
+
+    service = AlignmentService(
+        settings=AlignmentSettings(), worker_factory=factory,
+    )
+    track = _make_track(audio, lyrics="hi")
+    statuses: list = []
+    service.status_changed.connect(lambda p, s: statuses.append((p, s)))
+    service.start_alignment(track)
+    assert (audio, AlignmentStatus.ALIGNING) in statuses
+
+    service.cancel(audio)
+
+    assert (audio, AlignmentStatus.NOT_YET_ALIGNED) in statuses
+    # The revert is the LAST status emitted for this path — the pill
+    # ends up not-yet-aligned, not stuck on ALIGNING.
+    last_for_path = next(s for p, s in reversed(statuses) if p == audio)
+    assert last_for_path == AlignmentStatus.NOT_YET_ALIGNED
+
+
+# Spec: L4-M5 (Tier 1 indie-review 2026-04-30)
+def test_cancel_for_unknown_path_is_noop(qtbot, tmp_path):
+    """Cancelling a path with no active worker must not emit a stray
+    status revert — only an actually-running alignment gets reverted."""
+    audio = tmp_path / "song.mpeg"
+    audio.write_bytes(b"a")
+    service = _service(tmp_path)
+    statuses: list = []
+    service.status_changed.connect(lambda p, s: statuses.append((p, s)))
+    service.cancel(audio)
+    assert statuses == []
+
+
 def test_failed_emits_failed_status_and_error(qtbot, tmp_path):
     audio = tmp_path / "song.mpeg"
     audio.write_bytes(b"a")
