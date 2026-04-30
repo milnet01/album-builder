@@ -80,26 +80,30 @@ class AlignmentWorker(QThread):
         # Honour the interruption flag BEFORE any expensive import or model
         # download — a controller that calls cancel() before run() ever
         # reached must see no work happen at all (TC-07-08).
-        if self.isInterruptionRequested():
-            raise _AlignmentInterrupted
-        whisperx = _load_whisperx()  # raises ImportError if not installed
-        if self.isInterruptionRequested():
-            raise _AlignmentInterrupted
+        self._check_interrupted()
+        # L4-H1-real: a cancel() that races with the very first run()
+        # instruction can fire AFTER the pre-import check but BEFORE the
+        # post-import check. Wrap the import in try/finally so the post
+        # check runs even if the import itself raised — which lets the
+        # cancel surface as _AlignmentInterrupted rather than as an
+        # ImportError-shaped failed.emit on a torn-down worker.
+        try:
+            whisperx = _load_whisperx()  # raises ImportError if not installed
+        finally:
+            self._check_interrupted()
 
         # Stage 1: free transcription via faster-whisper to get segment timing
         self.progress.emit(5)
         device = "cpu"  # Spec 07: CUDA optional; CPU is the default budget
         compute_type = "int8"
         model = whisperx.load_model(self._model_size, device, compute_type=compute_type)
-        if self.isInterruptionRequested():
-            raise _AlignmentInterrupted
+        self._check_interrupted()
 
         audio = whisperx.load_audio(str(self._track_path))
         self.progress.emit(20)
 
         result = model.transcribe(audio, batch_size=8)
-        if self.isInterruptionRequested():
-            raise _AlignmentInterrupted
+        self._check_interrupted()
         self.progress.emit(50)
 
         # Stage 2: wav2vec2 forced alignment of the known plain text against
@@ -107,8 +111,7 @@ class AlignmentWorker(QThread):
         align_model, metadata = whisperx.load_align_model(
             language_code=result.get("language", "en"), device=device
         )
-        if self.isInterruptionRequested():
-            raise _AlignmentInterrupted
+        self._check_interrupted()
         self.progress.emit(70)
 
         aligned = whisperx.align(
@@ -118,6 +121,10 @@ class AlignmentWorker(QThread):
         self.progress.emit(90)
 
         return _segments_to_lyrics(self._lyrics_text, aligned, self._track_path)
+
+    def _check_interrupted(self) -> None:
+        if self.isInterruptionRequested():
+            raise _AlignmentInterrupted
 
 
 def _load_whisperx():
@@ -142,7 +149,19 @@ def _segments_to_lyrics(lyrics_text: str, aligned_result: dict, track_path: Path
     raw_lines = [ln.rstrip() for ln in lyrics_text.splitlines() if ln.strip()]
     if not raw_lines:
         return Lyrics(track_path=track_path)
-    fallback_end = float(segments[-1]["end"]) if segments else 0.0
+    # L4-M2: malformed alignment payloads may omit `end` on the last
+    # segment; `.get` keeps the fallback robust instead of KeyError'ing
+    # at the end of an otherwise-successful alignment.
+    fallback_end = float(segments[-1].get("end", 0.0)) if segments else 0.0
+    # L4-M1: silent mis-pairing on count mismatch is a debugging trap;
+    # log a single INFO line so the user can correlate "fewer LRC lines
+    # than I expected" with the actual segment count.
+    if len(segments) != len(raw_lines):
+        logger.info(
+            "alignment count mismatch: %d segment(s) vs %d lyric line(s) for %s; "
+            "trailing lines pinned to last-segment end (%.3fs)",
+            len(segments), len(raw_lines), track_path, fallback_end,
+        )
     lines: list[LyricLine] = []
     for i, text in enumerate(raw_lines):
         if i < len(segments):

@@ -163,3 +163,25 @@ def test_tracker_position_before_first_line_is_minus_one(qtbot):
     assert emitted == []  # still before first line
     player.emit_position(5.5)
     assert emitted == [0]
+
+
+# Indie-review L4-M4: on track switch the tracker must reset its position
+# memory. Otherwise a residual `_last_position` from the prior track may
+# briefly mark the wrong line on the new track until the player ticks.
+def test_tracker_set_lyrics_resets_last_position(qtbot):
+    player = FakePlayer()
+    tracker = LyricsTracker(player)
+    # First track: tick to t=15s within line 2
+    tracker.set_lyrics(_lyrics(0.0, 5.0, 10.0))
+    player.emit_position(15.0)
+    assert tracker.current_index() == 2
+
+    # Switch to a track whose lyrics start later — the residual
+    # _last_position=15.0 would pick a wrong line if not reset.
+    emitted: list[int] = []
+    tracker.current_line_changed.connect(emitted.append)
+    tracker.set_lyrics(_lyrics(8.0, 20.0))
+    # After reset, last_position=0.0 -> active index is -1 (before line 0).
+    assert tracker.current_index() == -1
+    # Emit reflects the change from index 2 -> -1.
+    assert emitted == [-1]

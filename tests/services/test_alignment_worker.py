@@ -65,6 +65,50 @@ def test_segments_to_lyrics_handles_no_segments(tmp_path):
     assert lyrics.lines[1].time_seconds == 0.0
 
 
+# Indie-review L4-M2: a malformed alignment payload may have a final
+# segment without an `end` key. `.get("end", 0.0)` is the safe access;
+# bracket-access raised KeyError that crashed the worker right at the
+# end of an otherwise-successful alignment.
+def test_segments_to_lyrics_tolerates_missing_end_on_last_segment(tmp_path):
+    text = "a\nb\nc"
+    aligned = {"segments": [{"start": 1.0}]}  # no `end` key
+    lyrics = _segments_to_lyrics(text, aligned, tmp_path / "song.mpeg")
+    assert lyrics.lines[0].time_seconds == pytest.approx(1.0)
+    # Trailing lines fall back to last-segment-end which is 0.0 in this
+    # malformed case rather than raising KeyError.
+    assert lyrics.lines[1].time_seconds == pytest.approx(0.0)
+    assert lyrics.lines[2].time_seconds == pytest.approx(0.0)
+
+
+# Indie-review L4-M1: when segment count != lyric line count, the
+# silent mis-pairing is a debugging trap. Log an INFO message so the
+# user sees a record of why their LRC has fewer/more lines than expected.
+def test_segments_to_lyrics_logs_count_mismatch(tmp_path, caplog):
+    import logging as _logging
+
+    text = "a\nb\nc"
+    aligned = {"segments": [{"start": 1.0, "end": 4.0}]}
+    with caplog.at_level(_logging.INFO, logger="album_builder.services.alignment_worker"):
+        _segments_to_lyrics(text, aligned, tmp_path / "song.mpeg")
+    assert any(
+        "segment" in rec.message.lower() and "line" in rec.message.lower()
+        for rec in caplog.records
+    ), f"expected segment/line mismatch log; got {[r.message for r in caplog.records]}"
+
+
+def test_segments_to_lyrics_no_log_when_counts_match(tmp_path, caplog):
+    import logging as _logging
+
+    text = "a\nb"
+    aligned = {"segments": [{"start": 1.0, "end": 4.0}, {"start": 4.5, "end": 7.0}]}
+    with caplog.at_level(_logging.INFO, logger="album_builder.services.alignment_worker"):
+        _segments_to_lyrics(text, aligned, tmp_path / "song.mpeg")
+    # No mismatch -> no log.
+    assert not any(
+        "mismatch" in rec.message.lower() for rec in caplog.records
+    )
+
+
 def test_segments_to_lyrics_empty_text_returns_empty_lyrics(tmp_path):
     lyrics = _segments_to_lyrics("", {"segments": [{"start": 0.0, "end": 1.0}]},
                                  tmp_path / "song.mpeg")
