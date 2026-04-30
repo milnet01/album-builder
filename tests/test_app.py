@@ -72,6 +72,58 @@ def test_resolve_tracks_dir_settings_wins_over_dev_path(
     assert "using dev-tree path" not in capsys.readouterr().err
 
 
+# --- Project-root resolution (L8-C1) ----------------------------------------
+
+# Spec: L8-C1 (Tier 1 indie-review 2026-04-30)
+def test_resolve_project_root_reads_albums_folder_setting(
+    xdg_config: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Installed users with ``albums_folder`` configured get the parent of that
+    folder as their project root — Albums/ + state.json land there, not in
+    whatever CWD Plasma inherited at launch."""
+    user_albums = tmp_path / "MyMusic" / "Albums"
+    user_albums.mkdir(parents=True)
+    xdg_config.mkdir(parents=True)
+    (xdg_config / "settings.json").write_text(
+        json.dumps({"albums_folder": str(user_albums)})
+    )
+    # CWD is irrelevant when settings.json wins.
+    monkeypatch.chdir(tmp_path)
+    assert app._resolve_project_root() == user_albums.parent
+
+
+def test_resolve_project_root_falls_back_to_repo_root_in_dev_tree(
+    xdg_config: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Running from the source checkout (no settings.json) returns the repo
+    root, not whatever CWD the test runner started in. This is the path
+    used by `python -m album_builder` from arbitrary terminals."""
+    monkeypatch.chdir(tmp_path)  # not the repo root
+    monkeypatch.setenv("ALBUM_BUILDER_DEV_MODE", "1")
+    repo_root = Path(app.__file__).resolve().parent.parent.parent
+    assert app._resolve_project_root() == repo_root
+
+
+def test_resolve_project_root_warns_on_installed_no_config(
+    xdg_config: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Installed launcher with no settings.json must surface a warning so the
+    user knows their Albums/ location is CWD-dependent. Without this the
+    silent fallback would write to ``~/Albums/`` on Plasma sessions
+    (the L8-C1 ship-blocker)."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ALBUM_BUILDER_DEV_MODE", raising=False)
+    monkeypatch.setattr(app, "_running_from_source_tree", lambda: False)
+    result = app._resolve_project_root()
+    assert result == tmp_path
+    err = capsys.readouterr().err
+    assert "albums_folder" in err
+    assert "settings.json" in err
+
+
 # --- Single-instance lock + raise handshake ---------------------------------
 
 @pytest.fixture

@@ -200,10 +200,27 @@ def _bring_to_front(window: QMainWindow) -> None:
 def _resolve_project_root() -> Path:
     """Return the project root that hosts the Albums/ folder and state.json.
 
-    Convention: the working directory when the process is launched. Production
-    installs set CWD via the .desktop file's ``Path=`` field; the dev tree uses
-    the repo root. A settings-driven override can land here in a later release.
+    Priority order (Spec 10 §settings.json schema):
+
+    1. Parent of ``albums_folder`` from ``$XDG_CONFIG_HOME/album-builder/settings.json``
+       — the location the user configured. Used in production.
+    2. The repository root if running from a source checkout (``pyproject.toml``
+       sibling to the package OR ``ALBUM_BUILDER_DEV_MODE=1``) — the dev convention.
+    3. ``Path.cwd()`` with a stderr warning — last-resort fallback. Without this,
+       an installed launcher inheriting the Plasma session CWD silently writes
+       Albums/ + state.json into ``~/`` (L8-C1 from the 2026-04-30 indie-review).
     """
+    configured = settings.read_albums_folder()
+    if configured is not None:
+        return configured.parent
+    if _running_from_source_tree() or os.environ.get(DEV_MODE_ENV) == "1":
+        return Path(__file__).resolve().parent.parent.parent
+    print(
+        "album-builder: no albums_folder configured in settings.json; using "
+        f"{Path.cwd()} for Albums/ and state.json. Set albums_folder in "
+        f"{settings.settings_path()} to pin a stable project location.",
+        file=sys.stderr,
+    )
     return Path.cwd()
 
 

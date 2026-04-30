@@ -66,6 +66,41 @@ def test_read_tracks_folder_top_level_array_returns_none(xdg_config: Path) -> No
     assert settings.read_tracks_folder() is None
 
 
+# Spec: L8-C1 (Tier 1 indie-review 2026-04-30)
+def test_read_albums_folder_returns_configured_path(xdg_config: Path, tmp_path: Path) -> None:
+    target = tmp_path / "MyAlbums"
+    xdg_config.mkdir(parents=True)
+    (xdg_config / "settings.json").write_text(
+        json.dumps({"albums_folder": str(target)})
+    )
+    assert settings.read_albums_folder() == target
+
+
+def test_read_albums_folder_missing_file_returns_none(xdg_config: Path) -> None:
+    assert settings.read_albums_folder() is None
+
+
+def test_read_albums_folder_empty_string_returns_none(xdg_config: Path) -> None:
+    xdg_config.mkdir(parents=True)
+    (xdg_config / "settings.json").write_text(json.dumps({"albums_folder": ""}))
+    assert settings.read_albums_folder() is None
+
+
+def test_read_albums_folder_independent_of_tracks_folder(
+    xdg_config: Path, tmp_path: Path
+) -> None:
+    """Spec 10 §settings.json declares them as independent keys."""
+    xdg_config.mkdir(parents=True)
+    (xdg_config / "settings.json").write_text(
+        json.dumps({
+            "tracks_folder": str(tmp_path / "T"),
+            "albums_folder": str(tmp_path / "A"),
+        })
+    )
+    assert settings.read_tracks_folder() == tmp_path / "T"
+    assert settings.read_albums_folder() == tmp_path / "A"
+
+
 # Indie-review L3-M3: freedesktop Base Dir Spec mandates XDG_CONFIG_HOME be
 # absolute; relative values must be ignored and the default used.
 def test_relative_xdg_config_home_falls_back_to_home_config(monkeypatch) -> None:

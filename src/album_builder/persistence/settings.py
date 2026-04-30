@@ -94,8 +94,21 @@ def read_tracks_folder() -> Path | None:
     Returns ``None`` for any of: file missing, unreadable JSON, missing
     ``tracks_folder`` key, empty string. Callers fall back to a default.
     """
+    return _read_path_key("tracks_folder")
+
+
+def read_albums_folder() -> Path | None:
+    """Return the user-configured albums folder, or ``None`` if unset.
+
+    Spec 10 §settings.json schema lists ``albums_folder`` alongside
+    ``tracks_folder``. Same self-heal contract as :func:`read_tracks_folder`.
+    """
+    return _read_path_key("albums_folder")
+
+
+def _read_path_key(key: str) -> Path | None:
     data = _read_settings_dict()
-    folder = data.get("tracks_folder")
+    folder = data.get(key)
     if not isinstance(folder, str) or not folder.strip():
         return None
     return Path(folder).expanduser()
