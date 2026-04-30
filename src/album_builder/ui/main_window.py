@@ -10,12 +10,14 @@ from uuid import UUID
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
+    QAbstractSpinBox,
     QApplication,
+    QComboBox,
+    QDateTimeEdit,
     QInputDialog,
     QLineEdit,
     QMainWindow,
     QMessageBox,
-    QSpinBox,
     QSplitter,
     QTextEdit,
     QVBoxLayout,
@@ -47,6 +49,40 @@ logger = logging.getLogger(__name__)
 # stable small integer for round-trip identity; matches the spec example
 # `[5, 3, 5]` (sum 13) but is otherwise arbitrary.
 SPLITTER_RATIO_TOTAL = 13
+
+
+def _hamilton_ratios(pixels: list[int], total: int) -> list[int]:
+    """Apportion `total` across the entries in `pixels` proportional to
+    their values, preserving the sum (Hamilton's largest-remainder method).
+
+    L8-M1: the previous `round(p * total / sum(pixels))` could produce
+    `[1, 1, 1500] -> [1, 1, 13]` (sum 15) on pathological splits. Hamilton
+    floors each share, then bumps the entries with the largest fractional
+    remainders until the floors sum to `total`. Returns `[total, 0, ...]`
+    style assignments only when the input degenerates to all-zero pixels.
+    Each entry is at least 0 (Spec 10 §state.json: splitter_sizes >= 0)."""
+    n = len(pixels)
+    if n == 0:
+        return []
+    sum_p = sum(pixels)
+    if sum_p <= 0:
+        # Degenerate (no widget has been laid out yet). Spread evenly with
+        # any rounding remainder allocated to the first entry.
+        base = total // n
+        remainder = total - base * n
+        return [base + (remainder if i == 0 else 0) for i in range(n)]
+    raw = [(p * total) / sum_p for p in pixels]
+    floors = [int(r) for r in raw]
+    deficit = total - sum(floors)
+    # Allocate the deficit to the entries with the largest fractional parts.
+    fractions = sorted(
+        ((raw[i] - floors[i], i) for i in range(n)),
+        key=lambda t: (-t[0], t[1]),
+    )
+    for k in range(deficit):
+        _, i = fractions[k]
+        floors[i] += 1
+    return floors
 
 
 class MainWindow(QMainWindow):
@@ -110,7 +146,12 @@ class MainWindow(QMainWindow):
         self.splitter.addWidget(self.library_pane)
         self.splitter.addWidget(self.album_order_pane)
         self.splitter.addWidget(self.now_playing_pane)
-        self.splitter.setSizes(state.window.splitter_sizes)
+        # L8-H1: Qt renormalises setSizes() against the splitter's *current*
+        # actual width. At construction the splitter has no real width yet
+        # (it's near zero / sizeHint-driven), so the saved ratios drift on
+        # first paint. Stash the desired sizes and apply them in showEvent
+        # once the splitter has its real width.
+        self._restore_splitter_sizes: list[int] = list(state.window.splitter_sizes)
         outer.addWidget(self.splitter, stretch=1)
 
         # Toast overlays the bottom of the central widget. Position is
@@ -305,8 +346,22 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("M"), self, activated=self._toggle_mute)
 
     def _key_in_text_field(self) -> bool:
+        # L8-M3: broadened beyond QLineEdit / QSpinBox / QTextEdit to cover
+        # every Qt input that consumes typed characters — QAbstractSpinBox
+        # subclasses (QDoubleSpinBox), QDateTimeEdit, and editable
+        # QComboBox. Otherwise pressing Space / arrow keys while typing
+        # in any of these toggles playback / scrubs.
         w = QApplication.focusWidget()
-        return isinstance(w, (QLineEdit, QSpinBox, QTextEdit))
+        if isinstance(w, (QLineEdit, QTextEdit, QAbstractSpinBox, QDateTimeEdit)):
+            return True
+        # Editable QComboBox: the line edit is a child whose parent is the
+        # combo. Walk up one level to recognise the case.
+        if isinstance(w, QLineEdit):
+            return True
+        parent = w.parent() if w is not None else None
+        if isinstance(parent, QComboBox) and parent.isEditable():
+            return True
+        return False
 
     def _space_pressed(self) -> None:
         if self._key_in_text_field():
@@ -379,6 +434,10 @@ class MainWindow(QMainWindow):
             status = AlignmentStatus.NOT_YET_ALIGNED
         panel.set_status(status)
         if status == AlignmentStatus.NOT_YET_ALIGNED:
+            # L8-M5: auto_align_on_play is gated on the
+            # alignment.auto_align_on_play setting (default off, Spec 07
+            # opt-in). The method name doesn't reveal the conditional so
+            # we surface that here. Calling unconditionally is deliberate.
             self._alignment.auto_align_on_play(track)
 
     def _current_track(self) -> Track | None:
@@ -480,6 +539,16 @@ class MainWindow(QMainWindow):
         m = msg.lower()
         return any(s in m for s in ("decoder", "codec", "gstreamer", "plugin"))
 
+    def showEvent(self, e) -> None:
+        super().showEvent(e)
+        # L8-H1: apply the restored splitter ratios now that the splitter
+        # has its real width. Reapply only once per session — re-shows
+        # (minimise->restore) shouldn't re-clamp to the construction-time
+        # ratios.
+        if self._restore_splitter_sizes:
+            self.splitter.setSizes(self._restore_splitter_sizes)
+            self._restore_splitter_sizes = []
+
     def resizeEvent(self, e) -> None:
         super().resizeEvent(e)
         # Bottom-of-window banner; sits above the bottom edge.
@@ -492,28 +561,45 @@ class MainWindow(QMainWindow):
         self._state_save_timer.start()
 
     def closeEvent(self, e) -> None:
+        # L8-M2: stop the debounced state-save timer first thing so a 250
+        # ms tick mid-teardown can't race the synchronous _save_state_now
+        # below (and write a stale partial state into state.json).
+        self._state_save_timer.stop()
         # Flush all debounced writes before exit (Spec 10). Each step is
         # wrapped so a raise from one (e.g. ENOSPC mid-flush) does not skip
         # the other - window geometry must persist even if the per-album
-        # writer queue couldn't drain.
+        # writer queue couldn't drain. L8-H4: collect step failures into
+        # one stderr line at the end so the user has something visible
+        # to act on rather than a silent stack trace in the log.
+        failures: list[str] = []
         try:
             self._player.stop()
-        except Exception:
+        except Exception as exc:
             logger.exception("Player.stop() failed during closeEvent")
+            failures.append(f"player.stop: {exc}")
         try:
             write_audio(AudioSettings(
                 volume=self._player.volume(), muted=self._player.muted(),
             ))
-        except Exception:
+        except Exception as exc:
             logger.exception("write_audio() failed during closeEvent")
+            failures.append(f"write_audio: {exc}")
         try:
             self._store.flush()
-        except Exception:
+        except Exception as exc:
             logger.exception("AlbumStore.flush() failed during closeEvent")
+            failures.append(f"album-store flush: {exc}")
         try:
             self._save_state_now()
-        except Exception:
+        except Exception as exc:
             logger.exception("save_state_now() failed during closeEvent")
+            failures.append(f"save_state: {exc}")
+        if failures:
+            import sys as _sys
+            print(
+                "album-builder: close-event partial failure: " + "; ".join(failures),
+                file=_sys.stderr,
+            )
         super().closeEvent(e)
 
     def _save_state_now(self) -> None:
@@ -524,8 +610,7 @@ class MainWindow(QMainWindow):
         # state.json doesn't grow with display DPI - the absolute values
         # would otherwise drift between screens.
         pixels = self.splitter.sizes()
-        total = sum(pixels) or 1
-        ratios = [max(1, round(p * SPLITTER_RATIO_TOTAL / total)) for p in pixels]
+        ratios = _hamilton_ratios(pixels, SPLITTER_RATIO_TOTAL)
         self._state.window = WindowState(
             width=self.width(), height=self.height(),
             x=self.x(), y=self.y(),

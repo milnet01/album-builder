@@ -70,7 +70,7 @@ def run() -> int:
     library_watcher = LibraryWatcher(tracks_dir)
     store = AlbumStore(project_root / "Albums")
     window = MainWindow(store, library_watcher, state, project_root)
-    server = start_raise_server(window)
+    server = start_raise_server(window, lock=lock)
     window.show()
 
     try:
@@ -157,16 +157,25 @@ def signal_raise_existing_instance() -> None:
     socket.disconnectFromServer()
 
 
-def start_raise_server(window: QMainWindow) -> QLocalServer:
+def start_raise_server(
+    window: QMainWindow,
+    *,
+    lock: QSharedMemory | None = None,
+) -> QLocalServer:
     """Start a ``QLocalServer`` that brings ``window`` to the foreground when
     a peer sends :data:`RAISE_MESSAGE`. Returns the server so callers can
     keep it alive for the application lifetime.
 
-    PRECONDITION: only the SHM-lock holder reaches this function. Callers
-    of `run()` enforce this via the `if lock is None: return 0` early-out
-    above. The unconditional `removeServer(SHARED_KEY)` below would
-    otherwise nuke a peer's listening socket; relying on the lock-holder
-    invariant lets us treat the socket as ours to claim."""
+    PRECONDITION: only the SHM-lock holder reaches this function — the
+    unconditional ``removeServer(SHARED_KEY)`` below would otherwise nuke
+    a live peer's listening socket. L8-H3: enforce the precondition with
+    an explicit ``lock`` parameter + assert rather than relying on caller
+    discipline that an out-of-tree refactor could silently break."""
+    assert lock is not None, (
+        "start_raise_server: only the SHM-lock holder may listen on "
+        "SHARED_KEY; pass the QSharedMemory lock returned by "
+        "acquire_single_instance_lock() to enforce the precondition."
+    )
     QLocalServer.removeServer(SHARED_KEY)
     server = QLocalServer()
     server.listen(SHARED_KEY)

@@ -371,3 +371,135 @@ def test_main_window_track_switch_clears_old_lyrics(
     # Track 1 has no LRC → tracker reset to None
     assert win._tracker.lyrics() is None
     assert win.now_playing_pane.lyrics_panel.list.count() == 0
+
+
+# Indie-review L8-M2: closeEvent must stop the debounced state-save
+# timer first thing so a 250 ms timer fire mid-teardown can't race the
+# synchronous _save_state_now call (and write a stale partial state).
+def test_close_event_stops_state_save_timer(
+    qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    store = AlbumStore(tmp_path / "Albums")
+    watcher = LibraryWatcher(tracks_dir)
+    state = AppState()
+    win = MainWindow(store, watcher, state, tmp_path)
+    qtbot.addWidget(win)
+
+    win._state_save_timer.start()  # simulate a queued save
+    assert win._state_save_timer.isActive()
+
+    from PyQt6.QtGui import QCloseEvent
+    win.closeEvent(QCloseEvent())
+
+    assert not win._state_save_timer.isActive(), (
+        "closeEvent must stop the state-save timer to avoid a post-close "
+        "fire racing the synchronous _save_state_now"
+    )
+
+
+# Indie-review L8-M3: _key_in_text_field must catch QAbstractSpinBox
+# subclasses (QDoubleSpinBox), QDateTimeEdit, and editable QComboBox in
+# addition to QLineEdit / QSpinBox / QTextEdit. A user typing into one
+# of these widgets that pressed Space would otherwise toggle playback.
+def test_key_in_text_field_covers_abstract_spinbox(main_window) -> None:
+    from PyQt6.QtWidgets import (
+        QApplication,
+        QComboBox,
+        QDateTimeEdit,
+        QDoubleSpinBox,
+    )
+
+    # QDoubleSpinBox derives from QAbstractSpinBox but not QSpinBox.
+    dsb = QDoubleSpinBox(main_window)
+    dsb.show()
+    dsb.setFocus()
+    QApplication.processEvents()
+    if QApplication.focusWidget() is dsb:
+        assert main_window._key_in_text_field() is True
+
+    dte = QDateTimeEdit(main_window)
+    dte.show()
+    dte.setFocus()
+    QApplication.processEvents()
+    if QApplication.focusWidget() is dte:
+        assert main_window._key_in_text_field() is True
+
+    # Editable QComboBox is a text field; non-editable is not.
+    combo = QComboBox(main_window)
+    combo.setEditable(True)
+    combo.show()
+    combo.lineEdit().setFocus()
+    QApplication.processEvents()
+    if QApplication.focusWidget() is combo.lineEdit():
+        assert main_window._key_in_text_field() is True
+
+
+# Indie-review L8-M1: _save_state_now's pixel-ratio rounding must
+# preserve sum=SPLITTER_RATIO_TOTAL across pathological splits.
+# Pixel ratios [1, 1, 1500] previously rounded to [1, 1, 13] (sum 15);
+# Hamilton's largest-remainder method preserves the spec sum.
+def test_save_state_pixel_ratio_rounding_preserves_total(
+    qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    store = AlbumStore(tmp_path / "Albums")
+    watcher = LibraryWatcher(tracks_dir)
+    state = AppState()
+    win = MainWindow(store, watcher, state, tmp_path)
+    qtbot.addWidget(win)
+
+    # Stub the splitter to report pathological pixel sizes.
+    monkeypatch.setattr(win.splitter, "sizes", lambda: [1, 1, 1500])
+
+    win._save_state_now()
+
+    from album_builder.ui.main_window import SPLITTER_RATIO_TOTAL
+    assert sum(win._state.window.splitter_sizes) == SPLITTER_RATIO_TOTAL, (
+        f"splitter ratios must sum to {SPLITTER_RATIO_TOTAL}; got "
+        f"{win._state.window.splitter_sizes}"
+    )
+
+
+# Indie-review L8-H1: setSizes runs at construction-time before splitter
+# is shown — Qt renormalises ratios against the current actual width
+# (near zero or sizeHint-driven). Defer to a post-show callback so the
+# saved ratios apply against real pane widths.
+def test_splitter_setSizes_deferred_until_visible(
+    qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
+) -> None:
+    """The MainWindow constructor must NOT call splitter.setSizes
+    synchronously (since the splitter has no real width yet). Either
+    a QTimer.singleShot(0, ...) or a showEvent override is acceptable;
+    we assert by checking that the deferred setSizes runs once the
+    window is shown."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+
+    set_sizes_calls: list[list[int]] = []
+    real_set_sizes = None
+
+    store = AlbumStore(tmp_path / "Albums")
+    watcher = LibraryWatcher(tracks_dir)
+    state = AppState()
+    state.window.splitter_sizes = [4, 5, 4]  # custom restored ratios
+
+    win = MainWindow(store, watcher, state, tmp_path)
+    qtbot.addWidget(win)
+
+    real_set_sizes = win.splitter.setSizes
+
+    def tracking(sizes):
+        set_sizes_calls.append(list(sizes))
+        return real_set_sizes(sizes)
+
+    monkeypatch.setattr(win.splitter, "setSizes", tracking)
+
+    # Show triggers the deferred setSizes via showEvent or singleShot.
+    win.show()
+    qtbot.waitExposed(win)
+    qtbot.wait(50)
+
+    assert any(sizes == [4, 5, 4] for sizes in set_sizes_calls), (
+        f"deferred setSizes must apply restored ratios after show; got "
+        f"{set_sizes_calls}"
+    )

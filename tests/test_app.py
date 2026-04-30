@@ -192,7 +192,9 @@ def test_raise_server_brings_window_to_front(qtbot, isolated_key: str) -> None:
     window = QMainWindow()
     qtbot.addWidget(window)
     window.hide()
-    server = app.start_raise_server(window)
+    lock = app.acquire_single_instance_lock()
+    assert lock is not None
+    server = app.start_raise_server(window, lock=lock)
     try:
         # Connect a client socket and send the raise message, mimicking what
         # signal_raise_existing_instance() does from a second process.
@@ -209,6 +211,21 @@ def test_raise_server_brings_window_to_front(qtbot, isolated_key: str) -> None:
         client.disconnectFromServer()
     finally:
         server.close()
+        lock.detach()
+
+
+# Indie-review L8-H3: start_raise_server's precondition was docstring-only;
+# a future caller outside the lock-holder path would silently nuke the
+# live peer's listening socket. The assert + lock parameter makes the
+# precondition explicit.
+def test_start_raise_server_asserts_lock_param(qtbot) -> None:
+    import pytest as _pytest
+    window = QMainWindow()
+    qtbot.addWidget(window)
+    with _pytest.raises(AssertionError, match="SHM-lock"):
+        app.start_raise_server(window)
+    with _pytest.raises(AssertionError, match="SHM-lock"):
+        app.start_raise_server(window, lock=None)
 
 
 def test_signal_raise_existing_instance_is_silent_when_no_server(
