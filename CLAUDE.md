@@ -47,6 +47,7 @@ Signals flow up: domain → store → widgets via `pyqtSignal(object)`. Disk wri
 - **All datetimes UTC-aware** — `datetime.now(UTC)`. ISO-8601 ms-precision Z-suffix on disk via `_to_iso` in `album_io.py` (Spec 10 §Encoding rules).
 - **Atomic writes** — every persistence write goes through `atomic_write_text` (tmp file + `os.replace`). `_unique_tmp_path` uses PID + uuid4 hex to avoid concurrent-writer collisions.
 - **Tests cite spec contracts** — each test has a `# Spec: TC-NN-MM` comment. `grep -rn "TC-04-" tests/` shows which clauses are tested. Coverage maps live in each spec's "Test contract" section + the Phase 2 plan crosswalk.
+- **Test naming convention (forward-only, per Theme I closure 2026-04-30)** — NEW load-bearing test files SHOULD prefix the filename with the contract anchor: `test_TC_NN_*` (spec contracts), `test_WCAG_2_1_1_*` (a11y standards), `test_RFC_8259_*` (external standards). Existing files keep their current names — a retroactive rename would cascade through 15+ doc references without improving correctness. The inline `# Spec:` / `# WCAG` markers are still required at every test body regardless of filename.
 - **Commits** — conventional style (`feat:` / `fix:` / `docs:` / `test:` / `refactor:` / `chore:`); one logical change per commit; no Co-Authored-By footer (project convention — verify with `git log -10 --format=%B`).
 
 ## Slash commands that DO apply
