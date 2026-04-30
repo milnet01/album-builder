@@ -2,6 +2,15 @@
 
 from __future__ import annotations
 
+# Force Qt's offscreen QPA platform before any pytest-qt fixture imports
+# QApplication. Without this, every test using qtbot/QApplication briefly
+# composites a real top-level window — visible to whatever desktop is
+# hosting the runner (and very visible in another terminal where the
+# test was kicked off). `setdefault` lets a CI override (e.g.
+# QT_QPA_PLATFORM=minimal) still win.
+import os
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 import shutil
 from pathlib import Path
 
