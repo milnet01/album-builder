@@ -51,6 +51,17 @@ class AlignmentWorker(QThread):
             # Cancellation path — clean exit, no `.lrc`, no failed signal
             # (the controller treats cancellation as "back to NOT_YET_ALIGNED").
             return
+        except ImportError:
+            # WhisperX is an optional runtime dep; surface the install hint
+            # the user can copy/paste rather than the bare "No module named
+            # 'whisperx'" the generic Exception branch would produce. L4-L5.
+            logger.warning(
+                "AlignmentWorker: whisperx not installed for %s", self._track_path,
+            )
+            self.failed.emit(
+                "WhisperX not installed. Install via: pip install whisperx"
+            )
+            return
         except Exception as exc:  # pragma: no cover — covered by integration tier
             logger.exception("AlignmentWorker failed for %s", self._track_path)
             self.failed.emit(str(exc))

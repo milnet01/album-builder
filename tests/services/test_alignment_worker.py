@@ -71,9 +71,12 @@ def test_segments_to_lyrics_empty_text_returns_empty_lyrics(tmp_path):
     assert lyrics.lines == ()
 
 
-def test_worker_emits_failed_when_whisperx_missing(qtbot, tmp_path, monkeypatch):
-    """If `whisperx` import fails, run() should emit `failed` with a
-    helpful message — not crash silently."""
+# Spec: L4-L5 (Tier 1 indie-review 2026-04-30)
+def test_worker_emits_install_hint_when_whisperx_missing(qtbot, tmp_path, monkeypatch):
+    """When whisperx isn't installed, run() must emit a copy/paste-able
+    install hint — not the bare 'No module named whisperx' the generic
+    Exception branch would produce. The Phase 3B plan specified this exact
+    hint string ('pip install whisperx')."""
     audio = tmp_path / "song.mpeg"
     audio.write_bytes(b"a")
     worker = AlignmentWorker(audio, "lyrics text")
@@ -87,8 +90,11 @@ def test_worker_emits_failed_when_whisperx_missing(qtbot, tmp_path, monkeypatch)
     failures: list[str] = []
     worker.failed.connect(failures.append)
     worker.run()  # synchronous — call directly so qtbot can observe state
-    assert failures
-    assert "whisperx" in failures[0].lower()
+    assert len(failures) == 1
+    assert "WhisperX not installed" in failures[0]
+    assert "pip install whisperx" in failures[0]
+    # The bare ImportError text must NOT have leaked through.
+    assert "No module named" not in failures[0]
 
 
 # Note: the live cancel-mid-flight path (TC-07-08) is covered by
