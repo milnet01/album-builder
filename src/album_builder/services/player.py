@@ -74,8 +74,15 @@ class Player(QObject):
 
     # ---- Public API -------------------------------------------------
 
-    def set_source(self, path: Path) -> None:
-        self._source = Path(path)
+    def set_source(self, path: Path | None) -> None:
+        """Load `path` as the active source, or clear if `None` (L3-M1).
+
+        Qt's spelling for "clear the source" is `setSource(QUrl())`; we
+        forward that here so callers don't have to know the QtMultimedia
+        idiom. Passing None used to raise `TypeError` from `Path(None)` —
+        a footgun for any controller pattern that nulls the source on
+        track-clear."""
+        self._source = Path(path) if path is not None else None
         # Reset error state: a fresh source is the controller's signal
         # that the previous failure has been acknowledged.
         if self._state == PlayerState.ERROR:
@@ -84,7 +91,10 @@ class Player(QObject):
         # Stop before swap so the previous track's playbackState transitions
         # cleanly to Stopped instead of fighting the loader.
         self._player.stop()
-        self._player.setSource(QUrl.fromLocalFile(str(self._source)))
+        if self._source is None:
+            self._player.setSource(QUrl())
+        else:
+            self._player.setSource(QUrl.fromLocalFile(str(self._source)))
 
     def source(self) -> Path | None:
         return self._source
@@ -105,6 +115,15 @@ class Player(QObject):
         self._player.stop()
 
     def seek(self, seconds: float) -> None:
+        """Seek to `seconds`, clamping to `[0, duration - 1.0]`.
+
+        The 1-second tail margin keeps drag-scrubbing past the end from
+        firing EndOfMedia + auto-stop in the middle of a user gesture.
+        Side effect: tracks shorter than 1.0s clamp the upper bound to a
+        negative number, which `max(0.0, ...)` then floors at 0 — for very
+        short tracks every seek lands at the start. Tier 3 (L3-M2) judged
+        this acceptable because real album tracks are seconds at minimum;
+        the interactive scrubbing UX is what this method optimises for."""
         if self._duration_seconds > 0:
             seconds = min(seconds, self._duration_seconds - 1.0)
         seconds = max(0.0, seconds)
@@ -147,7 +166,7 @@ class Player(QObject):
         self._duration_seconds = ms / 1000.0
         self.duration_changed.emit(self._duration_seconds)
 
-    def _on_playback_state(self, qstate) -> None:
+    def _on_playback_state(self, qstate: QMediaPlayer.PlaybackState) -> None:
         # Map Qt's PlaybackState -> our PlayerState. Don't override an ERROR
         # state with a STOPPED transition that follows naturally from the
         # error path; the controller is the only place that clears errors
@@ -161,10 +180,16 @@ class Player(QObject):
             case QMediaPlayer.PlaybackState.StoppedState:
                 if prior != PlayerState.ERROR:
                     self._state = PlayerState.STOPPED
+            case _:
+                # Forward-compat: a future Qt version that adds a new
+                # PlaybackState (e.g. BufferingState) shouldn't silently
+                # drop into a wrong _state. Hold prior; the buffering /
+                # error pulse comes via _on_media_status / _on_error.
+                pass
         if self._state != prior:
             self.state_changed.emit(self._state)
 
-    def _on_media_status(self, status) -> None:
+    def _on_media_status(self, status: QMediaPlayer.MediaStatus) -> None:
         is_buffering = status == QMediaPlayer.MediaStatus.BufferingMedia
         self.buffering_changed.emit(is_buffering)
 
@@ -191,7 +216,7 @@ class Player(QObject):
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
             self.ended.emit()
 
-    def _on_error(self, error, message: str) -> None:
+    def _on_error(self, error: QMediaPlayer.Error, message: str) -> None:
         if error == QMediaPlayer.Error.NoError:
             return
         prior = self._state

@@ -103,6 +103,20 @@ def test_seek_with_no_source_clamps_to_zero() -> None:
     assert p.position() == 0.0
 
 
+# Tier 3 (L3-M1): set_source(None) clears the source via Qt's setSource(QUrl())
+# idiom instead of raising TypeError from Path(None). Lets the controller null
+# the source on track-clear without a special-case branch.
+def test_set_source_none_clears_source() -> None:
+    p = Player()
+    p.set_source(Path("/nonexistent/track.mp3"))
+    assert p.source() is not None
+    p.set_source(None)
+    assert p.source() is None
+    # Subsequent set_source(Path) must still work.
+    p.set_source(Path("/nonexistent/other.mp3"))
+    assert p.source() is not None
+
+
 # Spec: L3-H1 (Tier 1 indie-review 2026-04-30)
 def test_invalid_media_status_emits_error_and_error_state(qtbot, tmp_path) -> None:
     """Qt 6.11's FFmpeg backend delivers decode failures via

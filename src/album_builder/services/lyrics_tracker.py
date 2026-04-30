@@ -65,17 +65,26 @@ class LyricsTracker(QObject):
         if self._lyrics is None or not self._lyrics.lines:
             return -1
         lines = self._lyrics.lines
+        n = len(lines)
         hint = self._index
         # Cached-hint fast path: forward tick within the current line.
-        if 0 <= hint < len(lines):
+        if 0 <= hint < n:
             current_t = lines[hint].time_seconds
             if t >= current_t:
-                next_t = (
-                    lines[hint + 1].time_seconds if hint + 1 < len(lines) else float("inf")
-                )
+                next_idx = hint + 1
+                next_t = lines[next_idx].time_seconds if next_idx < n else float("inf")
                 if t < next_t:
                     return hint
-        # Backward seek (t < current line's start) or first call:
+                # L4-M3: forward line-crossing fast path. The common case
+                # is "tick crossed exactly one boundary"; check hint+1
+                # before the linear scan so a track playing in the
+                # foreground stays O(1) per tick instead of O(n) on every
+                # line transition.
+                if next_idx < n:
+                    after_t = lines[next_idx + 1].time_seconds if next_idx + 1 < n else float("inf")
+                    if t < after_t:
+                        return next_idx
+        # Backward seek (t < current line's start) or two+-line jump:
         # fall back to a full scan.
         return self._linear_scan(t)
 
