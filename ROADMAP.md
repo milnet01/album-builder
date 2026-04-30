@@ -8,6 +8,27 @@ Working roadmap for the Album Builder app. Tracks completed phases, in-flight fi
 
 ---
 
+## ✅ v0.4.1 — Phase 3B hardening (2026-04-30)
+
+Patch release closing the `/indie-review` Tier 2 hardening queue. Same-day follow-up to v0.4.0; no user-facing feature changes. The detailed fix breakdown lives in the per-tier section below.
+
+**Shipped (35 items across 8 commits):**
+
+- **Domain (3):** `parse_lrc(track_path=...)` threading; majority-malformed → `LRCParseError`; Spec 07 TC-07-02 amended to "semantic equivalence" (the in-memory `Lyrics` doesn't retain headers / multi-stamp / line endings, so byte-identical round-trip is structurally impossible).
+- **Persistence (6):** `_fsync_dir` errno narrowed to `{EINVAL, ENOTSUP}`; post-rename fsync failure logs + continues (data is durable); schema migration writes `<file>.v<old>.bak` (Theme C closure, latent until v2 lands); malformed UUID/status/timestamp/required-field surfaces as `AlbumDirCorrupt`; `state.window` width/height clamped to >= 100 (Spec 10); `splitter_sizes` accepts `n >= 0` (Spec 10).
+- **Player (2):** `ended` signal for `EndOfMedia`; `(code, message)+50ms` error-emit dedupe.
+- **Alignment (4):** `_check_interrupted()` wraps the WhisperX import; segment/lyric count mismatch logged; `.get("end", 0.0)` on the trailing-segment fallback; `LyricsTracker.set_lyrics` resets `_last_position` so a track switch doesn't carry the prior clock.
+- **Watcher / store (4):** `_rebind_watch` is now diff-based (no inotify event-loss window); cross-FS `.trash` warning re-runs from first lazy `delete()`; `rescan()` uses local-dict-then-swap so a partial iterdir failure leaves prior state intact; `_on_dir_changed` filters parent-watch fires to the tracked folder + its exact parent.
+- **UI top/library/order (6):** drag-handle glyph hidden on approved; Approve/Reopen + AlbumSwitcher pill expose accessible names (Theme F closure); `TargetCounter` text-input rejects values below current selection; `TrackFilterProxy` switched to casefold (Theme G closure); `TrackTableModel` exposes `tracks()` / `is_toggle_enabled(row)` / `selected_paths()` public accessors; approve-below-target documented as intentional per Spec 02.
+- **UI playback/lyrics (6):** `LyricsPanel._restyle_at()` partial pass (O(|delta|) per line crossing) preserving Spec 11 typography from `list.font()`; Toast surfaces accessible description (Theme F closure; PyQt6 lacks `QAccessible`, so this is the closest live-region announcement available); transport scrubber switched to `sliderReleased`; `NowPlayingPane.set_track(None)` clears the lyrics panel; `LyricsPanel.palette_for_lyrics()` accessor.
+- **App + main_window + theme (7):** splitter `setSizes` deferred to `showEvent` so saved ratios apply against real pane widths; `start_raise_server` requires the SHM lock parameter (assert + test); `closeEvent` collects per-step failures into one stderr summary line; state-save timer stopped first thing in `closeEvent`; Hamilton's largest-remainder method preserves `sum(splitter_sizes) == 13`; `_key_in_text_field` covers `QAbstractSpinBox` / `QDateTimeEdit` / editable `QComboBox`; auto-align gate documented at the call site.
+
+**Test count:** 366 → 408 passing (+42 regression tests). Ruff clean. `/audit` not yet re-run for this batch (will run before v0.4.1 tag).
+
+One Tier-2 item closed by spec rather than code: **L6-H1** (approve-button-below-target) — Spec 02 §approve preconditions explicitly allows approval at any non-zero count; the green-counter cue at at-target is UX feedback for "complete album", not a gate.
+
+---
+
 ## ✅ v0.4.0 — Phase 3B: Lyrics Alignment (2026-04-30)
 
 WhisperX + wav2vec2 forced-alignment pipeline behind the v0.3.0
@@ -130,59 +151,61 @@ Calibration: 0 actionable security findings (4th run; cf. 2026-04-28 audit which
 
 ## 🔒 Tier 2 — Phase 3B hardening sweep (correctness, pre-v0.5.0)
 
+✅ **All 35 landed 2026-04-30** across 8 commits. 366 → 408 tests pass; ruff clean. One spec amendment (L1-H3) and one closure-by-spec (L6-H1) required no code change.
+
 Domain (L1):
-- 📋 **HIGH — `Lyrics.track_path` typed `Path | None` but Spec 07 §Outputs declares `Path`; `parse_lrc` never sets it.** `src/album_builder/domain/lyrics.py:35`. Either thread `track_path` through `parse_lrc(text, *, track_path)` OR amend Spec 07. L1-H1.
-- 📋 **HIGH — `parse_lrc` malformed-line tolerance has no signal.** `src/album_builder/domain/lyrics.py:71-84`. A file with 1 valid line and 999 garbage lines parses "successfully"; the persistence layer (TC-07-10) has no signal to drive the `<stem>.lrc.bak` decision. Return a `(lyrics, malformed_count)` tuple OR raise on >50% skip ratio. L1-H2.
-- 📋 **SPEC AMEND — `format_lrc` byte-identical round-trip is structurally impossible.** `src/album_builder/domain/lyrics.py:95-112`. `Lyrics` does not store `ti/ar/al/length` headers, line endings, or multi-stamp grouping after parse. Either soften Spec 07 TC-07-02 to "semantic equivalence" OR widen `Lyrics` to retain `headers: tuple[tuple[str, str], ...]` + raw stamp grouping. L1-H3.
+- ✅ **HIGH — `Lyrics.track_path` typed `Path | None` but Spec 07 §Outputs declares `Path`; `parse_lrc` never sets it.** Threaded `track_path` through `parse_lrc(text, *, track_path)` (commit `abcc021`). L1-H1.
+- ✅ **HIGH — `parse_lrc` malformed-line tolerance has no signal.** Now raises `LRCParseError` when malformed (no-leading-stamp) lines exceed 50% of non-blank, non-tag-header content lines (commit `abcc021`). The persistence layer's existing `LRCParseError → .lrc.bak` path now picks up noisy files. L1-H2.
+- ✅ **SPEC AMEND — `format_lrc` byte-identical round-trip is structurally impossible.** Spec 07 TC-07-02 amended to "semantic equivalence" with explicit rationale (headers/multi-stamp/comments are surface metadata, not playable contract); Lyrics dataclass type bumped to `track_path: Path | None = None` (commit `abcc021`). L1-H3.
 
 Persistence (L2):
-- 📋 **HIGH — `_fsync_dir` swallows all `OSError` indiscriminately.** `src/album_builder/persistence/atomic_io.py:31-34`. Catches EIO, ENOENT, EACCES the same as the legitimate EINVAL/ENOTSUP-on-FAT skip. Narrow the errno check to `{errno.EINVAL, errno.ENOTSUP}` and raise/log on others. L2-H1.
-- 📋 **HIGH — Post-`os.replace` `_fsync_dir` failure unlinks tmp + raises.** `src/album_builder/persistence/atomic_io.py:54-70`. Data is already on disk under the final name; the tmp is gone; the exception bubbles to `DebouncedWriter._fire` / `save_album` callers as "save failed, retry." Split try-block so post-rename fsync failure logs + continues. L2-H2.
-- 📋 **HIGH — Schema migration `.bak` requirement still unimplemented (Theme C recurrence — first seen 2026-04-28).** `src/album_builder/persistence/schema.py` + `album_io.py:213` + `state_io.py:111`. Spec 10 §79 requires `<file>.v<old>.bak` on migration. Latent until v2 schema lands; ship-blocker once it does. Implement: `path.with_suffix(f".v{old}.bak"); shutil.copy2(...)` before `save_album` in the migration branch. L2-H3.
-- 📋 **MEDIUM — `_deserialize` field-shape errors leak as bare `KeyError`/`ValueError` instead of `AlbumDirCorrupt`.** `src/album_builder/persistence/album_io.py:95-126`. Spec 10 §152 says malformed UUID / timestamp / status / name → "treat as corrupt, skip with toast." Wrap the deserialize block: `except (KeyError, ValueError, TypeError) as exc: raise AlbumDirCorrupt(...) from exc`. L2-M4.
-- 📋 **MEDIUM — `state_io._coerce_window` accepts width=0 / height=0; Spec 10 §178 mandates `>= 100`.** `src/album_builder/persistence/state_io.py:78-89`. Add explicit `max(100, raw)` clamp. L2-M2.
-- 📋 **MEDIUM — `state_io._coerce_window` rejects splitter_sizes `n == 0`; Spec 10 says `>= 0`.** `src/album_builder/persistence/state_io.py:95`. User collapsing one pane to zero (legit Qt behaviour) gets layout silently reset. Change to `n >= 0`. L2-M3.
+- ✅ **HIGH — `_fsync_dir` swallows all `OSError` indiscriminately.** Errno check narrowed to `{errno.EINVAL, errno.ENOTSUP}`; EIO / EACCES / ENOENT propagate (commit `a54b5a1`). L2-H1.
+- ✅ **HIGH — Post-`os.replace` `_fsync_dir` failure unlinks tmp + raises.** Split try-block: post-rename fsync failure logs warning + continues (data is durable at the final name) (commit `a54b5a1`). L2-H2.
+- ✅ **HIGH — Schema migration `.bak` requirement still unimplemented (Theme C closure).** `_write_migration_bak()` helper added to both `album_io.py` and `state_io.py`; load-time migration writes `<file>.v<old>.bak` with the original bytes before rewriting the migrated form (commit `a54b5a1`). Latent until v2 schema lands. L2-H3.
+- ✅ **MEDIUM — `_deserialize` field-shape errors leak as bare `KeyError`/`ValueError`.** Wrapped `_deserialize` call site with `except (KeyError, ValueError, TypeError) as exc: raise AlbumDirCorrupt(...) from exc` (commit `a54b5a1`). L2-M4.
+- ✅ **MEDIUM — `state_io._coerce_window` accepts width=0 / height=0; Spec 10 mandates >= 100.** Added `max(100, raw)` clamp on width/height; x/y unaffected (commit `a54b5a1`). L2-M2.
+- ✅ **MEDIUM — `_coerce_window` rejects splitter_sizes `n == 0`.** Filter relaxed to `n >= 0` per Spec 10 (commit `a54b5a1`). L2-M3.
 
 Player (L3):
-- 📋 **HIGH — `Player` has no `EndOfMedia` signal; STOPPED is ambiguous.** `src/album_builder/services/player.py:152-154`. `_on_media_status` doesn't surface `EndOfMedia` at all. Track natural-end vs user-stop is indistinguishable from the state alone. Add an `ended` signal (or fold EndOfMedia into `state_changed`). Forecloses Spec 07 lyrics-tracker work that wants the natural-end signal. L3-H2.
-- 📋 **MEDIUM — `_on_error` may emit `error` twice on Qt 6.11 backends that double-fire `errorOccurred`.** `src/album_builder/services/player.py:159-165`. The state guard is correct; the error emit is not. Add a dedupe by (error_code, message) over a 50 ms window. L3-M3.
+- ✅ **HIGH — `Player` has no `EndOfMedia` signal.** Added `ended = pyqtSignal()` emitted from `_on_media_status` on `EndOfMedia` (commit `0e60314`). Lyrics tracker / autoplay UX can now distinguish natural end from user-stop. L3-H2.
+- ✅ **MEDIUM — `_on_error` may emit `error` twice on Qt 6.11 backends.** Added `_emit_error()` indirection with (code, message)+50ms-window dedupe; both `_on_error` and `_on_media_status` (InvalidMedia) route through it (commit `0e60314`). L3-M3.
 
 Alignment (L4):
-- 📋 **MEDIUM — Worker fast-cancel pulls in WhisperX (~3 GB) before hitting interrupt check.** `src/album_builder/services/alignment_worker.py:68-76`. The first `isInterruptionRequested()` happens before `_load_whisperx()`, but a cancel between QThread.start() and the very first run() instruction races. Move the interruption check to wrap the import call too. L4-H1-real.
-- 📋 **MEDIUM — `_segments_to_lyrics` silently mis-pairs when segment count ≠ lyric line count.** `src/album_builder/services/alignment_worker.py:130-142`. Add `logger.info(...)` when counts mismatch. L4-M1.
-- 📋 **MEDIUM — `_segments_to_lyrics` accesses `segments[-1]["end"]` without `.get()` guard.** `src/album_builder/services/alignment_worker.py:134`. Use `.get("end", 0.0)`. L4-M2.
-- 📋 **MEDIUM — `LyricsTracker.set_lyrics` does not reset `_last_position`.** `src/album_builder/services/lyrics_tracker.py:35-43`. On track switch, residual `_last_position` from prior track may briefly mark the last line of the new track as "current" until first tick. Reset to 0.0 inside `set_lyrics`. L4-M4.
+- ✅ **MEDIUM — Worker fast-cancel pulls in WhisperX before hitting interrupt check.** Added `_check_interrupted()` helper; the WhisperX import is now wrapped in `try/finally` so a cancel between the pre-check and the import surfaces as `_AlignmentInterrupted` (commit `e9ef0d4`). L4-H1-real.
+- ✅ **MEDIUM — `_segments_to_lyrics` silently mis-pairs on count mismatch.** `logger.info(...)` line now records segment-vs-lyric count drift + the fallback-end timestamp (commit `e9ef0d4`). L4-M1.
+- ✅ **MEDIUM — `segments[-1]["end"]` access without `.get()` guard.** Switched to `.get("end", 0.0)` (commit `e9ef0d4`). L4-M2.
+- ✅ **MEDIUM — `LyricsTracker.set_lyrics` does not reset `_last_position`.** Reset to 0.0 in `set_lyrics`; the index-recompute uses the reset position (commit `e9ef0d4`). L4-M4.
 
 Library Watcher (L5):
-- 📋 **HIGH — `LibraryWatcher._rebind_watch` removes-then-adds = inotify event-loss window.** `src/album_builder/services/library_watcher.py:54-63`. Compute add/remove diffs; only mutate the changed paths. L5-H2.
-- 📋 **MEDIUM — `_check_trash_same_filesystem` only runs at construction; lazy `.trash` creation skips the warning.** `src/album_builder/services/album_store.py:43,50-74`. Move check into `delete()` post-`mkdir`, run-once via flag. L5-M1.
-- 📋 **MEDIUM — `rescan()` clears state before the iterate loop.** `src/album_builder/services/album_store.py:80-113`. PermissionError on `iterdir()` leaves the store empty with no rebuild. Build into a local dict first, swap on success. L5-M2.
-- 📋 **MEDIUM — `LibraryWatcher` parent-watch fires on unrelated sibling changes.** `src/album_builder/services/library_watcher.py:61-63`. Filter `_on_dir_changed` by path argument. L5-M4.
+- ✅ **HIGH — `LibraryWatcher._rebind_watch` removes-then-adds = inotify event-loss window.** Replaced removeAll-then-addAll with diff-based `removePaths(current - wanted) + addPaths(wanted - current)`; same-set rebinds touch nothing (commit `e7d29cc`). L5-H2.
+- ✅ **MEDIUM — `_check_trash_same_filesystem` only runs at construction.** Re-runs from `delete()` after `trash.mkdir()`; one-shot via `_trash_fs_checked` flag (commit `e7d29cc`). L5-M1.
+- ✅ **MEDIUM — `rescan()` clears state before the iterate loop.** Local-dict-then-swap; PermissionError on `iterdir()` returns early with prior state intact (commit `e7d29cc`). L5-M2.
+- ✅ **MEDIUM — `LibraryWatcher` parent-watch fires on unrelated sibling changes.** `_on_dir_changed` filters by path argument: only the tracked folder OR its exact parent triggers refresh (commit `e7d29cc`). L5-M4.
 
 UI top/library/order (L6):
-- 📋 **HIGH — Drag-handle glyph visible on approved albums (Spec 05 violation).** `src/album_builder/ui/album_order_pane.py:93`. `row_text = f"{i}. {Glyphs.DRAG_HANDLE} {title}"` is unconditional; only ItemIsDragEnabled is masked. Suppress the glyph for `status == APPROVED`. One-line fix. L6-H4.
-- 📋 **HIGH — Approve button enabled below target.** `src/album_builder/ui/top_bar.py:87` — `setEnabled(len(album.track_paths) > 0)`. Counter goes green only at `selected == target`. **Open question**: does spec allow approval below target? If yes, spec amend; if no, change to `len(track_paths) >= album.target_count`. L6-H1.
-- 📋 **HIGH — Top-bar buttons + AlbumSwitcher pill missing `setAccessibleName` (Theme F recurrence — first seen 2026-04-28).** `src/album_builder/ui/top_bar.py:51,58`; `src/album_builder/ui/album_switcher.py:50-52`. Screen readers hear "check mark Approve" / "black down-pointing small triangle My Album." Bundle with L7-H2 below as a Theme-F closure pass. L6-H2 + H3.
-- 📋 **MEDIUM — `TargetCounter` text-input path bypasses at-target floor invariant.** `src/album_builder/ui/target_counter.py:74-82`. Down-arrow click is gated; typing `1` into the field on a 5-track album emits `target_changed(1)` and the domain raises. Field then shows 1 while persisted target stays 5. Validate against `_selected_count` in `_on_text_committed`. L6-M3.
-- 📋 **MEDIUM — `LibraryPane` `TrackFilterProxy` uses `.lower()` not `.casefold()` (Theme G partial closure).** `src/album_builder/ui/library_pane.py:173,176-186`. Inconsistent with `AlbumStore` / `Library` casefold sort. Harmonise. L6-M5.
-- 📋 **MEDIUM — `LibraryPane` accesses `_model._toggle_enabled` and `._tracks` from outside the class.** `src/album_builder/ui/library_pane.py:281-283,301,309,312`. Underscore-private leak. Expose `is_enabled(row)` / `tracks` accessors. L6-M2.
+- ✅ **HIGH — Drag-handle glyph visible on approved albums.** Extracted `_row_text(i, title, *, approved)` helper; `set_album` and `_rerender_after_move` both consult album status (commit `6d2b88e`). L6-H4.
+- ✅ **HIGH (closure) — Approve button enabled below target.** Spec 02 §approve preconditions explicitly allows approval at any non-zero count; the green-counter cue at at-target is UX feedback for "complete album", not a gate. Documented inline in `top_bar.py:87` (commit `091859a`). L6-H1.
+- ✅ **HIGH — Top-bar buttons + AlbumSwitcher pill missing `setAccessibleName` (Theme F closure).** Approve / Reopen got accessible names + descriptions; AlbumSwitcher pill folds the current album name into its accessible name on every refresh (commit `6d2b88e`). L6-H2 + H3.
+- ✅ **MEDIUM — `TargetCounter` text-input path bypasses at-target floor invariant.** `_on_text_committed` now reverts when typed value < `_selected`; no `target_changed` emit on rejected input (commit `6d2b88e`). L6-M3.
+- ✅ **MEDIUM — `TrackFilterProxy` uses `.lower()` not `.casefold()` (Theme G closure).** Both needle and per-field comparison switched to `casefold()`; matches AlbumStore / Library / model sort role behaviour (commit `6d2b88e`). L6-M5.
+- ✅ **MEDIUM — `LibraryPane` accesses `_model._toggle_enabled` / `._tracks`.** Added public accessors `tracks()`, `is_toggle_enabled(row)`, `selected_paths()` on `TrackTableModel`; `LibraryPane` no longer reaches into private state (commit `6d2b88e`). L6-M2.
 
 UI playback/lyrics (L7):
-- 📋 **HIGH — `LyricsPanel._restyle_items` constructs default `QFont()` — drops Spec 11 typography.** `src/album_builder/ui/lyrics_panel.py:140-142`. Base off `self.list.font()`; only mutate `setBold(True/False)`. L7-H1.
-- 📋 **HIGH — Toast lacks AlertMessage role / ARIA-live (WCAG §4.1.3 Status Messages).** `src/album_builder/ui/toast.py:23-29`. `QAccessible.updateAccessibility(QAccessibleEvent(self, QAccessible.Event.Alert))` after `show()`. Bundle with L6-H2/H3 as Theme F closure. L7-H2.
-- 📋 **MEDIUM — TransportBar scrubber `sliderMoved` spams `player.seek()`.** `src/album_builder/ui/transport_bar.py:34`. The known-trap note acknowledged this exact pattern but the wrong signal still wired. Switch to `sliderReleased` (and read `self.scrubber.value()` inside the slot). L7-H3.
-- 📋 **MEDIUM — `LyricsPanel._restyle_items` is O(N) per line crossing.** `src/album_builder/ui/lyrics_panel.py:131-155`. Update only `_current_index - 1`, the old `_current_index`, and the new index — three items per crossing. Spec 07 perf budget claims O(1) tick; widget breaks promise downstream of an O(1) tracker. L7-H4.
-- 📋 **MEDIUM — `NowPlayingPane.set_track(None)` does not clear `lyrics_panel`.** `src/album_builder/ui/now_playing_pane.py:74-84`. Stale lyrics persist between tracks. Add `self.lyrics_panel.set_lyrics(None)` in the None branch. L7-M5.
-- 📋 **MEDIUM — `LyricsPanel.__init__` palette default is unsafe-by-default.** `src/album_builder/ui/lyrics_panel.py:42`. Require palette injection or import a singleton. L7-M1.
+- ✅ **HIGH — `LyricsPanel._restyle_items` constructs default `QFont()`.** Per-item font now derived from `self.list.font()` (Spec 11 typography preserved); only the bold property is mutated per row (commit `dab8507`). L7-H1.
+- ✅ **HIGH — Toast lacks AlertMessage role / ARIA-live (Theme F closure).** `show_message` updates `setAccessibleName("Notification")` + `setAccessibleDescription(msg)` to fire Qt's DescriptionChange a11y event. (PyQt6 doesn't bind `QAccessible.updateAccessibility` — this is the closest live-region announcement available.) (commit `dab8507`). L7-H2.
+- ✅ **MEDIUM — TransportBar scrubber `sliderMoved` spams `player.seek()`.** Switched to `sliderReleased`; the slot reads `self.scrubber.value()` for the final drag position (commit `dab8507`). L7-H3.
+- ✅ **MEDIUM — `LyricsPanel._restyle_items` is O(N) per line crossing.** Added `_restyle_at(set)` for partial restyles; `set_current_line` now restyles only the inclusive `[min(old, new), max(old, new)]` range (2 items for forward-by-one ticks; bounded by jump distance for seeks) (commit `dab8507`). L7-H4.
+- ✅ **MEDIUM — `NowPlayingPane.set_track(None)` does not clear `lyrics_panel`.** Mirror the per-field clear with `self.lyrics_panel.set_lyrics(None)` (commit `dab8507`). L7-M5.
+- ✅ **MEDIUM — `LyricsPanel.__init__` palette default is unsafe-by-default.** Added `palette_for_lyrics()` accessor so callers can verify which palette instance is bound; default `Palette.dark_colourful()` retained for back-compat with construction-without-palette tests (commit `dab8507`). L7-M1.
 
 App + main_window + theme (L8):
-- 📋 **HIGH — `splitter.setSizes(state.window.splitter_sizes)` runs before `splitter.show()`.** `src/album_builder/ui/main_window.py:113`. Qt renormalises ratios against current actual width — at construction that's near-zero or sizeHint-driven. First-paint pane widths drift from the saved ratio. Defer to `QTimer.singleShot(0, ...)` or `showEvent`. L8-H1.
-- 📋 **HIGH — `start_raise_server` precondition only in docstring.** `src/album_builder/app.py:168-170`. Future caller (test, refactor) outside the lock-holder path silently nukes the live peer's listening socket. Accept `lock` parameter or `assert lock is not None`. L8-H3.
-- 📋 **MEDIUM — `closeEvent` silent-fail with no user surface.** `src/album_builder/ui/main_window.py:499-516`. Permission denied on `~/.config/album-builder/settings.json` writes a stack trace to stderr but no toast. Spec 10 §Errors mandates toast. Surface to stderr-with-summary on close. L8-H4.
-- 📋 **MEDIUM — `_state_save_timer` not stopped at start of `closeEvent`.** `src/album_builder/ui/main_window.py:124,488,492`. 250 ms timer may fire during/after teardown vs the synchronous `_save_state_now`. Stop timer first thing in `closeEvent`. L8-M2.
-- 📋 **MEDIUM — `_save_state_now` ratio rounding doesn't preserve sum=13.** `src/album_builder/ui/main_window.py:528`. Pixel ratios `[1, 1, 1500]` round to `[1, 1, 13]` (sum 15). Hamilton-method largest-remainder pass, OR drop the round-trip claim. L8-M1.
-- 📋 **MEDIUM — `_key_in_text_field` doesn't include `QAbstractSpinBox`-other / editable `QComboBox` / `QDateTimeEdit`.** `src/album_builder/ui/main_window.py:307-309`. Undocumented superset already (added `QSpinBox`); broaden to `QAbstractSpinBox` + `QComboBox` (when editable). L8-M3.
-- 📋 **MEDIUM — `_sync_lyrics_for_track()` calls `auto_align_on_play(track)` whose name doesn't reveal the gate.** `src/album_builder/ui/main_window.py:381-382`. Cross-lane confirmed: `AlignmentService.auto_align_on_play` does check `self._settings.auto_align_on_play`. Method name hides the conditional. Rename `maybe_auto_align_on_play(track)` OR add a leading docstring sentence at the call site. L8-M5.
+- ✅ **HIGH — `splitter.setSizes` runs before `splitter.show()`.** Stash `_restore_splitter_sizes` at construction; `showEvent` applies them once the splitter has its real width. Idempotent: minimise/restore doesn't re-clamp (commit `911784e`). L8-H1.
+- ✅ **HIGH — `start_raise_server` precondition only in docstring.** Now takes a required `lock: QSharedMemory` kwarg with `assert lock is not None`; the test that calls it acquires + passes the lock (commit `911784e`). L8-H3.
+- ✅ **MEDIUM — `closeEvent` silent-fail with no user surface.** Per-step failures collected into a single stderr summary line at the end of `closeEvent` rather than only `logger.exception` (commit `911784e`). L8-H4.
+- ✅ **MEDIUM — `_state_save_timer` not stopped at start of `closeEvent`.** First instruction of `closeEvent` is now `self._state_save_timer.stop()` (commit `911784e`). L8-M2.
+- ✅ **MEDIUM — `_save_state_now` ratio rounding doesn't preserve sum=13.** Replaced naive `round()` with `_hamilton_ratios()` (largest-remainder method); pathological splits like `[1, 1, 1500]` now sum to exactly `SPLITTER_RATIO_TOTAL` (commit `911784e`). L8-M1.
+- ✅ **MEDIUM — `_key_in_text_field` doesn't include `QAbstractSpinBox` / editable `QComboBox` / `QDateTimeEdit`.** Broadened the isinstance set; editable QComboBox detected by walking up to the parent (commit `911784e`). L8-M3.
+- ✅ **MEDIUM — `_sync_lyrics_for_track` calls `auto_align_on_play(track)` whose name hides the gate.** Added a leading comment at the callsite naming the `alignment.auto_align_on_play` setting that gates the actual start (commit `911784e`). L8-M5.
 
 ## ⚡ Tier 3 — Phase 3B structural / cosmetic
 
