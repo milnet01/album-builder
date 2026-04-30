@@ -85,6 +85,45 @@ def test_parse_lrc_raises_on_no_timestamps():
         parse_lrc("just\nplain\ntext\n")
 
 
+# Indie-review L1-H2: a file with 1 valid timestamped line and 9 garbage
+# lines (no leading timestamp, not a tag header) currently parses
+# "successfully", giving the persistence layer no signal to drive the
+# `<stem>.lrc.bak` decision (Spec 07 TC-07-10). Raise when the malformed
+# ratio exceeds 50% of non-blank/non-header lines.
+def test_parse_lrc_raises_on_majority_malformed():
+    text = "[00:01.00]hi\n" + "\n".join(["random garbage line"] * 9)
+    with pytest.raises(LRCParseError):
+        parse_lrc(text)
+
+
+def test_parse_lrc_tolerates_minority_malformed():
+    """8 valid + 2 garbage = 20% < 50% threshold; parses cleanly."""
+    text = "\n".join([
+        "[00:01.00]a",
+        "[00:02.00]b",
+        "[00:03.00]c",
+        "[00:04.00]d",
+        "[00:05.00]e",
+        "[00:06.00]f",
+        "[00:07.00]g",
+        "[00:08.00]h",
+        "stage direction garbage",
+        "another garbage line",
+    ])
+    lyrics = parse_lrc(text)
+    assert len(lyrics.lines) == 8
+
+
+# Indie-review L1-H1: parse_lrc should accept a `track_path` kwarg so the
+# domain Lyrics returned has its `track_path` field populated without the
+# persistence layer having to rebuild a fresh dataclass after the parse.
+def test_parse_lrc_threads_track_path():
+    from pathlib import Path
+    p = Path("/abs/song.mp3")
+    lyrics = parse_lrc("[00:01.00]hi", track_path=p)
+    assert lyrics.track_path == p
+
+
 def test_parse_lrc_handles_three_digit_minutes():
     """Some LRCs use 3-digit minute fields for tracks > 99 minutes."""
     text = "[100:00.00]way late"

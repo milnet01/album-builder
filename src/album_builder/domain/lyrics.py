@@ -49,20 +49,28 @@ def _stamp_to_seconds(match: re.Match[str]) -> float:
     return minutes * 60 + seconds + frac
 
 
-def parse_lrc(text: str) -> Lyrics:
-    """Parse an LRC string into a `Lyrics`. Raises `LRCParseError` on no lines.
+def parse_lrc(text: str, *, track_path: Path | None = None) -> Lyrics:
+    """Parse an LRC string into a `Lyrics`. Raises `LRCParseError` on no lines
+    or when the majority of content lines are unparseable.
 
     Tag headers (`[ti:..]`, `[ar:..]`, `[al:..]`, `[length:..]`) are skipped
-    silently. Lines without a leading timestamp are skipped. Multiple
-    timestamps on one line emit one `LyricLine` per stamp with shared text.
-    """
+    silently. Lines without a leading timestamp count as malformed; the
+    parser raises when malformed lines exceed 50% of non-blank, non-tag-
+    header lines so the persistence layer (Spec 07 TC-07-10) gets a clear
+    `.lrc.bak` signal on a noisy file. Multiple timestamps on one line emit
+    one `LyricLine` per stamp with shared text. `track_path`, when given,
+    is bound on the returned `Lyrics` so callers don't need to rebuild it
+    (Spec 07 §Outputs)."""
     lines: list[LyricLine] = []
+    malformed = 0
+    content_lines = 0  # non-blank, non-tag-header; the denominator for the ratio.
     for raw in text.splitlines():
         stripped = raw.strip()
         if not stripped:
             continue
         if _TAG_HEADER.match(stripped):
             continue
+        content_lines += 1
         # Walk leading timestamps
         stamps: list[float] = []
         cursor = 0
@@ -73,6 +81,7 @@ def parse_lrc(text: str) -> Lyrics:
             stamps.append(_stamp_to_seconds(m))
             cursor = m.end()
         if not stamps:
+            malformed += 1
             continue
         body = stripped[cursor:].strip()
         is_marker = bool(_SECTION_MARKER.match(body))
@@ -80,8 +89,15 @@ def parse_lrc(text: str) -> Lyrics:
             lines.append(LyricLine(time_seconds=t, text=body, is_section_marker=is_marker))
     if not lines:
         raise LRCParseError("LRC contains no parseable timestamped lines")
+    # L1-H2: refuse a file where the majority of content lines didn't parse;
+    # the persistence layer treats LRCParseError as "move to .bak".
+    if content_lines and malformed * 2 > content_lines:
+        raise LRCParseError(
+            f"LRC has {malformed} malformed line(s) out of {content_lines} content lines "
+            f"(>50% threshold); treating file as corrupt"
+        )
     lines.sort(key=lambda ln: ln.time_seconds)
-    return Lyrics(lines=tuple(lines))
+    return Lyrics(lines=tuple(lines), track_path=track_path)
 
 
 def _format_stamp(seconds: float) -> str:

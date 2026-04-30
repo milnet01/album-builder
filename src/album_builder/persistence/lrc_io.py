@@ -54,7 +54,9 @@ def read_lrc(audio_path: Path) -> Lyrics | None:
         logger.warning("LRC unreadable at %s: %s", lrc, exc)
         return None
     try:
-        lyrics = parse_lrc(text)
+        # parse_lrc binds track_path so downstream consumers (LyricsTracker,
+        # panel) can identify which audio this Lyrics is for (L1-H1).
+        return parse_lrc(text, track_path=audio_path)
     except LRCParseError as exc:
         bak = lrc.with_suffix(".lrc.bak")
         try:
@@ -63,9 +65,6 @@ def read_lrc(audio_path: Path) -> Lyrics | None:
         except OSError as move_exc:
             logger.warning("Could not back up malformed LRC %s: %s", lrc, move_exc)
         return None
-    # Bind the on-disk path so downstream consumers (LyricsTracker, panel)
-    # can identify which audio this Lyrics is for.
-    return Lyrics(lines=lyrics.lines, track_path=audio_path)
 
 
 def write_lrc(audio_path: Path, lyrics: Lyrics) -> None:

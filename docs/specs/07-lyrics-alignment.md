@@ -64,8 +64,10 @@ Show synchronized scrolling lyrics in the now-playing pane. The line being sung 
 
   @dataclass(frozen=True)
   class Lyrics:
-      lines: list[LyricLine]    # sorted by time
-      track_path: Path
+      lines: tuple[LyricLine, ...]   # sorted by time; coerced from any iterable
+      track_path: Path | None = None # bound by parse_lrc(track_path=...) or
+                                     # by an alignment-worker construction;
+                                     # None for "empty Lyrics, no track yet"
   ```
 
 ## Lyrics tracker
@@ -144,7 +146,7 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 | TC-07-15 | `tests/ui/test_lyrics_panel.py::test_visual_styling_uses_palette_tokens` |
 
 - **TC-07-01** — `parse_lrc(text)` returns `Lyrics` with line times in seconds and section markers flagged correctly.
-- **TC-07-02** — `format_lrc(Lyrics)` round-trips byte-identical text on a fixture LRC.
+- **TC-07-02** — `format_lrc(Lyrics)` round-trips to **semantically equivalent** text on a fixture LRC: re-parsing the formatter output reproduces the original `Lyrics.lines` (same `time_seconds` to centisecond precision, same `text`, same `is_section_marker`). Byte-identical equality is intentionally not contracted because the in-memory `Lyrics` does not retain headers (`[ti:..]`/`[ar:..]`/`[al:..]`/`[length:..]`), line-ending style, multi-stamp grouping, or comment lines from the input — those are surface metadata, not part of the playable contract. Headers, when desired, are passed explicitly to `format_lrc(...)` by the caller. *(Indie-review L1-H3 amendment, 2026-04-30.)*
 - **TC-07-03** — `tracker.line_at(t)` returns the correct index for boundary cases: before the first line (`-1`), exactly at a line, between lines, exactly at the last line, after the last line.
 - **TC-07-04** — `tracker` advances monotonically: a position tick that goes backward (seek) re-runs the search; forward ticks use the cached "last index" hint and run in O(1).
 - **TC-07-05** — `current_line_changed(index)` emits exactly when the line crosses; not on every position tick.
