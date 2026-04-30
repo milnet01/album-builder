@@ -8,6 +8,22 @@ Working roadmap for the Album Builder app. Tracks completed phases, in-flight fi
 
 ---
 
+## ✅ v0.4.2 — Phase 3B Tier 3 sweep (2026-04-30)
+
+Patch release closing the `/indie-review` Tier 3 structural / cosmetic queue. Same-day follow-up to v0.4.1; no user-facing feature changes (one user-visible polish: body font-size now 11.5px to match Spec 11 §Typography exactly, was ~14.7px from `11pt` at 96dpi).
+
+**Shipped (18 items across 5 logical batches):**
+
+- **Domain (4):** `Album` switches to `dataclass(eq=False)` + UUID-identity `__eq__`/`__hash__` (L1-M2; two reads of the same album that differ only by `updated_at` ms drift now compare equal); `Library.find` documents the resolve cost; `_STAMP` regex documents the 999-minute (~16h39m) upper bound (L1-M4); `slugify` adds a manual transliteration table for Latin-1 ligatures NFKD doesn't decompose (Æ→ae, Œ→oe, Ð→d, Þ→th, Ø→o, Ł→l, Đ→d, Ħ→h).
+- **Services (5):** `Player.set_source(None)` clears via `setSource(QUrl())` instead of raising `TypeError` (L3-M1); `seek()` documents the `[0, duration - 1.0]` clamp + short-track corner case (L3-M2); `match qstate:` adds `case _:` default for forward-compat; Qt event handler params typed (`PlaybackState`/`MediaStatus`/`Error`); `LyricsTracker._compute_index` forward fast path now also tries `hint+1` before linear-scan fallback (L4-M3 — foreground-playing tracks stay O(1) per tick across single-line crossings).
+- **App + UI + theme (7):** `DEFAULT_TRACKS_DIR` renamed `_DEV_TREE_TRACKS_DIR` (gated to dev-mode) + `USER_MUSIC_DIR` (~/Music) added as installed-user fallback (L8-info); window title is bare "Album Builder" (L8-info — `setApplicationVersion` rendered separately by KDE/GNOME shells); body `font-size: 11pt` → `11.5px` (Spec 11 §Typography); `closeEvent` stderr summary scrubs `$HOME` → `~` via `_redact_home()` (L8-privacy); `LibraryPane.set_tracks` annotation widened to `Sequence[Track]`; `LibraryPane.row_accent_at` narrows `model.data()` return via `isinstance(value, str)`; `AlbumOrderPane._rerender_after_move` narrows `itemWidget()` via `isinstance(widget, _OrderRowWidget)`.
+- **Theme J (1):** Glyphs single-source-of-truth sweep — `Glyphs.CHECK` / `TOGGLE_ON` / `TOGGLE_OFF` / `SEARCH` / `CLOSE` consumed at every previously-duplicated site (alignment_status.py, library_pane.py × 2, toast.py); literal-vs-escape convention documented at the namespace.
+- **Theme I (1):** Test-filename prefix convention adopted forward-only via CLAUDE.md addition. NEW load-bearing tests use `test_TC_NN_*` / `test_WCAG_*` / `test_RFC_*` prefixes; existing files keep their names (retroactive rename would cascade through 15+ doc references without improving correctness).
+
+**Test count:** 408 → 415 passing (+7 regression tests). Ruff clean.
+
+---
+
 ## ✅ v0.4.1 — Phase 3B hardening (2026-04-30)
 
 Patch release closing the `/indie-review` Tier 2 hardening queue. Same-day follow-up to v0.4.0; no user-facing feature changes. The detailed fix breakdown lives in the per-tier section below.
@@ -113,9 +129,9 @@ huggingface behaviour proves unreliable in practice.
 
 Tools run: ruff, bandit, semgrep (`p/security-audit` + `p/python`), gitleaks, trivy fs, pyright, shellcheck. Six tools clean (0 findings each); pyright surfaced 65 raw → 3 actionable (95% noise from PyQt6 stub conservatism: `objectName=` kwarg, `Optional[X]` returns from `QListWidget.item()` / `QMenu.addAction()`, parameter-name mismatch on `resizeEvent` overrides, mutagen import resolution on system-Python pyright). Filtered manually given small volume.
 
-- 📋 **LOW — `LibraryPane.set_library` annotation lags `Library.tracks` shape change.** `src/album_builder/ui/library_pane.py:263`. `library.tracks` is `tuple[Track, ...]` since the Tier 3 sweep but `_model.set_tracks` declares `list[Track]`. Widen to `Sequence[Track]`; runtime is fine.
-- 📋 **LOW — `AlbumOrderPane._rerender_after_move` calls `setText` on `QWidget` static type.** `src/album_builder/ui/album_order_pane.py:168`. `self.list.itemWidget(item)` returns `QWidget` per stubs; the concrete row widget is `_OrderRowWidget` which defines `setText`. Narrow via `isinstance(widget, _OrderRowWidget)` so a future row-widget swap fails at type-check time, not runtime.
-- 📋 **LOW — `LibraryPane.row_accent_at` return annotation too narrow.** `src/album_builder/ui/library_pane.py:285,293`. Declared `-> str | None` but `TrackTableModel.data()` for the toggle column's sort role returns `tuple[bool, str]` (Tier 2 fix L5-H2). The callsite uses the title column so the actual returned value is `str | None`, but pyright can't narrow statically. Annotate `Any`, or split `data()` by role.
+- ✅ **LOW — `LibraryPane.set_tracks` annotation widened to `Sequence[Track]`.** Now matches `Library.tracks: tuple[Track, ...]` (commit `b00807b`).
+- ✅ **LOW — `AlbumOrderPane._rerender_after_move` narrows `itemWidget()`.** `isinstance(widget, _OrderRowWidget)` makes a future row-widget swap fail at type-check time rather than runtime (commit `b00807b`).
+- ✅ **LOW — `LibraryPane.row_accent_at` narrowed via `isinstance(value, str)`.** Toggle-column sort tuple can't leak through the title-column lookup (commit `b00807b`).
 
 Also recommended (not code findings):
 
@@ -209,21 +225,23 @@ App + main_window + theme (L8):
 
 ## ⚡ Tier 3 — Phase 3B structural / cosmetic
 
-- 📋 **MEDIUM — Glyphs single-source-of-truth sweep (Theme J closure).** Move `✓` (alignment_status.py:51), `🔍`/`●`/`○` (library_pane.py:116,211), `"x"` (toast.py:26) into `theme.Glyphs`; pick literal-vs-escape consistency for the namespace itself.
-- 📋 **MEDIUM — Test naming discipline (Theme I closure).** Adopt `TC_NN_MM_*` / `WCAG_2_1_1_*` / `RFC_8259_*` filename prefixes for at least the load-bearing tests so file listings expose the contract anchor independent reviewers can read. Pattern flagged by all 8 lanes.
-- 📋 **LOW — `Album` uses default dataclass `__eq__` (full-field) instead of identity-by-UUID.** `src/album_builder/domain/album.py:38`. Two reads of the same album that differ only by `updated_at` (millisecond drift) compare unequal. Footgun for any `album in some_list` / `dict[album]` use. L1-M2.
-- 📋 **LOW — `Library.find` resolves the input path on every call.** `src/album_builder/domain/library.py:91-96`. Document precondition (input is already-resolved) or memoise. L1-M3.
-- 📋 **LOW — `_format_stamp` truncates minutes ≥ 1000 silently.** `src/album_builder/domain/lyrics.py:87-92`. Document the ~16-hour upper bound at the regex. L1-M4.
-- 📋 **LOW — `slugify` falls back to "album" for `Æ`/`Œ`/`Ð` unicode that NFKD doesn't decompose.** `src/album_builder/domain/slug.py:31-32`. Add a manual transliteration table for common Latin-1 ligatures, OR document.
-- 📋 **LOW — `seek()` clamps below 1.0s duration to 0.** `src/album_builder/services/player.py:92-96`. Document the chosen behaviour. L3-M2.
-- 📋 **LOW — `match qstate:` has no `case _:` default.** `src/album_builder/services/player.py:141`. Forward-compat for Qt 7.
-- 📋 **LOW — `Player` event handler params untyped (`qstate`, `status`, `error`).** `src/album_builder/services/player.py:135,152,156`. L3-L1.
-- 📋 **LOW — `LyricsTracker._compute_index` cached-hint fast-path covers only "within current line"; doesn't try `hint+1` first.** `src/album_builder/services/lyrics_tracker.py:64-75`. Micro-opt for forward line-crossings. L4-M3.
-- 📋 **LOW — `_set_source(None)` raises `TypeError` from `Path(None)`.** `src/album_builder/services/player.py:62-63`. Either `path: Path | None` + `setSource(QUrl())` or document the contract. L3-M1.
-- 📋 **LOW — Hardcoded developer absolute path in `DEFAULT_TRACKS_DIR`.** `src/album_builder/app.py:39`. Logged on startup; visible to installed users. L8-info.
-- 📋 **LOW — Window title duplicates app version.** `src/album_builder/ui/main_window.py:65`. KDE shells render `app.setApplicationVersion` separately. L8-info.
-- 📋 **LOW — `theme.qt_stylesheet` uses `font-size: 11pt` (= 14.7px at 96dpi); Spec 11 §Typography says 11.5px body.** `src/album_builder/ui/theme.py:72`. ~30% off. Either Spec is the typo, or implementation is. L8-info.
-- 📋 **LOW — `closeEvent` `logger.exception` may leak `~/` paths into shared stderr redirection.** Single-user local app; flag for future awareness. L8-privacy.
+✅ **All 15 landed 2026-04-30 in v0.4.2** across 5 commits. 408 → 415 tests pass; ruff clean. One MEDIUM item closed by policy (Theme I — test-filename prefix convention adopted forward-only via CLAUDE.md addition; retroactive rename of 30+ test files would cascade through 15+ doc references without improving correctness).
+
+- ✅ **MEDIUM — Glyphs single-source-of-truth sweep (Theme J closure).** Moved `✓` (alignment_status.py), `🔍`/`●`/`○` (library_pane.py), `"x"` (toast.py) to `theme.Glyphs`; literal-vs-escape convention documented at the namespace (commit `d4ef58f`).
+- ✅ **MEDIUM — Test naming discipline (Theme I closure, by policy).** CLAUDE.md adds the forward-only convention: NEW load-bearing test files use `test_TC_NN_*` / `test_WCAG_*` / `test_RFC_*` prefixes. Inline `# Spec:` markers stay required at every test body regardless of filename (commit `1f336df`).
+- ✅ **LOW — `Album` UUID-identity `__eq__`/`__hash__`.** Switched to `dataclass(eq=False)` + explicit identity by `id`. Reads that differ only by `updated_at` ms drift now compare equal (commit `46a33e0`). L1-M2.
+- ✅ **LOW — `Library.find` resolve cost.** Documented at the call site; callers in tight loops should pre-resolve once (commit `46a33e0`). L1-M3.
+- ✅ **LOW — `_format_stamp` 16h cap.** Documented at the `_STAMP` regex (commit `46a33e0`). L1-M4.
+- ✅ **LOW — `slugify` Latin-1 ligature transliteration.** Manual table for Æ/Œ/Ð/Þ/Ø/Ł/Đ/Ħ added before the ASCII-encode step. "Łódź" now slugs to "lodz" not "odz" (commit `46a33e0`).
+- ✅ **LOW — `seek()` clamp below 1.0s.** Documented; tracks <1.0s always seek to start (commit `5ad12f8`). L3-M2.
+- ✅ **LOW — `match qstate:` default case.** Added `case _: pass` for forward-compat with future Qt PlaybackState additions (commit `5ad12f8`).
+- ✅ **LOW — Player handler params typed.** `_on_playback_state` / `_on_media_status` / `_on_error` annotated with `QMediaPlayer.{PlaybackState,MediaStatus,Error}` (commit `5ad12f8`). L3-L1.
+- ✅ **LOW — `LyricsTracker._compute_index` `hint+1` fast path.** Foreground-playing tracks stay O(1) per tick across single-line crossings; two+-line jumps still fall back (commit `5ad12f8`). L4-M3.
+- ✅ **LOW — `Player.set_source(None)` clear.** `path: Path | None` + `setSource(QUrl())`; no more `TypeError` from `Path(None)` (commit `5ad12f8`). L3-M1.
+- ✅ **LOW — Hardcoded `DEFAULT_TRACKS_DIR` path.** Renamed `_DEV_TREE_TRACKS_DIR` (gated to dev mode) + `USER_MUSIC_DIR` (~/Music) added as installed-user fallback (commit `b00807b`). L8-info.
+- ✅ **LOW — Window title duplicates app version.** Title is bare "Album Builder"; `setApplicationVersion` rendered separately by shell (commit `b00807b`). L8-info.
+- ✅ **LOW — Theme font-size 11pt vs Spec 11 11.5px.** Switched body to `font-size: 11.5px`; pixel units sidestep dpi conversion and stay font-anchored across screen scales (commit `b00807b`). L8-info.
+- ✅ **LOW — `closeEvent` `~/` path leak.** `_redact_home()` scrubs `$HOME` → `~` in the per-step failure summary so a desktop launcher redirecting stderr to a shared journal can't expose the username via os-level exception paths (commit `b00807b`). L8-privacy.
 
 ## 🔭 Methodology gaps (standing practice for v0.5+)
 
