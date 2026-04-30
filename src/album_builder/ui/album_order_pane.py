@@ -41,6 +41,10 @@ class _OrderRowWidget(QWidget):
     state; the widget is just a viewport visual.
     """
 
+    # Spec 06 TC-06-22: row-body click (the label area, not the play
+    # button) emits this so the parent pane can re-emit the row's path.
+    body_clicked = pyqtSignal()
+
     def __init__(self, text: str, path: Path, title: str, on_preview, parent=None) -> None:
         super().__init__(parent)
         self._path = path
@@ -52,6 +56,11 @@ class _OrderRowWidget(QWidget):
         self.btn_play.clicked.connect(lambda: on_preview(self._path))
 
         self.label = QLabel(text, objectName="OrderRowLabel")
+        # Let mouse events fall through the label to this widget, so
+        # mousePressEvent fires for clicks on the title text area.
+        # The play button still absorbs its own clicks (QPushButton
+        # accepts mouse events by default).
+        self.label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(2, 2, 2, 2)
@@ -61,6 +70,31 @@ class _OrderRowWidget(QWidget):
 
     def setText(self, text: str) -> None:
         self.label.setText(text)
+
+    def mousePressEvent(self, e):
+        # Capture the press position so mouseReleaseEvent can decide
+        # whether this was a click (preview) or the start of a drag
+        # (reorder). Drag handling is owned by QListWidget's InternalMove,
+        # not by this widget — so we only need to distinguish "press +
+        # release in place" from "press + significant movement."
+        self._press_pos = e.pos()
+        super().mousePressEvent(e)
+
+    def mouseReleaseEvent(self, e):
+        # Spec 06 TC-06-22: clicks on the row body (label area, NOT the
+        # play button — QPushButton absorbs its own clicks before this
+        # event fires here) emit body_clicked. Suppress when the gesture
+        # was a drag — the press-to-release distance exceeds Qt's
+        # startDragDistance, in which case QListWidget has already
+        # consumed the gesture for InternalMove reordering.
+        from PyQt6.QtWidgets import QApplication
+        press = getattr(self, "_press_pos", None)
+        if press is not None:
+            delta = e.pos() - press
+            if abs(delta.x()) <= QApplication.startDragDistance() and \
+               abs(delta.y()) <= QApplication.startDragDistance():
+                self.body_clicked.emit()
+        super().mouseReleaseEvent(e)
 
     def set_active(self, *, playing: bool) -> None:
         """Spec 06 TC-06-19: flip the row's glyph + a11y between PAUSE
@@ -80,6 +114,9 @@ class _OrderRowWidget(QWidget):
 class AlbumOrderPane(QFrame):
     reordered = pyqtSignal()                          # Type: caller schedules save
     preview_play_requested = pyqtSignal(object)       # Type: Path
+    # Spec 06 TC-06-22: row-body click (label area only) — MainWindow gates
+    # the preview-without-play behaviour on Player.state() == STOPPED.
+    row_body_clicked = pyqtSignal(object)             # Type: Path
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -142,6 +179,10 @@ class AlbumOrderPane(QFrame):
                     item.setData(MISSING_ROLE, True)
                 self.list.addItem(item)
                 row_widget = _OrderRowWidget(row_text, p, title, self._emit_preview)
+                # Spec 06 TC-06-22: row-body clicks bubble up as the row's path.
+                row_widget.body_clicked.connect(
+                    lambda path=p: self.row_body_clicked.emit(path)
+                )
                 # Spec 06 TC-06-19: re-applying the active state on a
                 # set_album re-render preserves the PAUSE glyph if the
                 # active source happens to be in the new track list.
@@ -150,6 +191,17 @@ class AlbumOrderPane(QFrame):
                 item.setSizeHint(QSize(0, row_widget.sizeHint().height() + 4))
                 self.list.setItemWidget(item, row_widget)
         self.list.blockSignals(False)
+
+    def set_row_body_cursor_for_state(self, *, stopped: bool) -> None:
+        """Spec 06 TC-06-26: PointingHandCursor on the row-body hit-zone
+        when the player is STOPPED, default cursor otherwise. Mirrors
+        LibraryPane's helper of the same name."""
+        viewport = self.list.viewport()
+        if viewport is None:
+            return
+        viewport.setCursor(
+            Qt.CursorShape.PointingHandCursor if stopped else Qt.CursorShape.ArrowCursor
+        )
 
     def set_active_play_state(self, path: Path | None, playing: bool) -> None:
         """Spec 06 TC-06-17/18/19 — flip the per-row PLAY/PAUSE glyph for

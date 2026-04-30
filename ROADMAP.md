@@ -30,6 +30,25 @@ User-reported UX gaps spotted on the v0.5.1 build:
 
 **Convergence trace:** spec amendments 1-pass cold-eyes review (7 → 0 findings), implementation, post-implementation `/audit` + `/indie-review` (6 → 0 findings). 471 → 484 passing tests (+13: 11 new TC-06-17/18/19 + TC-07-16 contracts and 2 round-1-fold-out additions). Ruff clean. Manual smoke-launch on the `Tracks/` corpus completed without error.
 
+### v0.5.2 follow-up — click-to-preview-when-idle (2026-04-30)
+
+Same release wave; user feedback after the v0.5.2 commit: the running `~/.local`-installed app was still v0.4.1 (the install.sh deploy hadn't been re-run after the v0.5.2 source-tree commit), so the lyrics-pane fill + per-row pause weren't observed. Triaged that as a deployment gap (re-run `install.sh`). Same round, the user requested a new behaviour: **clicking a track row (anywhere outside the play / toggle column) should populate the now-playing pane with that track's metadata + lyrics, but only when nothing is playing**.
+
+**Spec amendments (signed off via 1-pass cold-eyes review, 10 → 0 findings):**
+
+- **Spec 06 §user-visible-behavior** — new top bullet "Row body click previews-without-playing when idle" with sub-bullets for: hit-zones (library = non-_play / non-_toggle columns; album-order = label area only, drag-handle and play button excluded), keyboard-navigation parity (preview is mouse-click only — Enter routes through a separate `_on_table_activated` slot that handles only `_play`/`_toggle`), app-start state (STOPPED on launch, preview enabled from first click; restored `last_played_track_path` is not mutated by preview), `Player.source()` decoupling during preview, hover affordance (PointingHand cursor when STOPPED, Arrow otherwise — applies to both panes' viewports).
+- **Spec 06 Errors table** — new row for "late `state_changed(STOPPED)` arrives after preview populated the now-playing pane" (preview metadata wins; state_changed only repaints row glyphs, not the now-playing block).
+- **Spec 06 test contract** — TC-06-20 (STOPPED → preview), TC-06-21 (PLAYING/PAUSED/ERROR → no-op), TC-06-22 (album-order pane parity), TC-06-23 (`last_played_track_path` not mutated), TC-06-24 (late STOPPED clobber), TC-06-25 (keyboard nav inert), TC-06-26 (cursor mapping for all four states).
+
+**Code changes:**
+
+- `LibraryPane` — new `row_body_clicked` signal; `_on_table_clicked` emits it for non-`_play`/`_toggle` columns; new `_on_table_activated` slot handles keyboard activation (no row-body branch); new `set_row_body_cursor_for_state(stopped=)` method.
+- `_OrderRowWidget` — new `body_clicked` signal; overridden `mousePressEvent` captures press position; overridden `mouseReleaseEvent` emits `body_clicked` only when the press → release delta is within `QApplication.startDragDistance()` (so genuine drags don't fire previews); label has `WA_TransparentForMouseEvents` so clicks fall through to the row widget.
+- `AlbumOrderPane` — new `row_body_clicked` signal; `set_album` connects each row's `body_clicked` to re-emit the row's path; new `set_row_body_cursor_for_state(stopped=)` mirroring the library pane.
+- `MainWindow` — new `_on_row_body_clicked(path)` handler gates on `Player.state() == STOPPED`, then `set_track + _sync_lyrics_for_track`; missing-track shows toast (mirroring `_on_preview_play`); `_on_player_state_changed_for_rows` flips both panes' cursors and is now also called once at end of `__init__` so the construction-time cursor is correct without waiting for a state-change emission.
+
+**Audit/review trace:** post-implementation `/audit` + `/indie-review` (12 → 0 findings, all H+M folded inline). 484 → 500 passing tests (+16: 9 initial TC-06-20..26 contracts + 7 round-1-fold-out additions covering ERROR-state no-op, PAUSED+ERROR cursor, real-mousePress plumbing, play-button-negative case, fresh-LRC lyrics population, Enter-doesn't-preview, construction-time cursor). Ruff clean. Manual smoke pending on `~/.local` install (gated on the running v0.4.1 instance being closed first).
+
 ---
 
 ## ✅ v0.5.1 — Outstanding-roadmap sweep (2026-04-30)

@@ -258,6 +258,12 @@ def _column_index(name: str) -> int:
 class LibraryPane(QFrame):
     selection_toggled = pyqtSignal(object, bool)        # Type: Path, new_state
     preview_play_requested = pyqtSignal(object)         # Type: Path
+    # Spec 06 TC-06-20/21: row-body click (anywhere in the row outside the
+    # play column or the toggle column) emits this signal so MainWindow can
+    # decide whether to populate the now-playing pane (only when the player
+    # is STOPPED). Layered on top of the existing preview_play / toggle
+    # signals — those still fire from their own columns independently.
+    row_body_clicked = pyqtSignal(object)               # Type: Path
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -313,8 +319,11 @@ class LibraryPane(QFrame):
         self.table.clicked.connect(self._on_table_clicked)
         # Keyboard parity with mouse: Enter / Return on a focused toggle cell
         # toggles the selection. Without this, a keyboard-only user (WCAG
-        # 2.2 §2.1.1) cannot operate the column.
-        self.table.activated.connect(self._on_table_clicked)
+        # 2.2 §2.1.1) cannot operate the column. Spec 06 TC-06-25 says the
+        # row-body preview path is **click-only** (Enter does NOT preview),
+        # so Enter routes through `_on_table_activated` which only handles
+        # the _play and _toggle columns.
+        self.table.activated.connect(self._on_table_activated)
         self.table.setAccessibleName("Track library")
         self.table.setAccessibleDescription(
             "Searchable list of tracks. First column previews playback; "
@@ -376,13 +385,38 @@ class LibraryPane(QFrame):
             track = self._model.track_at(row)
             self.preview_play_requested.emit(track.path)
             return
-        if col_attr != "_toggle":
+        if col_attr == "_toggle":
+            if not self._model.is_toggle_enabled(row):
+                return
+            track = self._model.track_at(row)
+            was_selected = track.path in self._model.selected_paths()
+            self.selection_toggled.emit(track.path, not was_selected)
             return
-        if not self._model.is_toggle_enabled(row):
-            return
+        # Spec 06 TC-06-20/21: row-body click on any other column emits
+        # row_body_clicked. MainWindow gates the preview behaviour on
+        # Player.state() == STOPPED.
         track = self._model.track_at(row)
-        was_selected = track.path in self._model.selected_paths()
-        self.selection_toggled.emit(track.path, not was_selected)
+        self.row_body_clicked.emit(track.path)
+
+    def _on_table_activated(self, view_index: QModelIndex) -> None:
+        """Keyboard activation (Enter / Return). Routes only to the _play
+        and _toggle columns; row-body activation is suppressed (Spec 06
+        TC-06-25 — preview-without-play is mouse-click-only)."""
+        if not view_index.isValid():
+            return
+        col_attr = COLUMNS[view_index.column()][1]
+        if col_attr in ("_play", "_toggle"):
+            self._on_table_clicked(view_index)
+
+    def set_row_body_cursor_for_state(self, *, stopped: bool) -> None:
+        """Spec 06 TC-06-26: PointingHandCursor when the player is STOPPED
+        (preview-without-play is enabled), default cursor otherwise."""
+        viewport = self.table.viewport()
+        if viewport is None:
+            return
+        viewport.setCursor(
+            Qt.CursorShape.PointingHandCursor if stopped else Qt.CursorShape.ArrowCursor
+        )
 
     def row_count(self) -> int:
         return self._proxy.rowCount()

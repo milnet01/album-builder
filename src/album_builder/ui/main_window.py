@@ -211,6 +211,11 @@ class MainWindow(QMainWindow):
         self.library_pane.preview_play_requested.connect(self._on_preview_play)
         self.album_order_pane.reordered.connect(self._on_reorder_done)
         self.album_order_pane.preview_play_requested.connect(self._on_preview_play)
+        # Spec 06 TC-06-20..22: row-body click on either pane previews the
+        # row's metadata into now-playing without starting playback, but
+        # only when the player is STOPPED.
+        self.library_pane.row_body_clicked.connect(self._on_row_body_clicked)
+        self.album_order_pane.row_body_clicked.connect(self._on_row_body_clicked)
         library_watcher.tracks_changed.connect(self.library_pane.set_library)
         # Lyrics: tracker → panel (current-line index); panel → service (Align-now)
         self._tracker.current_line_changed.connect(
@@ -241,6 +246,14 @@ class MainWindow(QMainWindow):
                 # Spec 07 cache-hit at startup: if the LRC is fresh, show
                 # the lyrics paused at zero alongside the track.
                 self._sync_lyrics_for_track(track)
+
+        # Spec 06 TC-06-26: at construction time the player is already in
+        # whatever state set_source left it (STOPPED on a fresh app start).
+        # state_changed will not fire on its own — push the current state
+        # through the row-state handler so the panes' cursor and glyph
+        # caches start coherent. The handler writes (path, playing) into
+        # the model; the cursor flips to PointingHandCursor for STOPPED.
+        self._on_player_state_changed_for_rows(self._player.state())
 
         # Restore current album from state (TC-03-07) with fallback (TC-03-09)
         if state.current_album_id and store.get(state.current_album_id):
@@ -531,11 +544,38 @@ class MainWindow(QMainWindow):
         panes so the per-row glyph reflects current player state. Source-
         swaps come through here too, since set_source emits state_changed
         on its ERROR -> STOPPED reset path; cross-row swaps happen inside
-        _on_preview_play and the play() call there triggers state_changed."""
+        _on_preview_play and the play() call there triggers state_changed.
+
+        Also flips the library-pane row-body cursor (TC-06-26):
+        PointingHand when STOPPED (preview-without-play is enabled),
+        default cursor otherwise.
+        """
         path = self._player.source()
         playing = state == PlayerState.PLAYING
         self.library_pane.set_active_play_state(path, playing)
         self.album_order_pane.set_active_play_state(path, playing)
+        stopped = state == PlayerState.STOPPED
+        self.library_pane.set_row_body_cursor_for_state(stopped=stopped)
+        self.album_order_pane.set_row_body_cursor_for_state(stopped=stopped)
+
+    def _on_row_body_clicked(self, path: Path) -> None:
+        """Spec 06 TC-06-20/21/22: row-body click previews-without-playing
+        when idle. Suppressed when state is PLAYING / PAUSED / ERROR — the
+        active track stays on screen."""
+        if self._player.state() != PlayerState.STOPPED:
+            return
+        track = next(
+            (t for t in self._library_watcher.library().tracks if t.path == path),
+            None,
+        )
+        if track is None:
+            # Mirrors _on_preview_play's missing-track toast — gives the
+            # user feedback when an album-order row points at a track
+            # that has vanished from the library since the album was saved.
+            self._toast.show_message(f"Track not in library: {path}")
+            return
+        self.now_playing_pane.set_track(track)
+        self._sync_lyrics_for_track(track)
 
     def _on_preview_play(self, path: Path) -> None:
         # Spec 06 TC-06-17/18: same-row click on the active source
