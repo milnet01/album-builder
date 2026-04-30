@@ -16,6 +16,14 @@ logger = logging.getLogger(__name__)
 DEFAULT_VOLUME = 80
 DEFAULT_MUTED = False
 
+DEFAULT_AUTO_ALIGN_ON_PLAY = False
+DEFAULT_MODEL_SIZE = "medium.en"
+# Spec 07 §Alignment job: WhisperX model sizes the worker recognises. Anything
+# outside this set falls back to the default; v1 doesn't enforce GPU-vs-CPU
+# distinctions because alignment is opt-in and the cost of a too-large model
+# is borne by the user (long alignment, big disk hit), not by app stability.
+ALLOWED_MODEL_SIZES = frozenset({"tiny.en", "base.en", "small.en", "medium.en", "large-v3"})
+
 
 @dataclass(frozen=True)
 class AudioSettings:
@@ -23,6 +31,14 @@ class AudioSettings:
 
     volume: int = DEFAULT_VOLUME
     muted: bool = DEFAULT_MUTED
+
+
+@dataclass(frozen=True)
+class AlignmentSettings:
+    """Spec 07 §Alignment job: opt-in auto-align + Whisper model size."""
+
+    auto_align_on_play: bool = DEFAULT_AUTO_ALIGN_ON_PLAY
+    model_size: str = DEFAULT_MODEL_SIZE
 
 
 def settings_dir() -> Path:
@@ -107,6 +123,39 @@ def write_audio(audio: AudioSettings) -> None:
     """Write audio block to settings.json, preserving other top-level keys."""
     data = _read_settings_dict()
     data["audio"] = {"volume": audio.volume, "muted": audio.muted}
+    path = settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(path, json.dumps(data, indent=2, sort_keys=True))
+
+
+def read_alignment() -> AlignmentSettings:
+    """Return alignment block (auto_align_on_play, model_size), defaults if absent.
+
+    Spec 07: defaults are auto_align_on_play=False (alignment is opt-in) and
+    model_size="medium.en" (the canonical pair faster-whisper / wav2vec2 use).
+    Bool guard on auto_align_on_play; whitelist guard on model_size.
+    """
+    data = _read_settings_dict()
+    block = data.get("alignment")
+    if not isinstance(block, dict):
+        return AlignmentSettings()
+    raw_auto = block.get("auto_align_on_play", DEFAULT_AUTO_ALIGN_ON_PLAY)
+    auto = raw_auto if isinstance(raw_auto, bool) else DEFAULT_AUTO_ALIGN_ON_PLAY
+    raw_size = block.get("model_size", DEFAULT_MODEL_SIZE)
+    if isinstance(raw_size, str) and raw_size in ALLOWED_MODEL_SIZES:
+        size = raw_size
+    else:
+        size = DEFAULT_MODEL_SIZE
+    return AlignmentSettings(auto_align_on_play=auto, model_size=size)
+
+
+def write_alignment(alignment: AlignmentSettings) -> None:
+    """Write alignment block to settings.json, preserving other top-level keys."""
+    data = _read_settings_dict()
+    data["alignment"] = {
+        "auto_align_on_play": alignment.auto_align_on_play,
+        "model_size": alignment.model_size,
+    }
     path = settings_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(path, json.dumps(data, indent=2, sort_keys=True))

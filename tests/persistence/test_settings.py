@@ -145,3 +145,63 @@ def test_audio_write_preserves_tracks_folder(xdg_config: Path) -> None:
     assert data["tracks_folder"] == "/home/u/Music"
     assert data["audio"]["volume"] == 50
     assert data["audio"]["muted"] is True
+
+
+# Spec: TC-07-13 — alignment.{auto_align_on_play, model_size} round-trip
+def test_alignment_defaults_when_file_missing(xdg_config: Path) -> None:
+    """Spec 07: default auto_align_on_play=False, model_size=medium.en."""
+    a = settings.read_alignment()
+    assert a == settings.AlignmentSettings(
+        auto_align_on_play=False, model_size="medium.en"
+    )
+
+
+def test_alignment_defaults_when_block_missing(xdg_config: Path) -> None:
+    xdg_config.mkdir(parents=True)
+    (xdg_config / "settings.json").write_text(json.dumps({"tracks_folder": "/x"}))
+    assert settings.read_alignment() == settings.AlignmentSettings()
+
+
+def test_alignment_round_trip(xdg_config: Path) -> None:
+    settings.write_alignment(
+        settings.AlignmentSettings(auto_align_on_play=True, model_size="small.en")
+    )
+    assert settings.read_alignment() == settings.AlignmentSettings(
+        auto_align_on_play=True, model_size="small.en"
+    )
+
+
+def test_alignment_rejects_non_bool_auto_align(xdg_config: Path) -> None:
+    """1 / 0 / "yes" must not silently flip auto-align on."""
+    xdg_config.mkdir(parents=True)
+    (xdg_config / "settings.json").write_text(
+        json.dumps({"alignment": {"auto_align_on_play": 1, "model_size": "medium.en"}})
+    )
+    assert settings.read_alignment().auto_align_on_play is False
+
+
+def test_alignment_rejects_unknown_model_size(xdg_config: Path) -> None:
+    """`xxl` is not a valid Whisper model — fall back to default."""
+    xdg_config.mkdir(parents=True)
+    (xdg_config / "settings.json").write_text(
+        json.dumps({"alignment": {"auto_align_on_play": False, "model_size": "xxl"}})
+    )
+    assert settings.read_alignment().model_size == "medium.en"
+
+
+def test_alignment_accepts_each_known_model_size(xdg_config: Path) -> None:
+    for size in ("tiny.en", "base.en", "small.en", "medium.en", "large-v3"):
+        settings.write_alignment(
+            settings.AlignmentSettings(auto_align_on_play=False, model_size=size)
+        )
+        assert settings.read_alignment().model_size == size
+
+
+def test_alignment_write_preserves_audio_block(xdg_config: Path) -> None:
+    """Audio + alignment blocks are siblings — write one must not erase the other."""
+    settings.write_audio(settings.AudioSettings(volume=42, muted=False))
+    settings.write_alignment(
+        settings.AlignmentSettings(auto_align_on_play=True, model_size="small.en")
+    )
+    assert settings.read_audio().volume == 42
+    assert settings.read_alignment().model_size == "small.en"
