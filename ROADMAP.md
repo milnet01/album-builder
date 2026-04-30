@@ -23,7 +23,7 @@ Patch release closing the `/indie-review` Tier 2 hardening queue. Same-day follo
 - **UI playback/lyrics (6):** `LyricsPanel._restyle_at()` partial pass (O(|delta|) per line crossing) preserving Spec 11 typography from `list.font()`; Toast surfaces accessible description (Theme F closure; PyQt6 lacks `QAccessible`, so this is the closest live-region announcement available); transport scrubber switched to `sliderReleased`; `NowPlayingPane.set_track(None)` clears the lyrics panel; `LyricsPanel.palette_for_lyrics()` accessor.
 - **App + main_window + theme (7):** splitter `setSizes` deferred to `showEvent` so saved ratios apply against real pane widths; `start_raise_server` requires the SHM lock parameter (assert + test); `closeEvent` collects per-step failures into one stderr summary line; state-save timer stopped first thing in `closeEvent`; Hamilton's largest-remainder method preserves `sum(splitter_sizes) == 13`; `_key_in_text_field` covers `QAbstractSpinBox` / `QDateTimeEdit` / editable `QComboBox`; auto-align gate documented at the call site.
 
-**Test count:** 366 → 408 passing (+42 regression tests). Ruff clean. `/audit` not yet re-run for this batch (will run before v0.4.1 tag).
+**Test count:** 366 → 408 passing (+42 regression tests). Ruff clean. `/audit` (2026-04-30 post-Tier-2): bandit 0 medium/high (5 low — known assert/try-pass patterns from prior runs); gitleaks clean (116 commits scanned).
 
 One Tier-2 item closed by spec rather than code: **L6-H1** (approve-button-below-target) — Spec 02 §approve preconditions explicitly allows approval at any non-zero count; the green-counter cue at at-target is UX feedback for "complete album", not a gate.
 
