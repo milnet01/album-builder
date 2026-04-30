@@ -503,12 +503,19 @@ class MainWindow(QMainWindow):
     def _on_alignment_error(self, _path: Path, msg: str) -> None:
         self._toast.show_message(f"Alignment failed: {msg}")
         if self._looks_like_whisperx_missing(msg) and not self._whisperx_dialog_shown:
+            # Anchor the install hint at sys.executable so it lands in the
+            # app's own venv regardless of dev-tree vs installed location;
+            # bare `pip install` would target the system Python and on
+            # PEP 668 distros (openSUSE, Debian 12+) require an extra
+            # --break-system-packages flag that doesn't even fix the
+            # original problem (the app's venv is a separate site-packages).
+            import sys as _sys
             QMessageBox.warning(
                 self,
                 "WhisperX not installed",
                 "Lyrics alignment requires the optional WhisperX runtime.\n"
                 "Install it via:\n\n"
-                "    pip install whisperx\n\n"
+                f"    {_sys.executable} -m pip install whisperx\n\n"
                 "and restart the app. The first run downloads ~1 GB of model "
                 "files to ~/.cache/album-builder/whisper-models/.",
             )

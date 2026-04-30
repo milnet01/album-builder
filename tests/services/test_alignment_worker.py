@@ -118,9 +118,12 @@ def test_segments_to_lyrics_empty_text_returns_empty_lyrics(tmp_path):
 # Spec: L4-L5 (Tier 1 indie-review 2026-04-30)
 def test_worker_emits_install_hint_when_whisperx_missing(qtbot, tmp_path, monkeypatch):
     """When whisperx isn't installed, run() must emit a copy/paste-able
-    install hint — not the bare 'No module named whisperx' the generic
-    Exception branch would produce. The Phase 3B plan specified this exact
-    hint string ('pip install whisperx')."""
+    install hint that anchors at the running interpreter's pip — bare
+    `pip install` would target whatever pip is on PATH (typically the
+    system Python on PEP 668 distros), which doesn't help when the app
+    runs from its own venv."""
+    import sys as _sys
+
     audio = tmp_path / "song.mpeg"
     audio.write_bytes(b"a")
     worker = AlignmentWorker(audio, "lyrics text")
@@ -136,7 +139,10 @@ def test_worker_emits_install_hint_when_whisperx_missing(qtbot, tmp_path, monkey
     worker.run()  # synchronous — call directly so qtbot can observe state
     assert len(failures) == 1
     assert "WhisperX not installed" in failures[0]
-    assert "pip install whisperx" in failures[0]
+    # The hint must use `<sys.executable> -m pip install whisperx` so it
+    # lands in the running interpreter's site-packages, not the bare
+    # `pip install whisperx` that would silently target system Python.
+    assert f"{_sys.executable} -m pip install whisperx" in failures[0]
     # The bare ImportError text must NOT have leaked through.
     assert "No module named" not in failures[0]
 

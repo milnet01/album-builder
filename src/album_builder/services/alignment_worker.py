@@ -13,6 +13,7 @@ behind, so re-running is idempotent (Spec 07 TC-07-08).
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -55,11 +56,17 @@ class AlignmentWorker(QThread):
             # WhisperX is an optional runtime dep; surface the install hint
             # the user can copy/paste rather than the bare "No module named
             # 'whisperx'" the generic Exception branch would produce. L4-L5.
+            # The hint anchors at `sys.executable -m pip install` so the
+            # install lands in the SAME interpreter the worker is running
+            # in — bare `pip install` would target whatever pip is on PATH
+            # (typically system Python on PEP 668 distros), missing the
+            # app's venv entirely.
             logger.warning(
                 "AlignmentWorker: whisperx not installed for %s", self._track_path,
             )
             self.failed.emit(
-                "WhisperX not installed. Install via: pip install whisperx"
+                f"WhisperX not installed. Install via: "
+                f"{sys.executable} -m pip install whisperx"
             )
             return
         except Exception as exc:  # pragma: no cover — covered by integration tier
