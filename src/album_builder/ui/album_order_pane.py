@@ -25,6 +25,14 @@ MISSING_ROLE = Qt.ItemDataRole.UserRole + 1
 TITLE_ROLE = Qt.ItemDataRole.UserRole + 3   # cached title for re-render
 
 
+def _row_text(index: int, title: str, *, approved: bool) -> str:
+    """Format the visible row label. Approved rows omit the drag-handle
+    glyph since drag is disabled on approved albums (L6-H4)."""
+    if approved:
+        return f"{index}. {title}"
+    return f"{index}. {Glyphs.DRAG_HANDLE} {title}"
+
+
 class _OrderRowWidget(QWidget):
     """A row inside the AlbumOrderPane: preview-play button + label.
 
@@ -86,11 +94,16 @@ class AlbumOrderPane(QFrame):
         self.list.blockSignals(True)
         self.list.clear()
         if album is not None:
+            approved = album.status == AlbumStatus.APPROVED
             by_path: dict[Path, Track] = {t.path: t for t in tracks}
             for i, p in enumerate(album.track_paths, start=1):
                 t = by_path.get(p)
                 title = t.title if t is not None else p.name
-                row_text = f"{i}. {Glyphs.DRAG_HANDLE} {title}"
+                # L6-H4: Spec 05 says drag handles are hidden on approved
+                # albums (rows can't be dragged); previously only the
+                # IsDragEnabled flag was masked, leaving the visual ⠿
+                # glyph as a usability lie.
+                row_text = _row_text(i, title, approved=approved)
                 # The QListWidgetItem still carries the full row text for
                 # accessibility + programmatic access (existing tests +
                 # screen readers go via item.text()); the visible label
@@ -158,10 +171,11 @@ class AlbumOrderPane(QFrame):
         # titles containing ". " (e.g. "Mr. Brightside"). Update both the
         # QListWidgetItem text (for accessibility / programmatic readers)
         # and the row widget's QLabel (for visible rendering).
+        approved = self._album.status == AlbumStatus.APPROVED
         for i in range(self.list.count()):
             item = self.list.item(i)
             title = item.data(TITLE_ROLE) or ""
-            text = f"{i + 1}. {Glyphs.DRAG_HANDLE} {title}"
+            text = _row_text(i + 1, title, approved=approved)
             item.setText(text)
             widget = self.list.itemWidget(item)
             if widget is not None:

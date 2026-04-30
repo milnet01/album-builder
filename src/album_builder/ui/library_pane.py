@@ -70,6 +70,20 @@ class TrackTableModel(QAbstractTableModel):
     def track_at(self, row: int) -> Track:
         return self._tracks[row]
 
+    # Public read accessors so external code (LibraryPane, tests) does not
+    # have to reach into `_tracks` / `_toggle_enabled` (L6-M2 closure).
+
+    def tracks(self) -> list[Track]:
+        return list(self._tracks)
+
+    def is_toggle_enabled(self, row: int) -> bool:
+        if row < 0 or row >= len(self._toggle_enabled):
+            return False
+        return self._toggle_enabled[row]
+
+    def selected_paths(self) -> set[Path]:
+        return set(self._selected_paths)
+
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: B008
         return 0 if parent.isValid() else len(self._tracks)
 
@@ -170,7 +184,11 @@ class TrackFilterProxy(QSortFilterProxyModel):
         self._needle: str = ""
 
     def set_needle(self, text: str) -> None:
-        self._needle = text.strip().lower()
+        # L6-M5 (Theme G closure): casefold instead of lower so search
+        # matches the same Unicode-aware comparison the rest of the app
+        # uses (AlbumStore.list, Library.sorted, model sort role).
+        # casefold('ß') == 'ss', lower('ß') == 'ß' — affects German users.
+        self._needle = text.strip().casefold()
         self.invalidateFilter()
 
     def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
@@ -181,7 +199,7 @@ class TrackFilterProxy(QSortFilterProxyModel):
             return True
         track = model.track_at(source_row)
         for field in SEARCH_FIELDS:
-            if self._needle in str(getattr(track, field, "")).lower():
+            if self._needle in str(getattr(track, field, "")).casefold():
                 return True
         return False
 
@@ -278,9 +296,7 @@ class LibraryPane(QFrame):
     def toggle_enabled_at(self, source_row: int) -> bool:
         # Operates on source-model rows (independent of the proxy's sort).
         # Real user clicks go through `_on_table_clicked`, which maps view->source.
-        if source_row >= len(self._model._toggle_enabled):
-            return False
-        return self._model._toggle_enabled[source_row]
+        return self._model.is_toggle_enabled(source_row)
 
     def row_accent_at(self, source_row: int) -> str | None:
         # Operates on source-model rows (independent of the proxy's sort).
@@ -298,7 +314,7 @@ class LibraryPane(QFrame):
         col_attr = COLUMNS[view_index.column()][1]
         src = self._proxy.mapToSource(view_index)
         row = src.row()
-        if row >= len(self._model._tracks):
+        if row >= self._model.rowCount():
             return
         if col_attr == "_play":
             track = self._model.track_at(row)
@@ -306,10 +322,10 @@ class LibraryPane(QFrame):
             return
         if col_attr != "_toggle":
             return
-        if row >= len(self._model._toggle_enabled) or not self._model._toggle_enabled[row]:
+        if not self._model.is_toggle_enabled(row):
             return
         track = self._model.track_at(row)
-        was_selected = track.path in self._model._selected_paths
+        was_selected = track.path in self._model.selected_paths()
         self.selection_toggled.emit(track.path, not was_selected)
 
     def row_count(self) -> int:

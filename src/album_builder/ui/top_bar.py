@@ -52,10 +52,21 @@ class TopBar(QFrame):
         # objectName lets theme.qt_stylesheet target this button specifically
         # (Spec 11 §Gradients TC-11-08: success -> success-dark gradient).
         self.btn_approve.setObjectName("ApproveButton")
+        # L6-H2 (Theme F closure / WCAG 2.2 §4.1.2): a screen reader hearing
+        # the button's display text speaks the leading glyph ("check mark
+        # Approve"). Override with a clean accessible name.
+        self.btn_approve.setAccessibleName("Approve album")
+        self.btn_approve.setAccessibleDescription(
+            "Lock this album as the final version and generate the report."
+        )
         self.btn_approve.clicked.connect(self._on_approve_clicked)
         layout.addWidget(self.btn_approve)
 
         self.btn_reopen = QPushButton("Reopen for editing")
+        self.btn_reopen.setAccessibleName("Reopen album for editing")
+        self.btn_reopen.setAccessibleDescription(
+            "Unlock the approved album so the selection and order can be edited."
+        )
         self.btn_reopen.clicked.connect(self._on_reopen_clicked)
         layout.addWidget(self.btn_reopen)
 

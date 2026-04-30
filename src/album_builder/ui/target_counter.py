@@ -103,4 +103,11 @@ class TargetCounter(QFrame):
             # consistently with the int() spec.
             self.field.setText(str(self._target))
             return
+        # L6-M3: typing a target below the current selection bypasses the
+        # at-target floor invariant (the down arrow is gated, but typing
+        # was not). The domain raises in that case; revert + bail rather
+        # than emit a target_changed the store will reject.
+        if n < self._selected:
+            self.field.setText(str(self._target))
+            return
         self._emit(n)

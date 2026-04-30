@@ -260,3 +260,46 @@ def test_format_duration_uses_classic_half_up_rounding() -> None:
     # Sanity: integer seconds unchanged, hour boundary intact.
     assert _format_duration(0) == "0:00"
     assert _format_duration(3600) == "1:00:00"
+
+
+# Indie-review L6-M5 (Theme G partial closure): TrackFilterProxy used
+# .lower() while AlbumStore + Library.sorted use .casefold(). The
+# inconsistency surfaces as "search for 'ß' fails to match a track named
+# 'Süß' on a German user's system" — the casefolded form of ß is "ss".
+def test_search_uses_casefold_not_lower(qtbot, tmp_path: Path) -> None:
+    from album_builder.domain.library import Library
+    from album_builder.domain.track import Track
+    from album_builder.ui.library_pane import LibraryPane
+
+    track = Track(
+        path=tmp_path / "song.mp3",
+        title="Süß",  # German sharp-S; casefold('ß') == 'ss', lower('ß') == 'ß'
+        artist="x", album_artist="x", album="", composer="", comment="",
+        lyrics_text=None, cover_data=None, cover_mime=None,
+        duration_seconds=0.0, file_size_bytes=0, is_missing=False,
+    )
+    pane = LibraryPane()
+    pane.set_library(Library(folder=tmp_path, tracks=(track,)))
+    qtbot.addWidget(pane)
+
+    # Searching for 'ss' must match the casefolded form of 'ß' (= 'ss').
+    # With .lower() both sides, "ss" is not a substring of "süß"; only
+    # casefold('ß') -> 'ss' surfaces the match.
+    pane.search_box.setText("ss")
+    qtbot.wait(50)
+    assert pane.row_count() == 1, (
+        "search must use casefold() so ß is matchable by 'ss' (Theme G)"
+    )
+
+
+# Indie-review L6-M2: LibraryPane reaches into _model._toggle_enabled
+# and ._tracks from outside the class. Underscore-private leak. Add
+# public accessors that lock the contract.
+def test_track_table_model_exposes_public_accessors() -> None:
+    from album_builder.ui.library_pane import TrackTableModel
+
+    model = TrackTableModel([])
+    # is_toggle_enabled(row) for out-of-range -> False (or returns a bool).
+    assert model.is_toggle_enabled(0) is False
+    # tracks() is the public read accessor.
+    assert model.tracks() == []

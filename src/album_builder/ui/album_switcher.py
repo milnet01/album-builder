@@ -49,6 +49,14 @@ class AlbumSwitcher(QFrame):
         layout.setContentsMargins(0, 0, 0, 0)
         self.pill = QPushButton()
         self.pill.setObjectName("AlbumPill")
+        # L6-H3 (Theme F / WCAG 2.2 §4.1.2): a screen reader hearing the
+        # raw button text speaks "black down-pointing small triangle My
+        # Album." Override with a clean Name + Description; the pill's
+        # current album name is folded into the name on each refresh.
+        self.pill.setAccessibleName("Album switcher")
+        self.pill.setAccessibleDescription(
+            "Click to switch albums or create a new one."
+        )
         self.pill.clicked.connect(self._show_menu)
         layout.addWidget(self.pill)
 
@@ -101,9 +109,14 @@ class AlbumSwitcher(QFrame):
             # Spec 03 §user-visible behaviour line 21: middle dot (U+00B7) as
             # the visual separator between "No albums" and the inline action.
             self.pill.setText(f"{Glyphs.CARET} No albums · + New album")
+            self.pill.setAccessibleName(
+                "Album switcher (no albums; click to create one)"
+            )
             return
         current = self._store.get(self._current_id) if self._current_id else None
-        self.pill.setText(f"{Glyphs.CARET} {current.name if current else albums[0].name}")
+        name = current.name if current else albums[0].name
+        self.pill.setText(f"{Glyphs.CARET} {name}")
+        self.pill.setAccessibleName(f"Album switcher: current album {name}")
 
     def _show_menu(self) -> None:
         if not self._store.list():

@@ -93,6 +93,34 @@ def test_approved_album_disables_drag(pane: AlbumOrderPane) -> None:
     assert not (flags & Qt.ItemFlag.ItemIsDragEnabled)
 
 
+# Indie-review L6-H4: Spec 05 says drag handles are hidden on approved
+# albums (because they can't be dragged). The previous code only masked
+# ItemIsDragEnabled but kept the visual ⠿ glyph in the row text — a
+# usability lie that suggested the row was draggable.
+def test_approved_album_hides_drag_handle_glyph(pane: AlbumOrderPane) -> None:
+    from album_builder.ui.theme import Glyphs
+
+    a = Album.create(name="x", target_count=5)
+    a.track_paths = [Path("/abs/a.mp3")]
+    a.status = AlbumStatus.APPROVED
+    pane.set_album(a, [_track("a")])
+    text = pane.list.item(0).text()
+    assert Glyphs.DRAG_HANDLE not in text, (
+        f"approved row must not show the drag glyph; got {text!r}"
+    )
+
+
+def test_draft_album_keeps_drag_handle_glyph(pane: AlbumOrderPane) -> None:
+    from album_builder.ui.theme import Glyphs
+
+    a = Album.create(name="x", target_count=5)
+    a.track_paths = [Path("/abs/a.mp3")]
+    # status remains DRAFT
+    pane.set_album(a, [_track("a")])
+    text = pane.list.item(0).text()
+    assert Glyphs.DRAG_HANDLE in text
+
+
 # Spec: TC-05-10
 def test_drag_onto_self_is_noop(pane: AlbumOrderPane) -> None:
     a = Album.create(name="x", target_count=5)
