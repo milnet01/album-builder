@@ -178,5 +178,9 @@ class AlbumOrderPane(QFrame):
             text = _row_text(i + 1, title, approved=approved)
             item.setText(text)
             widget = self.list.itemWidget(item)
-            if widget is not None:
+            # `QListWidget.itemWidget` is typed `QWidget` per stubs but we
+            # always install a concrete `_OrderRowWidget` here. Narrow with
+            # isinstance so a future row-widget swap fails at type-check
+            # time rather than at the AttributeError on `.setText` runtime.
+            if isinstance(widget, _OrderRowWidget):
                 widget.setText(text)

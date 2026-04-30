@@ -57,7 +57,10 @@ def qt_stylesheet(p: Palette) -> str:
         background-color: {p.bg_base};
         color: {p.text_primary};
         font-family: "Inter", "Cantarell", "Segoe UI", system-ui, sans-serif;
-        font-size: 11pt;
+        /* Spec 11 §Typography: 11.5px body. The previous `11pt` resolved to
+           ~14.7px at 96dpi - ~30% off the spec. Pixel units sidestep the
+           dpi conversion and stay font-anchored across screen scales. */
+        font-size: 11.5px;
     }}
     QFrame#Pane {{
         background-color: {p.bg_pane};

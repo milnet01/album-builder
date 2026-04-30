@@ -34,8 +34,11 @@ def test_main_window_top_bar_present(main_window) -> None:
     assert main_window.top_bar.objectName() == "TopBar"
 
 
-def test_main_window_title_includes_app_name(main_window) -> None:
-    assert "Album Builder" in main_window.windowTitle()
+def test_main_window_title_is_bare_app_name(main_window) -> None:
+    # Tier 3 (L8-info): version is set via app.setApplicationVersion and
+    # rendered separately by KDE / GNOME shells, so it must NOT appear in
+    # the title bar — duplicate noise. The title is the app name only.
+    assert main_window.windowTitle() == "Album Builder"
 
 
 def test_create_then_select_appears_in_order_pane(qtbot, tmp_path: Path, tracks_dir: Path) -> None:
@@ -503,3 +506,25 @@ def test_splitter_setSizes_deferred_until_visible(
         f"deferred setSizes must apply restored ratios after show; got "
         f"{set_sizes_calls}"
     )
+
+
+# Tier 3 (L8-privacy): closeEvent failure-summary stderr line scrubs
+# `$HOME` -> `~` so a desktop launcher that redirects stderr to a shared
+# journal doesn't leak the username via embedded paths from os-level
+# exception messages.
+def test_redact_home_replaces_home_with_tilde(monkeypatch) -> None:
+    from album_builder.ui.main_window import _redact_home
+
+    home = Path.home()
+    msg = f"OSError: [Errno 13] Permission denied: '{home}/Albums/foo.json'"
+    redacted = _redact_home(msg)
+    assert str(home) not in redacted
+    assert "~/Albums/foo.json" in redacted
+
+
+def test_redact_home_passes_through_when_home_absent() -> None:
+    """Strings that don't contain the home path round-trip unchanged."""
+    from album_builder.ui.main_window import _redact_home
+
+    assert _redact_home("ENOSPC: write failed") == "ENOSPC: write failed"
+    assert _redact_home(ValueError("oops")) == "oops"

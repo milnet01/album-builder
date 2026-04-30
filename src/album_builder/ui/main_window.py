@@ -40,7 +40,6 @@ from album_builder.ui.now_playing_pane import NowPlayingPane
 from album_builder.ui.theme import Palette, qt_stylesheet
 from album_builder.ui.toast import Toast
 from album_builder.ui.top_bar import TopBar
-from album_builder.version import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +48,20 @@ logger = logging.getLogger(__name__)
 # stable small integer for round-trip identity; matches the spec example
 # `[5, 3, 5]` (sum 13) but is otherwise arbitrary.
 SPLITTER_RATIO_TOTAL = 13
+
+
+def _redact_home(value: object) -> str:
+    """Replace `$HOME` occurrences in `str(value)` with a literal `~`.
+
+    The closeEvent failure summary lands on stderr (which a desktop launcher
+    may redirect to a shared journal). Exception messages from os-level
+    APIs commonly embed the absolute path that failed, which on a single-
+    user machine reveals the username. Redacting `$HOME` -> `~` keeps the
+    diagnostic intact (you can still tell *which* file failed) without
+    leaking the home directory path. (L8-privacy.)"""
+    s = str(value)
+    home = str(Path.home())
+    return s.replace(home, "~") if home else s
 
 
 def _hamilton_ratios(pixels: list[int], total: int) -> list[int]:
@@ -98,7 +111,11 @@ class MainWindow(QMainWindow):
         self._library_watcher = library_watcher
         self._state = state
         self._project_root = project_root
-        self.setWindowTitle(f"Album Builder {__version__}")
+        # Window title is the bare app name; KDE / GNOME shells render
+        # `app.setApplicationVersion` separately (in the about-dialog and
+        # task-switcher tooltip), so duplicating it in the title bar is
+        # redundant noise. (L8-info Tier 3 cleanup.)
+        self.setWindowTitle("Album Builder")
         # Clamp restored geometry against pathological values (hand-edited
         # state.json with width=10 would open a 10 px wide window). Spec 10
         # documents minimum 100px implicit; explicit here so a corrupt cache
@@ -583,24 +600,24 @@ class MainWindow(QMainWindow):
             self._player.stop()
         except Exception as exc:
             logger.exception("Player.stop() failed during closeEvent")
-            failures.append(f"player.stop: {exc}")
+            failures.append(f"player.stop: {_redact_home(exc)}")
         try:
             write_audio(AudioSettings(
                 volume=self._player.volume(), muted=self._player.muted(),
             ))
         except Exception as exc:
             logger.exception("write_audio() failed during closeEvent")
-            failures.append(f"write_audio: {exc}")
+            failures.append(f"write_audio: {_redact_home(exc)}")
         try:
             self._store.flush()
         except Exception as exc:
             logger.exception("AlbumStore.flush() failed during closeEvent")
-            failures.append(f"album-store flush: {exc}")
+            failures.append(f"album-store flush: {_redact_home(exc)}")
         try:
             self._save_state_now()
         except Exception as exc:
             logger.exception("save_state_now() failed during closeEvent")
-            failures.append(f"save_state: {exc}")
+            failures.append(f"save_state: {_redact_home(exc)}")
         if failures:
             import sys as _sys
             print(

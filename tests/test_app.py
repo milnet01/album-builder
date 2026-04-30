@@ -45,9 +45,24 @@ def test_resolve_tracks_dir_warns_when_falling_back_to_dev(
     install is mis-configured."""
     fake_dev = tmp_path / "dev_tracks"
     fake_dev.mkdir()
-    monkeypatch.setattr(app, "DEFAULT_TRACKS_DIR", fake_dev)
+    monkeypatch.setattr(app, "_DEV_TREE_TRACKS_DIR", fake_dev)
     assert app._resolve_tracks_dir() == fake_dev
     assert "using dev-tree path" in capsys.readouterr().err
+
+
+# Tier 3 (L8-info): when no settings.json exists, no dev tree is detected,
+# and no `./Tracks` is present, the resolver falls back to ~/Music. This
+# replaced a bare hardcoded developer path that would silently surface to
+# end users via the dev-tree warning when no other source matched.
+def test_resolve_tracks_dir_falls_back_to_user_music_for_installed(
+    xdg_config: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)  # no ./Tracks here
+    monkeypatch.delenv("ALBUM_BUILDER_DEV_MODE", raising=False)
+    monkeypatch.setattr(app, "_running_from_source_tree", lambda: False)
+    assert app._resolve_tracks_dir() == app.USER_MUSIC_DIR
 
 
 def test_resolve_tracks_dir_settings_wins_over_dev_path(
@@ -61,7 +76,7 @@ def test_resolve_tracks_dir_settings_wins_over_dev_path(
     scanning the dev tree instead of their own folder."""
     fake_dev = tmp_path / "dev_tracks"
     fake_dev.mkdir()
-    monkeypatch.setattr(app, "DEFAULT_TRACKS_DIR", fake_dev)
+    monkeypatch.setattr(app, "_DEV_TREE_TRACKS_DIR", fake_dev)
     user_tracks = tmp_path / "user_tracks"
     user_tracks.mkdir()
     xdg_config.mkdir(parents=True)

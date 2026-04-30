@@ -36,7 +36,13 @@ from album_builder.services.library_watcher import LibraryWatcher
 from album_builder.ui.main_window import MainWindow
 from album_builder.version import __version__
 
-DEFAULT_TRACKS_DIR = Path("/mnt/Storage/Scripts/Linux/Music_Production/Tracks")
+# Convenience fallback for `_resolve_tracks_dir`: only used in dev mode (a
+# `pyproject.toml` sibling to the package) so an installed end-user never
+# sees the developer's path. Cross-user installs reach the `~/Music`
+# fallback in `_resolve_tracks_dir` instead. (L8-info: Tier 3 cleanup —
+# was a bare hardcoded absolute path.)
+_DEV_TREE_TRACKS_DIR = Path(__file__).resolve().parent.parent.parent / "Tracks"
+USER_MUSIC_DIR = Path.home() / "Music"
 SHARED_KEY = "album-builder-single-instance-v1"
 RAISE_MESSAGE = b"raise\n"
 # 500 ms was too tight: a busy first instance (Whisper alignment running, big
@@ -236,7 +242,7 @@ def _resolve_project_root() -> Path:
 def _running_from_source_tree() -> bool:
     """Heuristic: a `pyproject.toml` sibling to the package's parent dir
     means we're running from the source checkout, not from an installed
-    site-packages location. Used to gate the DEFAULT_TRACKS_DIR fallback
+    site-packages location. Used to gate the _DEV_TREE_TRACKS_DIR fallback
     so an installed user doesn't silently pick the developer's path."""
     candidate = Path(__file__).resolve().parent.parent.parent / "pyproject.toml"
     return candidate.exists()
@@ -248,26 +254,28 @@ def _resolve_tracks_dir() -> Path:
     Priority order (Spec 12 + Spec 01):
     1. ``tracks_folder`` from ``$XDG_CONFIG_HOME/album-builder/settings.json``
        — the value the user configured. Used in production.
-    2. The hardcoded ``DEFAULT_TRACKS_DIR`` if it exists AND we're running
-       from the dev tree — convenience for running without a settings file.
-       Gated to avoid silently picking a coincidentally-named user path.
-       Trigger: either the ``ALBUM_BUILDER_DEV_MODE`` env is set or a
-       ``pyproject.toml`` sits next to the running script.
+    2. ``<dev tree>/Tracks`` if it exists AND we're running from the dev
+       tree — convenience for running without a settings file. Gated so an
+       installed user can never see the dev path. Trigger: either
+       ``ALBUM_BUILDER_DEV_MODE`` is set or a ``pyproject.toml`` sits next
+       to the running script.
     3. ``./Tracks`` relative to the CWD — last-resort dev fallback.
+    4. ``~/Music`` — installed-user default; `Library.scan` returns an empty
+       library if it doesn't exist, which is the right UX for a fresh install.
     """
     configured = settings.read_tracks_folder()
     if configured is not None:
         return configured
     dev_mode = os.environ.get(DEV_MODE_ENV) == "1" or _running_from_source_tree()
-    if dev_mode and DEFAULT_TRACKS_DIR.exists():
+    if dev_mode and _DEV_TREE_TRACKS_DIR.exists():
         print(
             f"album-builder: no settings.json found; using dev-tree path "
-            f"{DEFAULT_TRACKS_DIR}. Configure {settings.settings_path()} to "
+            f"{_DEV_TREE_TRACKS_DIR}. Configure {settings.settings_path()} to "
             f"point at your own tracks folder.",
             file=sys.stderr,
         )
-        return DEFAULT_TRACKS_DIR
+        return _DEV_TREE_TRACKS_DIR
     cwd_tracks = Path.cwd() / "Tracks"
     if cwd_tracks.exists():
         return cwd_tracks
-    return DEFAULT_TRACKS_DIR
+    return USER_MUSIC_DIR

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from PyQt6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt, pyqtSignal
@@ -31,14 +32,14 @@ SEARCH_FIELDS: tuple[str, ...] = (
 
 
 class TrackTableModel(QAbstractTableModel):
-    def __init__(self, tracks: list[Track]):
+    def __init__(self, tracks: Sequence[Track]):
         super().__init__()
         self._tracks: list[Track] = list(tracks)
         self._selected_paths: set[Path] = set()
         self._toggle_enabled: list[bool] = []
         self._album_status: AlbumStatus = AlbumStatus.DRAFT
 
-    def set_tracks(self, tracks: list[Track]) -> None:
+    def set_tracks(self, tracks: Sequence[Track]) -> None:
         # Contract: set_tracks() resets only the per-row enable cache,
         # NOT _selected_paths. Selection state belongs to the active album
         # and is owned by set_album_state(); a library-watcher refresh
@@ -302,11 +303,16 @@ class LibraryPane(QFrame):
         # Operates on source-model rows (independent of the proxy's sort).
         # Use the title column for the lookup — the play column has its own
         # role table that doesn't include UserRole+2, so column 0 (play)
-        # would always return None.
+        # would always return None. The model's `data()` returns
+        # `tuple[bool, str]` for the toggle column's sort role (Tier 2 fix
+        # L5-H2); narrowing here protects this method's contract — title
+        # column never returns the toggle-sort tuple, so `isinstance(value,
+        # str)` is the right guard.
         src = self._model.index(source_row, _column_index("title"))
         if not src.isValid():
             return None
-        return self._model.data(src, Qt.ItemDataRole.UserRole + 2)
+        value = self._model.data(src, Qt.ItemDataRole.UserRole + 2)
+        return value if isinstance(value, str) else None
 
     def _on_table_clicked(self, view_index: QModelIndex) -> None:
         if not view_index.isValid():
