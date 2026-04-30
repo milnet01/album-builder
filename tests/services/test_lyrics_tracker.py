@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from album_builder.domain.lyrics import Lyrics, LyricLine
+from album_builder.domain.lyrics import LyricLine, Lyrics
 from album_builder.services.lyrics_tracker import LyricsTracker
 
 
