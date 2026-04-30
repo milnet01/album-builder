@@ -8,6 +8,21 @@ Working roadmap for the Album Builder app. Tracks completed phases, in-flight fi
 
 ---
 
+## ✅ v0.5.1 — Outstanding-roadmap sweep (2026-04-30)
+
+Same-day follow-up to v0.5.0 closing every actionable `📋` item still surviving in `ROADMAP.md` after the v0.5.0 ship: audit-tooling configs (`pyrightconfig.json`, `.gitleaks.toml`), version-file drift, the long-deferred `ACCENT_ROLE` extraction, the `settings.json` `schema_version` stamp gap (final piece of Theme B recurrence), Phase-4-shipped README dependency note. Also flips every stale `📋` cross-cutting summary line to `✅` where the underlying themes had been closed in per-item Tier fixes but the high-level summary was never updated.
+
+**Shipped (8 items):**
+
+- **Audit tooling (2):** `pyrightconfig.json` pinned at repo root pointing pyright at `.venv` (recovers the 4 mutagen unresolved-import diagnostics that surfaced on every `/audit` run); `.gitleaks.toml` with `extend.useDefault = true` + path-regexp allowlist for `.venv/`, `__pycache__/`, generated icon assets, and the gitignored `Tracks/` + `Albums/` + `.album-builder/` folders so `gitleaks detect -c .gitleaks.toml` runs without a `/tmp` shim.
+- **Version drift (1):** `pyproject.toml` + `src/album_builder/version.py` bumped 0.4.2 → 0.5.0 to match the Phase 4 ship (the v0.5.0 commit was a `feat:` not a `release:` so the bump step was skipped).
+- **Code (2):** `ACCENT_ROLE = Qt.ItemDataRole.UserRole + 2` extracted as module-level constant in `library_pane.py` (closes v0.2.1 Tier 2 L6-M2 deferral; mirrors `MISSING_ROLE` / `TITLE_ROLE` in `album_order_pane.py`); `_write_settings(data)` helper in `persistence/settings.py` stamps `schema_version = SETTINGS_SCHEMA_VERSION` at every write site (closes the final Theme B recurrence gap — hand-rolled files lacking `schema_version` self-heal on next save).
+- **Docs (3):** README §Status promoted from v0.2.0 to v0.5.0 prose; README §System dependencies adds WeasyPrint runtime-library install commands (Pango / Cairo / GDK-PixBuf for openSUSE + Debian/Ubuntu) — closes the "Phase-4-prep, add when requirements pulls it in" deferral; ROADMAP cross-cutting summary 📋 → ✅ flips for Themes A-H (2026-04-28 review) and Themes B/F/I/J/K/L recurrence (2026-04-30 review), each citing the per-item Tier fix that actually closed it.
+
+**Test count:** 467 → 471 passing (+4 schema_version regression tests in `tests/persistence/test_settings.py`). Ruff clean.
+
+---
+
 ## ✅ v0.5.0 — Phase 4: Export & Approval (2026-04-30)
 
 M3U + symlink folder per album, hard-lock approval state, PDF + HTML report generation via WeasyPrint. Specs: 08, 09. Shipped on `main` (commits `9bd98de` + `feb49b5`).
@@ -371,8 +386,8 @@ Tools run: ruff, bandit, semgrep (`p/security-audit` + `p/python`), gitleaks, tr
 
 Also recommended (not code findings):
 
-- 📋 **INFO — Add `pyrightconfig.json` at project root pointing at `.venv`.** Recovers the 4 `mutagen` unresolved-import diagnostics on every audit run.
-- 📋 **INFO — Persist `.gitleaks.toml` allowlist in-repo.** Eliminates the per-run `/tmp` shim for path-regexp scope. Same for the gitleaks/trivy `--skip-dirs` set.
+- ✅ **INFO — Add `pyrightconfig.json` at project root pointing at `.venv`.** Recovers the 4 `mutagen` unresolved-import diagnostics on every audit run. Landed in v0.5.1 sweep.
+- ✅ **INFO — Persist `.gitleaks.toml` allowlist in-repo.** Path-regexp allowlist + extends-default-rules pinned at the repo root; `gitleaks detect -c .gitleaks.toml` runs without a `/tmp` shim. Landed in v0.5.1 sweep.
 
 Calibration: 0 actionable security findings (4th run; cf. 2026-04-28 audit which was 0 actionable post-Phase-2). 95% noise rate on pyright is consistent with PyQt6 stub maturity.
 
@@ -382,12 +397,12 @@ Calibration: 0 actionable security findings (4th run; cf. 2026-04-28 audit which
 
 8-lane multi-agent independent review post-Phase-3B (v0.4.0). Author-bias flagged: parent session authored Phase 3B (Lanes 1, 4, 7 dense in author-recent code). Mitigation: every cross-cutting theme below is grounded in ≥2 independent agent reports.
 
-- 📋 **Theme I — Test names mirror internal modules, not external signals.** Flagged by ALL 8 lanes. `tests/**/*.py` filenames track source module names (`test_player.py`, `test_album_io.py`); none cite WCAG_2_1_1_*, RFC_8259_*, CWE_*, or `TC_NN_MM_*` prefixes. Project CLAUDE.md mandates `# Spec: TC-NN-MM` markers inside test bodies, but file *names* are the surface independent reviewers see — and they look like internal-mirror tests, the failure-mode this sweep is constructed to catch. **Highest-confidence finding of the sweep.** Caught by L1 / L2 / L3 / L4 / L5 / L6 / L7 / L8.
-- 📋 **Theme J — Glyphs single-source-of-truth bypassed across UI.** Spec 11 §Glyphs mandates one source. Violations: `✓` (`src/album_builder/services/alignment_status.py:51`), `🔍` and toggle `●`/`○` (`src/album_builder/ui/library_pane.py:116,211`), `"x"` close button (`src/album_builder/ui/toast.py:26`), and `Glyphs` itself mixes literal codepoints with `\Uxxxxxxxx` escapes inconsistently. Caught by L4 / L6 / L7 / L8.
-- 📋 **Theme K — Cancel / teardown semantics are partial across subsystems.** AlignmentService.cancel() doesn't emit NOT_YET_ALIGNED status revert (Spec 07 §Errors gap). AlbumStore.delete/rename don't cancel pending DebouncedWriter entries (stale write into `.trash/`). MainWindow.closeEvent silent-fail with no user surface (Spec 10 toast contract). Caught by L4 / L5 / L8.
-- 📋 **Theme L — Spec text vs code drift on contracts that can't ship in current form.** L1-H3: `format_lrc` byte-identical round-trip impossible (Lyrics doesn't store headers/multi-stamps). L2-H3: schema migration `.bak` not implemented (recurrence of Theme C from 2026-04-28). L6-H4: Spec 05 says drag handles hidden on approved, code keeps glyph. L8-M4: Spec 11 TC-11-05 "outline with 2px offset" — Qt QSS doesn't support outline-offset. Each requires either spec amendment OR code fix. Caught by L1 / L2 / L6 / L8.
-- 📋 **Theme F (recurrence)** — WCAG 2.2 §4.1.2 / §4.1.3 a11y gaps in v0.3+ widgets. L6-H2 (top-bar Approve/Reopen no `setAccessibleName`); L6-H3 (AlbumSwitcher pill no name/role/value); L7-H2 (Toast no AlertMessage role / ARIA-live). Partial closure in Tier 2 (toggle column) didn't carry forward to new widgets. **Recurrence — first seen 2026-04-28 indie-review.**
-- 📋 **Theme B (recurrence)** — settings.json schema growth lags Spec 10. Lane 2 + Lane 8 cross-confirm: settings.alignment block landed in v0.4.0 but `albums_folder`, `ui.theme`, `ui.open_report_folder_on_approve` and a `schema_version` field per Spec 10 §settings.json (lines 189-216) are still unimplemented. **Recurrence — first seen 2026-04-28 indie-review.**
+- ✅ **Theme I — Test names mirror internal modules, not external signals.** Closed by policy in v0.4.2: CLAUDE.md adopts the forward-only `test_TC_NN_*` / `test_WCAG_*` / `test_RFC_*` prefix convention for NEW load-bearing tests; existing files keep their names (retroactive rename would cascade through 15+ doc references without improving correctness).
+- ✅ **Theme J — Glyphs single-source-of-truth bypassed across UI.** Closed in v0.4.2 commit `d4ef58f` (`alignment_status.py`, `library_pane.py`, `toast.py` consume `theme.Glyphs`); v0.5.0 F12 added `Glyphs.MIDDOT` for the toast separator.
+- ✅ **Theme K — Cancel / teardown semantics are partial across subsystems.** All three components closed: `AlignmentService.cancel()` emits NOT_YET_ALIGNED revert (Tier 1 L4-M5); `AlbumStore.delete/rename` cancel `DebouncedWriter` entries (Tier 1 L5-M3); `closeEvent` collects per-step failures into a stderr summary (Tier 2 L8-H4).
+- ✅ **Theme L — Spec text vs code drift on contracts that can't ship in current form.** All four closed: L1-H3 spec amended to "semantic equivalence" (Tier 2); L2-H3 `<file>.v<old>.bak` migration helper added (Tier 2); L6-H4 drag handles hidden on approved (Tier 2); L8-M4 outline-offset workaround in `theme.py:184-186` widens the existing border + shrinks padding to avoid layout shift (Qt QSS limitation documented inline).
+- ✅ **Theme F (recurrence)** — WCAG 2.2 §4.1.2 / §4.1.3 a11y gaps closed in Tier 2: top-bar Approve / Reopen + AlbumSwitcher pill expose `setAccessibleName` (L6-H2 + H3); Toast surfaces `AccessibleDescription` for live-region announcement (L7-H2).
+- ✅ **Theme B (recurrence)** — settings.json schema growth caught up to Spec 10: `albums_folder` (Tier 1 L8-C1), `ui.theme` + `ui.open_report_folder_on_approve` (v0.5.0 F31 + F30), `schema_version` stamping at every write site (v0.5.1 sweep). All Spec 10 §`settings.json` v1 fields are now implemented.
 
 ## 🔒 Tier 1 — Phase 3B ship-this-week fixes (data-loss / blocking)
 
@@ -587,14 +602,14 @@ Plan: [`docs/plans/2026-04-28-phase-2-albums.md`](docs/plans/2026-04-28-phase-2-
 
 8-lane multi-agent independent review (7 code lanes + 1 documentation lane). Same-mental-model blind spots caught by ≥2 reviewers. Author-bias flagged: parent session authored all of Phase 2; mitigation = fresh-context subagents widening external specs cited.
 
-- 📋 **Theme A — Empty-state pill text drift.** `album_switcher.py:91` ships `▾ No albums + New album`; Spec 03 §user-visible behaviour line 21 + TC-03-06 require `▾ No albums · + New album` (middle dot U+00B7). ASCII-source-cleanup dropped the separator. Caught by L6-H1 + L8-L4.
-- 📋 **Theme B — `settings.json` 8-field schema is fictional.** `persistence/settings.py` reads only `tracks_folder`. Spec 10 §`settings.json` schema (lines 189-216) documents `albums_folder`, `audio.{volume,muted}`, `alignment.{auto_align_on_play,model_size}`, `ui.{theme,open_report_folder_on_approve}`, plus `schema_version`. Either implement or mark spec as v1=tracks_folder-only. Caught by L3-M5 + L8-H5.
-- 📋 **Theme C — `.bak` file requirement unimplemented.** Spec 10 line 79 + TC-10-03 require `<file>.v<old>.bak` on schema migration. `persistence/schema.py` is pure compute, no I/O. Latent until v2 schema lands; ship-blocker once it does. Caught by L2-M2 + L8-H4.
-- 📋 **Theme D — Approve-button + AlbumPill QSS gradients absent.** Spec 11 §Gradients line 38 + TC-11-08 + Spec 03 §Visual rules line 90 specify `success → success-dark` / `accent-primary-1 → accent-primary-2` `qlineargradient` calls. `theme.py` contains zero gradient declarations. Caught by L6-M2 + L8-M4.
+- ✅ **Theme A — Empty-state pill text drift.** Closed in v0.2.1 Tier 2 (album_switcher.py uses U+00B7 middle dot per Spec 03 + TC-03-06).
+- ✅ **Theme B — `settings.json` 8-field schema.** All Spec 10 v1 fields landed across releases — `tracks_folder` (Phase 1), `albums_folder` (v0.4.0 Tier 1 L8-C1), `audio.{volume,muted}` (v0.3.0), `alignment.*` (v0.4.0), `ui.theme` + `ui.open_report_folder_on_approve` (v0.5.0 F30 + F31), `schema_version` stamping (v0.5.1 sweep).
+- ✅ **Theme C — `.bak` file requirement unimplemented.** Closed in v0.4.1 Tier 2 (L2-H3): `_write_migration_bak()` helper added to both `album_io.py` and `state_io.py`; migration writes `<file>.v<old>.bak` before rewriting.
+- ✅ **Theme D — Approve-button + AlbumPill QSS gradients absent.** Closed in v0.2.2 Tier 3: `QPushButton#ApproveButton` (`success → success-dark`) and `QPushButton#AlbumPill` (`accent-primary-1 → accent-primary-2`) gradient rules in `theme.qt_stylesheet`.
 - ✅ **Theme E — Keyboard shortcuts not wired.** Closed in v0.3.0. Every Spec 00 shortcut wired with `QShortcut` + `_key_in_text_field` suppression for transport keys; F1 help dialog enumerates the bindings.
-- 📋 **Theme F — Screen-reader / a11y labels missing across all widgets.** No `setAccessibleName` / `setAccessibleDescription` / `AccessibleTextRole` anywhere in `src/album_builder/ui/`. Toggle column reads as "black circle / white circle" to Orca. WCAG 2.2 §2.1.1 (keyboard) + §4.1.2 (Name, Role, Value) fail. Caught by L5-H3 / H4 / H5 + L6-L12.
-- 📋 **Theme G — Locale-aware sort missing.** `library_pane.py:108` returns raw `value` for sort role; AlbumStore uses `name.lower()`. Spec 00 §"Sort order (canonical)" line 65 says case-insensitive locale-aware. Polish "ł", Turkish dotted I, German "ß" sort wrong; Z < a (ASCII). Caught by L1 (noted) + L5-H1 + L8-M6.
-- 📋 **Theme H — TC-01-P2-03/04 plan-crosswalk lies about coverage.** `docs/plans/2026-04-28-phase-2-albums.md:3683-3684` marks both "direct"; the named tests (`test_tracks_changed_fires_on_file_removed`, `test_watcher_survives_folder_deletion_and_recreation`) don't assert what the TCs say (`Track.is_missing=True`, `Library.search(include_missing=)` parameter). Spec 01 + ROADMAP correctly say "deferred"; the plan crosswalk is wrong. Caught by L1 (noted) + L8-H2.
+- ✅ **Theme F — Screen-reader / a11y labels missing across all widgets.** Closed in v0.2.1 Tier 2 (toggle column `AccessibleTextRole`, drag a11y) + v0.4.1 Tier 2 (top-bar Approve / Reopen + AlbumSwitcher pill `setAccessibleName`; Toast `AccessibleDescription`).
+- ✅ **Theme G — Locale-aware sort missing.** Closed in v0.2.1 Tier 2 (L5-H1 — `library_pane.py` casefold sort role) + v0.2.2 Tier 3 (`AlbumStore.list()` and `Library.sorted()` casefold).
+- ✅ **Theme H — TC-01-P2-03/04 plan-crosswalk lies about coverage.** Closed in v0.2.1 Tier 1 (L8-H2 — both rows flipped from "direct" to "deferred" matching Spec 01 + ROADMAP).
 
 ---
 
@@ -659,8 +674,8 @@ Plan: [`docs/plans/2026-04-28-phase-2-albums.md`](docs/plans/2026-04-28-phase-2-
 - ✅ **HIGH — `set_current(None)` initial-emit suppressed.** Docstring now documents the "no emit on construction; caller must seed" contract. MainWindow already seeds correctly. Commit `ced2923`. (L6-H2)
 - ✅ **HIGH — `TargetCounter` empty-string commit reverts.** Empty now snaps to `MIN_TARGET` (TC-04-12); non-integer reverts via try/except `int()` (handles negative signs, Unicode digit forms). Commit `ced2923`. (L6-H4)
 - ✅ **HIGH — `setMaxLength(80)` is UTF-16 code units.** Dropped; validation moved to commit time and uses `len(text) > 80` (code points) matching domain. Emoji-rich names no longer truncated. Commit `ced2923`. (L6-H5)
-- 📋 **LOW (deferred to Tier 3) — `LibraryPane._model._toggle_enabled` direct access.** Naming-convention violation; refactor adds `is_toggle_enabled(row)` accessor. Tier 3. (L6-M1)
-- 📋 **LOW (deferred to Tier 3) — `ACCENT_ROLE` magic number.** Define module constant; mirror to MISSING_ROLE shape. Tier 3. (L6-M2)
+- ✅ **LOW — `LibraryPane._model._toggle_enabled` direct access.** Closed in v0.4.1 Tier 2 (L6-M2): `tracks()` / `is_toggle_enabled(row)` / `selected_paths()` public accessors on `TrackTableModel`.
+- ✅ **LOW — `ACCENT_ROLE` magic number.** Closed in v0.5.1 sweep: `ACCENT_ROLE = Qt.ItemDataRole.UserRole + 2` extracted as module-level constant in `library_pane.py`; mirrors the `MISSING_ROLE` / `TITLE_ROLE` shape in `album_order_pane.py`.
 
 **App integration (L7):**
 
@@ -705,7 +720,7 @@ Plan: [`docs/plans/2026-04-28-phase-2-albums.md`](docs/plans/2026-04-28-phase-2-
 - ✅ **LOW — Empty-state pill middle dot.** Already shipped in Tier 2 (album_switcher.py:103 uses U+00B7 middle dot).
 - ✅ **LOW — DRAG_HANDLE rendering.** Documented in `theme.Glyphs.DRAG_HANDLE`: U+22EE x2 approximates the spec's vertical stack at the available font sizes; a true vertical stack would require a custom-painted `QStyledItemDelegate`.
 - ✅ **INFO — Structured logging in persistence/.** Added `logger = logging.getLogger(__name__)` to `settings.py`; `read_tracks_folder` now logs `OSError`, malformed-JSON, and non-object cases. (`album_io`, `state_io`, `debounce` already had loggers from prior tiers.)
-- 📋 **INFO (carried) — Tests don't cite WCAG / RFC / TC-* in filenames.** Acceptable as flagged; `tests/ui/` filenames mirror module names; coverage map lives in spec only. Standing observation, not a defect.
+- ✅ **INFO (closed by policy) — Tests don't cite WCAG / RFC / TC-* in filenames.** Closed in v0.4.2 by adopting the forward-only `test_TC_NN_*` / `test_WCAG_*` / `test_RFC_*` prefix convention via CLAUDE.md (existing files keep their names, NEW load-bearing tests use the prefix).
 
 ---
 
@@ -780,8 +795,8 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 - ✅ **LOW — `Library.search()` doesn't filter `is_missing`.** Carried forward into Phase 2 deliverables (only meaningful once `is_missing` is reachable post-rescan).
 - ✅ **LOW — QScrollBar QSS styling.** Dark-theme scrollbars: `bg_pane` track, `border_strong` → `text_tertiary`-on-hover handle, 5px radius, no arrow buttons.
 - ✅ **LOW — Splitter ratios.** `[500, 350, 550]` → `[5, 3, 5]` — HiDPI-friendly.
-- 📋 **LOW — README WeasyPrint system-deps.** Genuinely Phase 4 prep (no WeasyPrint dependency until then). Add when `requirements.txt` pulls it in.
-- 📋 **INFO — `track_at()` only used by tests.** Phase 2 will use it for click-to-play row → Track resolution. Keep.
+- ✅ **LOW — README WeasyPrint system-deps.** Closed in v0.5.1 sweep: README §System dependencies lists Pango / Cairo / GDK-PixBuf install commands for openSUSE + Debian/Ubuntu, with link to WeasyPrint's per-distro guide.
+- ✅ **INFO — `track_at()` only used by tests.** Closed in v0.3.0: `LibraryPane._on_table_clicked` and `_on_double_click` consume `track_at()` for preview-play row → Track resolution.
 
 
 ## 🔭 Future / deferred

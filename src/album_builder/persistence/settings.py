@@ -13,6 +13,11 @@ from album_builder.persistence.atomic_io import atomic_write_text
 logger = logging.getLogger(__name__)
 
 
+SETTINGS_SCHEMA_VERSION = 1
+"""Spec 10 §`settings.json` schema (v1). Every write stamps this value so a
+hand-rolled file without ``schema_version`` self-heals on the next save and
+the migration runner has an unambiguous starting point when v2 lands."""
+
 DEFAULT_VOLUME = 80
 DEFAULT_MUTED = False
 
@@ -145,13 +150,24 @@ def read_audio() -> AudioSettings:
     return AudioSettings(volume=volume, muted=muted)
 
 
+def _write_settings(data: dict) -> None:
+    """Stamp ``schema_version`` and write ``settings.json`` atomically.
+
+    Single write site so every block-level helper (audio, alignment, ui)
+    emits a Spec 10-conformant document and a hand-edited file missing
+    ``schema_version`` self-heals on the next save.
+    """
+    data["schema_version"] = SETTINGS_SCHEMA_VERSION
+    path = settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(path, json.dumps(data, indent=2, sort_keys=True))
+
+
 def write_audio(audio: AudioSettings) -> None:
     """Write audio block to settings.json, preserving other top-level keys."""
     data = _read_settings_dict()
     data["audio"] = {"volume": audio.volume, "muted": audio.muted}
-    path = settings_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(path, json.dumps(data, indent=2, sort_keys=True))
+    _write_settings(data)
 
 
 def read_alignment() -> AlignmentSettings:
@@ -182,9 +198,7 @@ def write_alignment(alignment: AlignmentSettings) -> None:
         "auto_align_on_play": alignment.auto_align_on_play,
         "model_size": alignment.model_size,
     }
-    path = settings_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(path, json.dumps(data, indent=2, sort_keys=True))
+    _write_settings(data)
 
 
 ALLOWED_THEMES = frozenset({"dark-colourful"})
@@ -222,6 +236,4 @@ def write_ui(ui: UiSettings) -> None:
         "open_report_folder_on_approve": ui.open_report_folder_on_approve,
         "theme": ui.theme,
     }
-    path = settings_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(path, json.dumps(data, indent=2, sort_keys=True))
+    _write_settings(data)

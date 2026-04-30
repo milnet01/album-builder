@@ -240,3 +240,38 @@ def test_alignment_write_preserves_audio_block(xdg_config: Path) -> None:
     )
     assert settings.read_audio().volume == 42
     assert settings.read_alignment().model_size == "small.en"
+
+
+# Spec: TC-10-NN — settings.json schema_version stamping.
+# Spec 10 §`settings.json` schema declares `"schema_version": 1`. Every
+# write through write_audio / write_alignment / write_ui must stamp the
+# value so a hand-edited file without it self-heals on the next save.
+
+def test_write_stamps_schema_version(xdg_config: Path) -> None:
+    settings.write_audio(settings.AudioSettings(volume=70, muted=False))
+    raw = json.loads((xdg_config / "settings.json").read_text())
+    assert raw["schema_version"] == settings.SETTINGS_SCHEMA_VERSION
+
+
+def test_write_alignment_stamps_schema_version(xdg_config: Path) -> None:
+    settings.write_alignment(settings.AlignmentSettings())
+    raw = json.loads((xdg_config / "settings.json").read_text())
+    assert raw["schema_version"] == settings.SETTINGS_SCHEMA_VERSION
+
+
+def test_write_ui_stamps_schema_version(xdg_config: Path) -> None:
+    settings.write_ui(settings.UiSettings())
+    raw = json.loads((xdg_config / "settings.json").read_text())
+    assert raw["schema_version"] == settings.SETTINGS_SCHEMA_VERSION
+
+
+def test_write_self_heals_missing_schema_version(xdg_config: Path) -> None:
+    """Hand-rolled file lacking schema_version gains it on the next save."""
+    xdg_config.mkdir(parents=True, exist_ok=True)
+    (xdg_config / "settings.json").write_text(
+        json.dumps({"audio": {"volume": 33, "muted": False}}, indent=2)
+    )
+    settings.write_audio(settings.AudioSettings(volume=44, muted=False))
+    raw = json.loads((xdg_config / "settings.json").read_text())
+    assert raw["schema_version"] == settings.SETTINGS_SCHEMA_VERSION
+    assert raw["audio"]["volume"] == 44

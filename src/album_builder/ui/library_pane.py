@@ -13,6 +13,12 @@ from album_builder.domain.library import Library
 from album_builder.domain.track import Track
 from album_builder.ui.theme import Glyphs
 
+# Mirror of `MISSING_ROLE` / `TITLE_ROLE` in album_order_pane.py: per-pane
+# user-role offsets above Qt.ItemDataRole.UserRole, named so callers don't
+# need to know the offset arithmetic. ACCENT_ROLE returns "primary" /
+# "warning" / None for the QSS attribute selector at paint time.
+ACCENT_ROLE = Qt.ItemDataRole.UserRole + 2
+
 COLUMNS: list[tuple[str, str]] = [
     ("▶", "_play"),   # PLAY glyph - Spec 06 per-row preview-play
     ("Title", "title"),
@@ -139,15 +145,15 @@ class TrackTableModel(QAbstractTableModel):
             if role == Qt.ItemDataRole.UserRole:
                 # Sort key for the toggle column - keep selected rows together.
                 return (selected, track.path.name.casefold())
-            if role == Qt.ItemDataRole.UserRole + 2:
+            if role == ACCENT_ROLE:
                 if selected:
                     return "warning" if track.is_missing else "primary"
                 return None
             return None
 
-        # Non-toggle column UserRole+2 surfaces accent so the whole row
+        # Non-toggle column ACCENT_ROLE surfaces accent so the whole row
         # picks it up via the QSS attribute selector at paint time.
-        if role == Qt.ItemDataRole.UserRole + 2:
+        if role == ACCENT_ROLE:
             if track.path in self._selected_paths:
                 return "warning" if track.is_missing else "primary"
             return None
@@ -302,7 +308,7 @@ class LibraryPane(QFrame):
     def row_accent_at(self, source_row: int) -> str | None:
         # Operates on source-model rows (independent of the proxy's sort).
         # Use the title column for the lookup — the play column has its own
-        # role table that doesn't include UserRole+2, so column 0 (play)
+        # role table that doesn't include ACCENT_ROLE, so column 0 (play)
         # would always return None. The model's `data()` returns
         # `tuple[bool, str]` for the toggle column's sort role (Tier 2 fix
         # L5-H2); narrowing here protects this method's contract — title
@@ -311,7 +317,7 @@ class LibraryPane(QFrame):
         src = self._model.index(source_row, _column_index("title"))
         if not src.isValid():
             return None
-        value = self._model.data(src, Qt.ItemDataRole.UserRole + 2)
+        value = self._model.data(src, ACCENT_ROLE)
         return value if isinstance(value, str) else None
 
     def _on_table_clicked(self, view_index: QModelIndex) -> None:

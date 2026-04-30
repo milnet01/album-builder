@@ -1,0 +1,35 @@
+# Gitleaks config for album-builder.
+#
+# Extends the default ruleset and pins project-specific allowlist paths so
+# /audit runs don't need a per-invocation /tmp shim. Audit conventions:
+#   gitleaks detect -s . -v --no-banner --redact
+#
+# The default ruleset (https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml)
+# covers AWS / GitHub / Slack / generic high-entropy keys.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Album Builder repository allowlist"
+
+paths = [
+    # Python build / venv / cache
+    '''\.venv/''',
+    '''__pycache__/''',
+    '''\.pytest_cache/''',
+    '''\.ruff_cache/''',
+    '''\.mypy_cache/''',
+    '''.*\.egg-info/''',
+    '''build/''',
+    '''dist/''',
+
+    # User-owned data folders (gitignored, but keep for safety on non-clean trees)
+    '''^Tracks/''',
+    '''^Albums/''',
+    '''^\.album-builder/''',
+
+    # Generated icon assets and packaging shadows
+    '''^assets/.*\.png$''',
+    '''^packaging/.*\.desktop$''',
+]

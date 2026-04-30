@@ -4,9 +4,15 @@ A small PyQt6 desktop app for curating albums from a folder of audio recordings,
 
 ## Status
 
-**v0.2.0 — Phase 2: Albums (shipped 2026-04-28).** The app scans `Tracks/`, lets you create / rename / delete albums, pick tracks via a per-row toggle column, set a target track count, drag rows in the middle pane to set order, and approve. State persists across launches: window geometry, splitter sizes, last-active album, and per-album selection / target / order all round-trip through atomic JSON writes with self-heal on corrupt input. The library refreshes live when files change in `Tracks/`.
+**v0.5.0 — Phase 4: Export & Approval (shipped 2026-04-30).** Phases 1–4 are
+feature-complete. The app scans `Tracks/`, curates albums via a per-row toggle
+column + drag-reorder pane, syncs lyrics during preview-play (WhisperX +
+wav2vec2 forced alignment, opt-in), and on approve generates an M3U +
+numbered-symlink folder + PDF/HTML report under `Albums/<slug>/`. State
+persists across launches; library refreshes live when `Tracks/` changes.
 
-Playback + lyrics alignment land in Phase 3; full export pipeline (M3U + symlink folder + PDF/HTML report) lands in Phase 4. See [`ROADMAP.md`](ROADMAP.md) and `docs/plans/` for details.
+See [`ROADMAP.md`](ROADMAP.md) for the full release log and `docs/plans/` for
+per-phase implementation details.
 
 ## Install (openSUSE Tumbleweed + KDE Plasma)
 
@@ -24,6 +30,7 @@ The installer assumes these are present:
 - GStreamer audio plugins (`zypper install gstreamer-plugins-good gstreamer-plugins-bad gstreamer-plugins-libav`)
 - desktop-file-utils (for validation; optional)
 - Inkscape OR rsvg-convert OR cairosvg (for icon PNG generation; the installer falls back to cairosvg via pip if the others are missing)
+- WeasyPrint runtime libraries — Pango / Cairo / GDK-PixBuf, plus the standard fontconfig/freetype stack — for PDF report rendering (`zypper install pango cairo gdk-pixbuf libffi6 fontconfig`). On Debian / Ubuntu the equivalent set is `libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0`. WeasyPrint's [installation guide](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html) lists per-distro details if the import fails at runtime.
 
 ## Uninstall
 
