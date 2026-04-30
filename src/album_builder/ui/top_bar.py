@@ -95,6 +95,13 @@ class TopBar(QFrame):
             self.btn_reopen.setVisible(True)
         else:
             self.btn_approve.setVisible(True)
+            # L6-H1 (closed): Spec 02 §approve preconditions — approve
+            # only requires "at least 1 selected track". The Spec 04
+            # at-target green badge is UX feedback for "complete album",
+            # not an approve gate. Approving below target is intentional
+            # (a 5-of-12 album the user wants to ship as-is). Counter-
+            # intuitive vs. the green-badge cue but explicitly allowed
+            # by spec, so don't tighten this to `>= target_count`.
             self.btn_approve.setEnabled(len(album.track_paths) > 0)
             self.btn_reopen.setVisible(False)
 
