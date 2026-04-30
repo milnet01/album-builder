@@ -46,6 +46,19 @@ class DebouncedWriter(QObject):
             # and silently drop the write.
             logger.exception("DebouncedWriter callback failed for key=%r", key)
 
+    def cancel(self, key: Hashable) -> None:
+        """Drop a pending callback for ``key`` without firing it.
+
+        Used by callers that move/rename the resource the queued callback
+        targets, e.g. AlbumStore.delete() before moving a folder to .trash —
+        the queued ``save_album(folder, album)`` would otherwise fire into
+        the trashed location after the move (L5-M3).
+        """
+        timer = self._timers.pop(key, None)
+        if timer is not None:
+            timer.stop()
+        self._pending.pop(key, None)
+
     def flush_all(self) -> None:
         for key, timer in list(self._timers.items()):
             if timer.isActive():

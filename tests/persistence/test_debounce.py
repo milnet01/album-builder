@@ -52,6 +52,37 @@ def test_schedule_after_flush_still_works(app, qtbot) -> None:
     assert calls == ["first", "second"]
 
 
+# Spec: L5-M3 (Tier 1 indie-review 2026-04-30)
+def test_cancel_drops_pending_callback_without_firing(app, qtbot) -> None:
+    """cancel() removes the queued callback for a key. The next idle-window
+    expiry must NOT fire it. Used by AlbumStore.delete()/rename() to prevent
+    a queued save from writing into a folder that's been moved or trashed."""
+    calls: list[str] = []
+    w = DebouncedWriter(idle_ms=20)
+    w.schedule("k", lambda: calls.append("would-have-fired"))
+    w.cancel("k")
+    qtbot.wait(80)
+    assert calls == []
+
+
+def test_cancel_unknown_key_is_safe(app, qtbot) -> None:
+    """cancel() of a key that was never scheduled is a no-op, not an error."""
+    w = DebouncedWriter(idle_ms=20)
+    w.cancel("never-scheduled")  # must not raise
+
+
+def test_schedule_after_cancel_works(app, qtbot) -> None:
+    """A cancel() does not poison the key. A subsequent schedule() with the
+    same key fires normally."""
+    calls: list[str] = []
+    w = DebouncedWriter(idle_ms=20)
+    w.schedule("k", lambda: calls.append("first"))
+    w.cancel("k")
+    w.schedule("k", lambda: calls.append("second"))
+    qtbot.wait(80)
+    assert calls == ["second"]
+
+
 # Indie-review L3-H4: a raising callback must not escape into Qt's slot
 # dispatcher (which silently drops the write per Spec 10 §Errors). The
 # writer must keep accepting subsequent schedules.

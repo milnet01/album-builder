@@ -235,3 +235,126 @@ def test_delete_same_folder_name_same_second_does_not_collide(
             f"Trash entry {entry.name} contains a nested album folder: "
             f"{[c.name for c in children]}"
         )
+
+
+# Spec: L5-H1 (Tier 1 indie-review 2026-04-30)
+def test_rename_atomicity_folder_rename_failure_leaves_state_intact(
+    store: AlbumStore, tmp_path: Path, monkeypatch,
+) -> None:
+    """If folder rename fails (EBUSY/EACCES/EXDEV), the in-memory album
+    name and the on-disk album.json must both still reflect the OLD name.
+    The pre-fix code mutated the album BEFORE the folder rename, so a
+    rename failure left domain renamed but JSON + folder still old."""
+    a = store.create(name="OldName", target_count=3)
+    old_folder = store.folder_for(a.id)
+    assert old_folder is not None and old_folder.name == "oldname"
+
+    def boom(self, target):
+        raise OSError("simulated EBUSY")
+    monkeypatch.setattr(Path, "rename", boom)
+
+    with pytest.raises(OSError, match="simulated EBUSY"):
+        store.rename(a.id, "NewName")
+
+    # In-memory album still has the old name.
+    assert store.get(a.id).name == "OldName"
+    # Folder still at old path with old slug.
+    assert old_folder.exists()
+    assert store.folder_for(a.id) == old_folder
+    # On-disk album.json still has the old name.
+    payload = json.loads((old_folder / "album.json").read_text())
+    assert payload["name"] == "OldName"
+
+
+# Spec: L5-H1 (Tier 1 indie-review 2026-04-30)
+def test_rename_validation_error_does_not_touch_disk(
+    store: AlbumStore, tmp_path: Path,
+) -> None:
+    """An invalid name (too long, all whitespace) must raise ValueError
+    without renaming the folder OR mutating the album."""
+    a = store.create(name="OldName", target_count=3)
+    old_folder = store.folder_for(a.id)
+    with pytest.raises(ValueError):
+        store.rename(a.id, "")  # empty after trim
+    assert store.get(a.id).name == "OldName"
+    assert old_folder.exists()
+
+
+# Spec: L5-M3 (Tier 1 indie-review 2026-04-30)
+def test_rename_cancels_pending_save_into_old_folder(
+    store: AlbumStore, tmp_path: Path, qtbot,
+) -> None:
+    """A queued debounced save_album against the OLD folder must be
+    cancelled by rename(); otherwise it fires after the rename and writes
+    album.json into a path that no longer exists (or, if the old folder
+    was reused, into the wrong album)."""
+    a = store.create(name="OldName", target_count=3)
+    old_folder = store.folder_for(a.id)
+    # Manually mutate + schedule a save to simulate a pending write.
+    a.set_target(5)
+    store.schedule_save(a.id)
+    # Now rename — this must cancel the pending save.
+    store.rename(a.id, "NewName")
+    new_folder = store.folder_for(a.id)
+    assert new_folder != old_folder
+    # Wait past the debounce window. The cancelled lambda must not fire
+    # against the (now-moved) old_folder.
+    qtbot.wait(350)
+    # If the cancelled save had fired, it would have re-created the old
+    # folder OR raised. Old folder must NOT exist as a directory; new
+    # folder must contain the up-to-date album.json.
+    assert not old_folder.exists()
+    payload = json.loads((new_folder / "album.json").read_text())
+    assert payload["name"] == "NewName"
+    assert payload["target_count"] == 5
+
+
+# Spec: L5-M3 (Tier 1 indie-review 2026-04-30)
+def test_delete_cancels_pending_save_into_trashed_folder(
+    store: AlbumStore, tmp_path: Path, qtbot,
+) -> None:
+    """A queued save against an album's folder must not fire after delete()
+    has moved that folder to .trash/."""
+    a = store.create(name="x", target_count=3)
+    folder = store.folder_for(a.id)
+    a.set_target(5)
+    store.schedule_save(a.id)
+    store.delete(a.id)
+    qtbot.wait(350)
+    # Folder is in trash; no album.json was re-written into it after the move.
+    assert not folder.exists()
+    trash_entries = list((tmp_path / ".trash").iterdir())
+    assert len(trash_entries) == 1
+    # The trashed album.json reflects pre-schedule state (target=3), since
+    # the queued save (target=5) was cancelled, not flushed.
+    trashed_payload = json.loads((trash_entries[0] / "album.json").read_text())
+    assert trashed_payload["target_count"] == 3
+
+
+# Spec: L5-H3 (Tier 1 indie-review 2026-04-30)
+def test_delete_current_album_state_consistent_at_signal_emit_time(
+    store: AlbumStore, tmp_path: Path, qtbot,
+) -> None:
+    """When album_removed fires, the store must already be in its full
+    post-delete state: the deleted album popped AND _current_id swapped.
+    The pre-fix code emitted album_removed FIRST and only then computed
+    + emitted current_album_changed, so a subscriber observing state at
+    album_removed time saw _current_id still pointing at the doomed
+    album. The fix is to swap state before any emit."""
+    a1 = store.create(name="alpha", target_count=3)
+    a2 = store.create(name="beta", target_count=3)
+    store.set_current(a1.id)
+    assert store.current_album_id == a1.id
+
+    seen: dict[str, object] = {}
+
+    def observer(_album_id):
+        # Snapshot state at the moment album_removed fires.
+        seen["current_at_emit"] = store.current_album_id
+        seen["a1_present"] = store.get(a1.id) is not None
+    store.album_removed.connect(observer)
+
+    store.delete(a1.id)
+
+    assert seen["current_at_emit"] == a2.id
+    assert seen["a1_present"] is False

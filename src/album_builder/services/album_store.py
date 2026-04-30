@@ -150,8 +150,17 @@ class AlbumStore(QObject):
     def rename(self, album_id: UUID, new_name: str) -> None:
         album = self._albums[album_id]
         old_folder = self._folders[album_id]
-        album.rename(new_name)
-        slug_attempt = slugify(album.name)
+
+        # Validate the name BEFORE any disk mutation. Mirrors the rule in
+        # Album._validate_name (1..80 chars after trim) so that an invalid
+        # name aborts here without renaming the folder. Album.rename below
+        # re-validates against the same rule and is then guaranteed to
+        # succeed — no rollback path needed. L5-H1.
+        trimmed = new_name.strip()
+        if not (1 <= len(trimmed) <= 80):
+            raise ValueError(f"name must be 1-80 chars after trim, got {len(trimmed)}")
+
+        slug_attempt = slugify(trimmed)
         # If the slug derived from the new name is identical to the album's
         # OWN folder name (e.g. "Foo" -> "Foo!" both slugify to "foo"), no
         # move is needed and `unique_slug` would falsely treat our own folder
@@ -162,8 +171,21 @@ class AlbumStore(QObject):
         else:
             new_slug = unique_slug(self._albums_dir, slug_attempt)
             new_folder = self._albums_dir / new_slug
+
+        # Cancel any pending debounced save targeting old_folder. Without
+        # this, a queued `save_album(old_folder, album)` from a prior
+        # schedule_save fires after the rename and writes album.json into a
+        # path that no longer exists. L5-M3.
+        self._writer.cancel(album_id)
+
+        # Disk op (the failure-prone step). EBUSY/EACCES/EXDEV here leaves
+        # in-memory and on-disk state intact — caller can retry. L5-H1.
+        if new_folder != old_folder:
             old_folder.rename(new_folder)
             self._folders[album_id] = new_folder
+
+        # Disk consistent — now safe to mutate domain state and persist.
+        album.rename(trimmed)
         save_album(new_folder, album)
         self.album_renamed.emit(album)
 
@@ -173,6 +195,13 @@ class AlbumStore(QObject):
         # state before the move would orphan the folder on disk while the
         # store has already forgotten the album.
         folder = self._folders.get(album_id)
+
+        # Cancel pending debounced saves before moving the folder; otherwise
+        # a queued `save_album(folder, album)` lambda fires after the move
+        # and writes album.json into the just-trashed directory (or raises
+        # because the parent no longer exists). L5-M3.
+        self._writer.cancel(album_id)
+
         if folder is not None and folder.exists():
             trash = self._albums_dir / TRASH_DIRNAME
             trash.mkdir(exist_ok=True)
@@ -183,18 +212,25 @@ class AlbumStore(QObject):
             # first.
             stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
             shutil.move(str(folder), str(trash / f"{folder.name}-{stamp}"))
-        # Disk move succeeded (or folder was already gone) - mutate state.
+
+        # Compute the post-delete state in full BEFORE emitting any signal.
+        # Without this, a slot connected to album_removed that raises (Qt
+        # re-raises in DirectConnection) would skip the trailing
+        # current_album_changed emit AND the _current_id swap, leaving the
+        # store pointing at the deleted album. L5-H3.
+        was_current = self._current_id == album_id
         self._folders.pop(album_id, None)
         self._albums.pop(album_id, None)
-        # TC-02-16: deleting the current album re-points current at the
-        # alphabetically-first remaining album (or None).
-        # Emit album_removed BEFORE current_album_changed so subscribers
-        # that listen to "current changed" and re-query the list see the
-        # post-remove state, not a stale entry.
-        self.album_removed.emit(album_id)
-        if self._current_id == album_id:
+        if was_current:
+            # TC-02-16: deleting the current album re-points current at the
+            # alphabetically-first remaining album (or None).
             remaining = self.list()
             self._current_id = remaining[0].id if remaining else None
+
+        # State is consistent. Emit album_removed FIRST so subscribers that
+        # re-query .list() see the post-remove view, not a stale entry.
+        self.album_removed.emit(album_id)
+        if was_current:
             self.current_album_changed.emit(self._current_id)
 
     @property
