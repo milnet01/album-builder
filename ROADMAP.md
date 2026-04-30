@@ -8,6 +8,242 @@ Working roadmap for the Album Builder app. Tracks completed phases, in-flight fi
 
 ---
 
+## ✅ v0.5.0 — Phase 4: Export & Approval (2026-04-30)
+
+M3U + symlink folder per album, hard-lock approval state, PDF + HTML report generation via WeasyPrint. Specs: 08, 09. Shipped on `main` (commits `9bd98de` + `feb49b5`).
+
+Convergence trace: pre-implementation 4-round spec sweep (39 → 17 → 3 → 0 actionable findings); implementation; 3-round post-implementation `/audit` + `/indie-review` (40 → 3 → 0 findings); full-codebase audit clean. 415 → 467 passing tests (+52 TC-08/09/10 contracts).
+
+#### 📝 Phase 4 prep — Round 1 spec sweep (2026-04-30)
+
+Pre-implementation cold-eyes review of the Phase 4 surface (Specs 02 §approve/§unapprove, 08, 09, 10 §atomic-write/§schemas, 11 §Glyphs/§Branding). 4 parallel review lanes (Spec 08 deep-dive, Spec 09 deep-dive, cross-spec consistency, test-contract coverage) returned 60 raw findings → 39 unique actionable items below after dedup. Goal: every BLOCKER + HIGH closes by spec edit before Phase 4 implementation begins.
+
+**Priority A — design / contract (BLOCKER + HIGH):**
+
+- ✅ **A1 — `_commit_export` is not actually atomic at the per-symlink granularity.** Spec 08 §Generation algorithm L77 promises "the staging-then-replace sequence"; §`_commit_export` L115–118 wipes live symlinks then per-link-replaces from staging — a kill between step 1 (wipe) and step 2 (first move) leaves zero symlinks + a stale M3U. Fix: rewrite the §`_commit_export` contract as "eventually consistent within bounded time" — explicit recovery rule "on launch OR before next mutation, count(live symlinks where is_symlink) ≠ count(track_paths) ⇒ trigger regeneration." Document the kill-9 window as a known short-window race that the next pass repairs. (Lane A BLOCKER.)
+- ✅ **A2 — Atomic-pair cleanup for half-rendered reports has no defined trigger.** Spec 09 §canonical approve sequence row "3c/3d" says half-pair → delete both on next launch, but no spec names *who* runs that scan. Spec 10 §Errors stale-`.tmp` rule covers JSON only. Fix: extend Spec 10 §Errors to walk `Albums/<slug>/reports/`, deleting both members of any pair where exactly one of `(html, pdf)` for a given date stem exists; cross-link from Spec 09. (Lanes B + C BLOCKER.)
+- ✅ **A3 — `#EXTINF` artist-title rendering rule unspecified.** Spec 08 §Outputs L59 shows `#EXTINF:281,18 Down - something more (calm)` by example. Null-artist handling, embedded ` - ` in title, missing-duration fallback are silent. Fix: explicit format rule + null-artist path + duration fallback (0 if mutagen returns None). (Lane A HIGH.)
+- ✅ **A4 — Symlink filename "100 chars" is codepoints vs bytes ambiguous.** Spec 08 §Symlink filenames L65. UTF-8 multi-byte titles will hit ext4 `NAME_MAX=255` at a different point than 100 codepoints. Fix: "100 Unicode codepoints, then verify UTF-8 byte length ≤ 255 and shorten further if needed." (Lane A HIGH.)
+- ✅ **A5 — `track_path` str-vs-Path coercion ambiguous in algorithm body.** Spec 08 §Generation algorithm L97 calls `.suffix.lower()` on the loop var; `album.track_paths` are strings per Spec 10. Fix: explicit `Path(p)` coercion in the pseudocode. (Lane A HIGH.)
+- ✅ **A6 — Stale `.export.new` on launch has no trigger.** Spec 08 §Behavior rules L128 says "wipe as the first step of the next export pass." Nothing triggers an export pass on launch if the user opens the app and quits without mutating. Fix: add `AlbumStore.load()`-time bullet "if `.export.new` exists, schedule a regeneration; if no mutation occurs, wipe `.export.new` unconditionally on the next clean shutdown." (Lane A HIGH.)
+- ✅ **A7 — Cross-filesystem `os.replace` rule for staging missing.** Spec 08 §`_commit_export` L118: `os.replace(staging/"playlist.m3u8", folder/"playlist.m3u8")` is atomic only when source + dest share a filesystem. Fix: assert "staging MUST be a sibling under the same album folder" with a TC. (Lane A HIGH.)
+- ✅ **A8 — Spec 10 atomic-write contract carve-out for staging not explicit on either side.** Spec 08 §Generation algorithm L104 uses bare `.write_text` for the staging M3U; Spec 10 §Atomic write protocol L37 is unconditional. Fix: add a `§Atomic write — staging-folder exception` paragraph to Spec 10 stating that writes inside a transactional staging dir that itself promotes atomically are exempt; cross-link from Spec 08. (Lane A HIGH.)
+- ✅ **A9 — Empty album (`track_paths == []`) export behavior silent.** Spec 08 doesn't say whether export still generates an empty M3U + zero symlinks, or skips the regeneration entirely. Fix: explicit §Behavior rules clause — empty album writes a one-line `#EXTM3U` file and zero symlinks; no warnings. (Lane A HIGH.)
+- ✅ **A10 — `>99` tracks numbering format silent.** Spec 08 §Symlink filenames says `{NN:02d}`. Spec 10 §`album.json` schema caps `target_count` at 99 (Spec 04 enforces UI), but `track_paths` self-heal can raise `target_count` above the cap. Fix: clamp at 99 with a warning, OR widen format to `{i:03d}` when `len > 99`. Pick one and add §Errors row + TC. (Lane A HIGH.)
+- ✅ **A11 — `_v2` suffix path is unreachable as written.** Spec 09 §File naming L134 + TC-09-04/11 assume same-day re-approve finds prior reports. But Spec 02 §unapprove step 2.i deletes `reports/` recursively, so re-approve always finds an empty directory. Fix: drop the `_vN` rule + delete TC-09-04 and TC-09-11; document "re-approve overwrites within the empty reports/ dir; date-only filename." (Lane B HIGH.)
+- ✅ **A12 — Approve race-window vs Spec 08 skip-with-warning contradiction.** Spec 02 §approve says missing tracks are an error, never a skip. Spec 09 step 2 calls Spec 08 export, which has a unconditional skip-with-warning rule. Fix: Spec 09 step 2 must call Spec 08 in *strict mode* (any missing path raises and aborts the sequence). Spec 08 §Errors row gets a one-line carve-out: "Approve gates this earlier; the skip path is for draft live re-export only." (Lanes B + C HIGH.)
+- ✅ **A13 — Spec 02 §approve §Behavior step 1 wording suggests double-verification.** Step 1 reads "Re-verify all `track_paths` exist (race-window check)" implying preconditions ran a *prior* check. Spec 09 has only one verification (canonical step 1). Fix: align Spec 02 step 1 to "Verify all `track_paths` exist — single check, per Spec 09 §canonical approve sequence step 1; preconditions snapshot the count, this re-checks existence." (Lane C HIGH.)
+- ✅ **A14 — Spec 09 hardcodes glyph codepoints inline (Theme J recurrence).** §The approve flow uses literal `✓` and prose "small lock icon"; Spec 11 §Glyphs canonicalises both as `Glyphs.CHECK` / `Glyphs.LOCK`. Fix: Spec 09 references `Glyphs.CHECK (Spec 11 §Glyphs)` and `Glyphs.LOCK (Spec 11 §Glyphs)` instead of literal codepoints. (Lane C HIGH.)
+- ✅ **A15 — `Albums/<slug>/` source-of-truth not pinned in Spec 02 §create.** Step 3 uses relative `Albums/`; doesn't say "resolve against `settings.albums_folder`." A reader could implement against CWD. Fix: change to "the album folder is created at `<settings.albums_folder>/<slug>/` (Spec 10 §`settings.json`)." (Lane C HIGH.)
+
+**Priority B — missing test contracts (HIGH):**
+
+- ✅ **A16 — Split TC-08-10 into 10a (hardlink fallback) + 10b (copy fallback).** Different UX semantics (suppressed dialog vs required dialog with default-no). Currently one TC line conflates both. (Lane D HIGH.)
+- ✅ **A17 — Add TC-08-14 — `library.refresh()` precedes every export pass.** Spec 08 §Disk-read checks line is prose-only. (Lane D HIGH.)
+- ✅ **A18 — Add TC-08-15 — symlink 64-byte sanity check after creation.** Spec 08 §Disk-read checks line is prose-only. (Lane D HIGH.)
+- ✅ **A19 — Add TC-08-16 — `.export-log` rotation (last 10 runs).** Spec 08 §Disk-read checks line is prose-only. (Lane D HIGH.)
+- ✅ **A20 — Add TC-09-18 — `xdg-open reports/` is gated on `settings.ui.open_report_folder_on_approve`.** Spec 09 §approve flow step 6. (Lane D HIGH.)
+- ✅ **A21 — Add TC-09-20 — Reopen confirm dialog text, default-button "Cancel."** Spec 09 §The reopen flow step 2. (Lane D HIGH.)
+- ✅ **A22 — Add TC-09-22 — Per-track section page-break CSS (`break-inside: avoid`).** Spec 09 §Per-track sections. (Lane D HIGH.)
+- ✅ **A23 — Add TC-09-24 — 50-track render <5 s + ">50 tracks: rendering may take a moment" hint.** Spec 09 §Performance budget. (Lane D HIGH.)
+- ✅ **A24 — Add TC-09-26 — long-line lyrics word-wrap, no overflow.** Spec 09 §Errors row. (Lane D HIGH.)
+- ✅ **A25 — Add TC-09-27 — approve serialises with in-flight export (queue or lock).** Spec 09 §Errors row. (Lane D HIGH.)
+
+**Priority C — clarifications + edge cases (MEDIUM):**
+
+- ✅ **A26 — Spec 08 §Symlink filenames trim order specified.** "Trim leading/trailing whitespace AND dots — repeat until stable." (Lane A MEDIUM.)
+- ✅ **A27 — Spec 08 §Outputs `#PLAYLIST:` / `#EXTART:` emit predicate.** Emit `#PLAYLIST:` iff `album.name` non-empty; emit `#EXTART:` iff all tracks share an artist. (Lane A MEDIUM.)
+- ✅ **A28 — Spec 08 §Robustness collision dedup placement.** `track A.mp3` vs `track A (2).mp3` — show explicit example with extension. (Lane A MEDIUM.)
+- ✅ **A29 — Spec 08 §Errors no-mutagen-readable-title fallback.** Distinct from post-sanitisation empty (which uses `track-{NN}`). (Lane A MEDIUM.)
+- ✅ **A30 — Spec 08 §Errors album-folder-deleted-mid-session.** `mkdir(exist_ok=True)` recreates silently — Spec 02's deletion semantics mean the folder is in `.trash/`; export should detect deletion and abort with a toast, not silently recreate. (Lane A MEDIUM.)
+- ✅ **A31 — Spec 09 `version_string()` `ImportError` fallback.** Return `'unknown'` on import failure; never abort render. Tighten TC-09-02 accordingly. (Lane B MEDIUM.)
+- ✅ **A32 — Spec 09 §Technology single-string-for-both-outputs claim clarified.** Confirm (or amend): rendered HTML string is identical for both writes; print-only CSS is gated behind `@media print` so HTML displays correctly in browsers. (Lane B MEDIUM.)
+- ✅ **A33 — Spec 09 §Errors partial-composer-column case.** Some tracks have a composer, some don't — currently §Track listing only handles "all share." Fix: composer column shown in full when ≥1 track has a composer; missing entries render as em-dash. (Lane B MEDIUM.)
+- ✅ **A34 — Spec 09 §Errors lyrics block size cap.** 100 KB single-track lyrics inflates the PDF. Fix: cap rendered block at e.g. 32 KB with "(... truncated)" suffix; full text remains in source LRC. (Lane B MEDIUM.)
+- ✅ **A35 — Spec 09 §Errors re-entrant approve.** Approve clicked while a previous approve worker is still rendering. Fix: button disables for the duration; queued click is dropped. (Lane B MEDIUM.)
+- ✅ **A36 — Spec 10 §Atomic write protocol gets a `§Atomic pair (multi-file transactions)` subsection.** Names the invariant Spec 09 step 3 enforces; recovery rule lives here, not buried in Spec 09 prose. (Lane C MEDIUM.)
+- ✅ **A37 — Spec 09 §canonical approve sequence step references switch from numeric to named anchors.** `step:verify-paths`, `step:export-staging`, `step:export-commit`, `step:render-tmp`, `step:render-rename-html`, `step:render-rename-pdf`, `step:write-marker`, `step:flip-status`. The crash-recovery table cites the named anchors. Future renumbering can't silently invalidate the recovery contract. (Lane C MEDIUM.)
+- ✅ **A38 — Sharpen TC-02-13 + TC-02-19.** Enumerate the four artefacts (`playlist.m3u8`, symlink set, PDF, HTML, marker) with non-zero size assertion; enumerate three crash points (post-step-2b, post-step-3d, post-step-4) for idempotency. (Lane D MEDIUM.)
+- ✅ **A39 — Sharpen TC-09-08 (cover resize threshold).** ≤ 10 MB AND ≤ 800×800 → pass-through; > 10 MB OR > 800×800 → resize. (Lane D MEDIUM.)
+
+**Deferred / closed-by-policy (LOW):**
+
+- ✅ **L1 — Spec 08 title `(M3U + Symlink Folder)`.** Stays as written; "M3U" refers to the format here, consistent with Spec 00 §Glossary which calls it the format. No change.
+- ✅ **L2 — "Toast" not in Spec 00 §Glossary.** Cross-spec UI term; defined implicitly by Spec 11 surface conventions. Out of Phase 4 prep scope; bookmark for v0.6+ glossary expansion.
+- ✅ **L3 — `reports/` deletion ordering note in Spec 09.** Folded into A37 (named anchors) — when steps are named, ordering becomes load-bearing automatically.
+- ✅ **L4 — Concurrent export passes for two albums.** Implicit from Spec 10 §Debounce ("Multiple albums are debounced independently"). No new spec text required.
+- ✅ **L5 — `reports/` is a user-symlink (shenanigans).** Out of v1 threat model (single-user single-machine); explicitly out of scope per Spec 00.
+- ✅ **L6 — TC-11-10 ↔ TC-09-02 duplication.** Intentional cross-spec link per Spec 11's "mirror" wording. No change.
+
+#### 📝 Phase 4 prep — Round 2 spec sweep (2026-04-30)
+
+Single consolidated cold-eyes pass against the round-1 fixed spec set. 18 issues, mostly drift-by-fix (named-anchor renumbering missed leftovers, undefined references introduced by the rename, mojibake from ASCII-only convention applied to a glyph-codepoint citation). Pattern matches expectations: round 1 introduced named anchors; round 2 catches the citations the rename missed.
+
+**Priority A — internal contradictions (BLOCKER + HIGH):**
+
+- ✅ **B1 — Spec 09 §Outputs lines 178–179 still carry `[_vN]` after the §File naming rewrite excised the rule.** Direct contradiction inside the same spec. Fix: drop `[_vN]` from both `<album-name> - YYYY-MM-DD[_vN].pdf` and `.html` lines.
+- ✅ **B2 — Spec 02 §approve §Behavior bullet 2 retains numeric "step 1 and step 2" reference.** Should cite `step:verify-paths` and `step:export-staging`.
+- ✅ **B3 — Spec 08 contains two stale "Spec 09 step 2" / "Spec 09 step 1" numeric citations.** Inline algorithm comment + TC-08-05a body. Should be `step:export-staging` and `step:verify-paths`.
+- ✅ **B5 — TC-09-26 has mojibake `ὑ2` instead of the lock codepoint.** ASCII-only convention applied wrongly. Fix: rewrite as `\U0001F512` per the project's ASCII-source convention.
+- ✅ **B6 — Spec 11 §Glyphs has no named constants; Spec 09 references `Glyphs.CHECK` / `Glyphs.LOCK` as if they were defined.** Fix: add a "Constants exposed in `theme.Glyphs`" subsection to Spec 11 §Glyphs mapping each glyph to a Python identifier.
+
+**Priority B — drift / semantic gap (MEDIUM):**
+
+- ✅ **B7 — Spec 02 `Albums/<slug>/` half-conversion drift.** §delete, §Outputs, the companions table, TC-02-05, TC-02-15 still use the literal `Albums/<slug>/`. Fix: add a one-line preamble — "Throughout this spec, `Albums/<slug>/` is shorthand for `<settings.albums_folder>/<slug>/`."
+- ✅ **B12 — Spec 09 §The reopen flow step 3 inlines the unapprove substeps instead of cross-referencing.** Fix: replace inline enumeration with "per Spec 02 §unapprove step 2.{i,ii,iii}."
+- ✅ **B13 — `step:render-rename-pdf` recovery row references a Spec 02 self-heal that doesn't exist.** Fix: weaken to "no self-heal needed; the marker is the source of truth."
+- ✅ **B14 — Spec 10 §Atomic pair scan uses `album.sanitised_name` without defining it.** Fix: add one-liner — "`album.sanitised_name` is `sanitise_title(album.name)` per Spec 09 §File naming."
+- ✅ **B15 — Atomic-pair glob can false-match on date-suffix album names** (e.g. `"Daily - 2026-04-30"`). Fix: add constraint — UI-side validation rejects album names ending in ` - YYYY-MM-DD`.
+
+**Priority C — cosmetic / docs hygiene (LOW):**
+
+- ✅ **B8 — Spec 09 doesn't state symmetric "approve regenerates symlinks/M3U; unapprove keeps them."** Fix: add a one-line note to §The reopen flow.
+- ✅ **B10 — Spec 08 inline comment "album.track_paths is list[str] per Spec 10" is misleading.** Fix: clarify — "list[str] on disk per Spec 10; coerce to Path here."
+- ✅ **B11 — TC-08-03 has no width=3 example.** Fix: add a one-line example for `len > 99`.
+- ✅ **B16 — Spec 10 TC-10-22/23 missing `(Phase 4)` tag.** Fix: tag consistently OR amend §Test contract preamble.
+- ✅ **B17 — Spec 11 §Branding "Generated by [icon] Album Builder" vs Spec 09 footer mismatch.** Fix: pick one — add icon to Spec 09 cover-page footer, OR drop "[icon]" from Spec 11.
+
+**Closed-without-change (LOW):**
+
+- ✅ **B4 / B9 — Spec 08 in-algorithm "step N" self-references.** Closed by B3 (only cross-spec citations need updating).
+- ✅ **B18 — Spec 11 §Album cover placeholder.** Confirmed clean.
+- ✅ **TC-09-04 / TC-09-11 / TC-09-23 tombstones.** Confirmed acceptable cleanup approach.
+
+#### 📝 Phase 4 prep — Round 3 spec sweep (2026-04-30)
+
+Single consolidated cold-eyes pass against the round-2 fixed spec set. 3 issues found — **convergence indicator**: round 1 = 39 actionable; round 2 = 17; round 3 = 3.
+
+- ✅ **C1 [HIGH] — Spec 02 §unapprove narration line 89 contradicts Spec 09's `step:render-rename-pdf` recovery contract.** Reads "Spec 09 self-heals this on next load by regenerating the report." No such "regenerate-on-load" self-heal exists in Spec 09 (recovery table says "no self-heal needed; user re-approves"). Fix: rewrite the sentence to match the actual contract — marker presence wins, a load-time toast prompts re-approve.
+- ✅ **C2 [MEDIUM] — Spec 10 §Atomic pair attributes the album-name regex constraint to "Spec 02 §rename" but neither Spec 02 §rename nor §create surfaces the rule.** A Spec-02-only reader would never see it. Fix: add the validation rule to Spec 02 §create + §rename + §Errors table; cross-reference Spec 10 §Atomic pair as the rationale.
+- ✅ **C3 [LOW] — Spec 11 §Constants exposed in `theme.Glyphs` includes `CLOSE` (`×`, U+00D7) but the visual §Glyphs table above does not.** Small narrative contradiction. Fix: add a `×` row to the upper visual table (toast close affordance) for parity.
+
+#### ✅ Phase 4 prep — Round 4 confirmation pass (2026-04-30)
+
+Single cold-eyes pass against the round-3 fixed spec set. **Zero findings.** Round-3 fixes (album-name regex constraint published byte-identical across 5 sites; Spec 02 §unapprove load-time-toast narration; Spec 11 §Glyphs `×` row addition) are internally consistent and consistent across specs.
+
+**Verdict: READY FOR IMPLEMENTATION.** The Phase 4 spec set (specs 02, 08, 09, 10, 11) is implementer-ready with no surviving BLOCKER, HIGH, MEDIUM, or LOW issues.
+
+**Convergence:** round 1 = 39 actionable findings; round 2 = 17; round 3 = 3; round 4 = 0. Specs grew from 996 → ~1,140 lines net and gained 16 new TC clauses (TC-08-02a, TC-08-05a, TC-08-10a, TC-08-10b, TC-08-14..19; TC-09-09a, TC-09-09b, TC-09-12a, TC-09-16a, TC-09-18..26; TC-10-21..24). 3 TCs were tombstoned (TC-09-04, TC-09-11, TC-09-23).
+
+#### ✅ Phase 4 — v0.5.0 implementation (2026-04-30)
+
+**Modules added:**
+- `src/album_builder/services/export.py` (442 LoC) — `sanitise_title`, `_render_m3u`, `regenerate_album_exports` (strict + non-strict), `_commit_export` (eventually-consistent commit), drift-detection `is_export_fresh`, fs-caps cache, `.export-log` rotation, stale-staging cleanup.
+- `src/album_builder/services/report.py` (335 LoC) — Jinja2 + WeasyPrint pipeline, `version_string()` `ImportError` fallback, three-state composer/artist column, 32 KB lyrics cap, cover normalise (Pillow OR-threshold), atomic-pair writes.
+- `src/album_builder/services/templates/report.html.j2` — single template with `@media print` rules, `break-inside: avoid` page-break CSS, `overflow-wrap: anywhere` for long lyrics, `data:`-URI inlining.
+- `src/album_builder/persistence/atomic_pair.py` (112 LoC) — `scan_reports_dir` load-time half-pair + stale-`.tmp` cleanup.
+
+**Modules edited:**
+- `src/album_builder/domain/album.py` — `_DATE_SUFFIX_RE` validation in `_validate_name`.
+- `src/album_builder/services/album_store.py` — `approve(library=...)` orchestrates `step:verify-paths` → export(strict=True) → report → marker → status; `unapprove` deletes `reports/` first; `rescan` triggers stale-staging wipe + atomic-pair scan per album.
+- `src/album_builder/persistence/settings.py` — `UiSettings` + `read_ui` / `write_ui` for `open_report_folder_on_approve`.
+- `src/album_builder/ui/main_window.py` — `_on_approve` shows pre-flight summary with warnings + disables button during render + emits success toast + `xdg-open`s reports folder gated on settings; `_on_reopen` confirm dialog matches Spec 09 verbatim text with default-Cancel.
+
+**Tests added (52 new):**
+- `tests/services/test_TC_08_export.py` — TC-08-01..19 covering sanitise rules, M3U render predicates, symlink filename + width, idempotence, missing-track strict/loose modes, real-file preservation, dedup-by-title, drift detection, control-char rejection.
+- `tests/services/test_TC_09_report.py` — TC-09-01..26 covering full template render, version fallback, three-state composer rule, cover resize threshold, lyrics cap, atomic-pair half-rename recovery, page-break CSS, single-file portability.
+- `tests/persistence/test_TC_10_atomic_pair.py` — TC-10-21..24 covering pair-completed / pair-repaired / tmps-swept stats, name regex validation.
+
+**Test count:** 415 → 467 passing (+52). Ruff clean. Audit + indie-review iterations queued next.
+
+##### 🔍 /audit 2026-04-30 (post-implementation)
+
+Tools: ruff, bandit (-ll), semgrep (p/security-audit + p/python on 42 files), gitleaks, pyright. **All clean — 0 actionable findings.** (Pyright surfaced 1 false-positive on weasyprint import resolution; system pyright doesn't see venv.)
+
+##### 🔥 /indie-review 2026-04-30 (6-lane parallel cold-eyes review)
+
+Author-bias flagged: parent session authored entire Phase 4 surface; cold-eyes lanes are the mitigation. Findings consolidated below; cross-cutting themes flagged by ≥2 lanes are the highest-confidence signal.
+
+**Cross-cutting themes (caught by ≥2 reviewers):**
+
+- 🔥 **Theme M — Bare `except Exception` swallowing real bugs.** `services/album_store.py:145` (rescan self-heal) + `ui/main_window.py:311` (post-approve niceties). Both correctly worried about hiding refactor regressions.
+- 🔥 **Theme N — Atomic-pair recovery hole between rename-A and rename-B.** `services/report.py:289-298` deletes `pdf_tmp` but leaves orphan `html_final` — Spec 10 §Atomic pair "delete BOTH". Cross-confirmed by services/report H2 + persistence/atomic_pair (load-time scan handles it on next launch, but in-process recovery doesn't match spec).
+- 🔥 **Theme O — Drift-detection / fallback-chain zombie infrastructure.** services/export L1 confirms `is_export_fresh` zero callers; `fs_supports_symlinks` + `_FS_CAPS_CACHE_PATH` machinery (50 LoC) zero callers. Spec 08 promises both.
+- 🔥 **Theme P — Atomic pair `_unique_tmp_path` glob mismatch with Spec 10 sketch.** `report.py` writes `<final>.<pid>.<uuid8>.tmp` per Spec 10 protocol; the load-time scan's `*.tmp` glob in `atomic_pair.py:41` matches correctly, but Spec 10 §Atomic pair line 92 sketch shows literal `<file>.tmp` — spec sketch should be tightened.
+
+**Tier 1 — ship-this-week (CRITICAL + HIGH that breaks shipping invariants):**
+
+- ✅ **F1 [CRITICAL] — Drift-detection unwired (Theme O).** `services/export.py:188-208` defines `is_export_fresh` with zero callers; `services/album_store.py:138-147` calls `cleanup_stale_staging` and discards its return value (documented as "caller may flag the album `needs_regen`"). Spec 08 line 167 mandates `AlbumStore.load()` to set `needs_regen` on count mismatch; current code can never repair a kill-mid-`_commit_export` short of user mutation. Fix: add `needs_regen` attribute, wire scan in `rescan()`, trigger regeneration via Qt signal on next mutation.
+- ✅ **F2 [CRITICAL] — Hardlink/copy fallback chain unimplemented (Theme O, scope decision).** `services/export.py:257` calls `link.symlink_to(...)` with no `try/except OSError`; `fs_supports_symlinks` + `_load_fs_caps` + `_save_fs_caps` + `_fs_key` + `_FS_CAPS_CACHE_PATH` are zombie code (50 LoC). FAT32/vfat album folder produces a stack trace instead of spec'd fallback. **Decision: scope-out the FAT32 fallback for v0.5.0 (not a real-world Linux desktop case)** — delete the dead infrastructure + amend Spec 08 §Errors to mark "Album folder on FS without symlink support" as v0.6+ defer.
+- ✅ **F3 [CRITICAL] — `assert staging.parent == folder` disappears under `python -O`.** `services/export.py:416`. Spec 08 line 147 explicitly contrasts "asserted, not just commented" — but `assert` is exactly the wrong tool. Fix: replace with `if … != …: raise RuntimeError(...)`.
+- ✅ **F4 [CRITICAL] — Pre-flight approve dialog uses default Qt Yes/No.** `ui/main_window.py:282-285`. Spec 09 §The approve flow step 3 mandates literal "Approve and generate report" / "Cancel" labels with destructive styling; default-Cancel per UX safety. Today: localised "Yes/No" defaults to Yes. Fix: replace `QMessageBox.question(...)` with custom `QMessageBox` mirroring `_on_reopen` shape.
+- ✅ **F5 [CRITICAL] — `_show_toast` `statusBar()` fallback materialises a permanent status bar.** `ui/main_window.py:349-351`. Calling `statusBar()` instantiates the widget. `hasattr(self, "statusBar")` is always True (inherited method). Fix: drop the fallback; toast widget is always present in normal init.
+- ✅ **F6 [CRITICAL] — `render_report` writes tmp via bare `open()` not `atomic_write_text`.** `services/report.py:264-276`. Spec 09 §step:render-tmp says "Write reports/… via Spec 10 atomic_write_text"; current code does `fsync(fh.fileno())` but skips parent-dir fsync. Fix: route through `atomic_io._atomic_write` or replicate its dir-fsync. (Note: the contract is satisfied at the file level; this is dir-level durability.)
+- ✅ **F7 [HIGH] — `_commit_export` partial-failure leaks staging files (Theme N adjacent).** `services/export.py:286-291`. The for-loop calls `os.replace` per entry; ENOSPC mid-loop leaves half the new symlinks plus stale ones from previous order. Fix: catch OSError, log, skip stale-unlink step so previous order survives.
+- ✅ **F8 [HIGH] — Atomic-pair recovery hole, in-process (Theme N).** `services/report.py:289-298`. On second `os.replace` failure, `html_final` orphan stays. Fix: in `except OSError` branch, also attempt `html_final.unlink()` matching Spec 10 "delete both".
+- ✅ **F9 [HIGH] — `library=None` branch in `approve()` silently skips export+report.** `services/album_store.py:313-322`. Spec 09 mandates steps 2-3; legacy compatibility branch produces "approved album with no artefacts" — exact invariant the spec forbids. Fix: drop the branch (update the legacy test to pass a fake library) or raise on `None`.
+- ✅ **F10 [HIGH] — `pairs_repaired` increments even when `unlink` failed.** `persistence/atomic_pair.py:90-102`. Stat lies to caller. Fix: increment only when both unlinks succeed; same for `tmps_swept`.
+- ✅ **F11 [HIGH] — `_DATE_STEM_RE` is dead code.** `persistence/atomic_pair.py:23`. Module-top regex never used; inline copy at line 60 does the actual matching. Fix: delete the global; use the inline form (or refactor inline → global).
+- ✅ **F12 [HIGH] — `·` glyph hardcoded in toast message (Theme J recurrence).** `ui/main_window.py:305`. Spec 11 §Constants single-source rule. Fix: add `Glyphs.MIDDOT = "·"` (or `Glyphs.SEP`) and reference it.
+- ✅ **F13 [HIGH] — `except Exception` in `_on_approve` post-niceties (Theme M).** `ui/main_window.py:311`. Fix: narrow to `(OSError, ImportError)`.
+- ✅ **F14 [HIGH] — `except OSError` in `rescan()` self-heal too narrow (Theme M).** `services/album_store.py:145`. `scan_reports_dir` could raise `re.error` in a future edit; `cleanup_stale_staging` could raise `ValueError` on bad input. Fix: add inline comment naming the policy ("OSError only — logic errors propagate to surface bugs"); broader catch with explicit raise-on-non-OSError.
+- ✅ **F15 [HIGH] — Approve-failure leaves user with no toast surface.** `ui/main_window.py:285-294`. Spec 09 §Errors row "Disk full at PDF write time → Toast error". Fix: emit toast on OSError alongside (or instead of) the QMessageBox.warning.
+- ✅ **F16 [HIGH] — Pillow optional + raw-bytes-survive masks decode failure.** `services/report.py:86-88`. With Pillow missing AND corrupt bytes, broken bytes flow into the data URI; WeasyPrint may abort. Fix: make Pillow a hard runtime dep (it's installed in venv), drop the `try/except ImportError`.
+
+**Tier 2 — hardening sweep (MEDIUM):**
+
+- ✅ **F17 — TOCTOU window between `step:verify-paths` and `step:export-staging`.** `services/album_store.py:307-315`. Mitigation is `strict=True` in export; pre-flight is UX only. Fix: add comment naming the mitigation so a future cleanup-pass author doesn't delete one half.
+- ✅ **F18 — Re-entrant `approve()` not guarded at service layer.** `services/album_store.py:290`. Contract delegated to UI button-disabling. Fix: add `_approve_in_flight: set[UUID]` guard.
+- ✅ **F19 — `unapprove()` partial-rmtree leaves indeterminate state.** `services/album_store.py:336-342`. EBUSY/EACCES mid-tree raises; album stays APPROVED with half-deleted reports/. Fix: catch OSError, retry once, then surface clear "manual cleanup needed" toast.
+- ✅ **F20 — 64-byte sanity check doesn't verify zero-length.** `services/export.py:259-263`. `fh.read(64)` returns `b""` for both zero-length AND short-file-no-error; warning never fires. Fix: check return-value bytes against a minimum threshold.
+- ✅ **F21 — M3U round-trip parse promised but not implemented.** `services/export.py:268`. Spec 08 line 186. Fix: scope-out for v0.5.0 (move to v0.6+ in spec) — round-trip is sanity, not safety.
+- ✅ **F22 — Toast surface for control-char rejection.** `services/export.py:162` (`_render_m3u`) and `:245-247` (`_build_staging`). Fix: return `(created, warnings)` tuple from `regenerate_album_exports` so caller can surface a toast.
+- ✅ **F23 — Permissions error in album folder gives stack trace, not toast.** `services/export.py:412-414`. `staging.mkdir()` raises `PermissionError`; no try-block around it. Fix: catch + raise `ExportFailed` with user-friendly message.
+- ✅ **F24 — `_append_export_log` write failure kills successful export.** `services/export.py:326`. Fix: wrap in try/except; log-and-continue (best-effort).
+- ✅ **F25 — `pairs_repaired`/`tmps_swept` accuracy + glob-escape sanitised_name.** `persistence/atomic_pair.py:41`. Album name with `[` or `]` (sanitiser doesn't strip these) silently fails to match. Fix: `glob.escape(sanitised_name)`.
+- ✅ **F26 — Both-finals + stale-tmp branch missing in scan.** `persistence/atomic_pair.py:88-110`. State not in spec recovery table but spirit ("never half-good") implies stale `.tmp` should be swept. Fix: add `else: unlink(tmps)` arm.
+- ✅ **F27 — `version_string()` falls back only on `ImportError`.** `services/report.py:49`. `AttributeError` (no `__version__` attr) raises. Fix: catch `(ImportError, AttributeError)`.
+- ✅ **F28 — Reopen confirm dialog has no warning icon, no destructive styling.** `ui/main_window.py:325-332`. TC-09-20 last sentence. Fix: `setIcon(QMessageBox.Icon.Warning)` + `setObjectName("DestructiveButton")` + QSS rule.
+- ✅ **F29 — Approve confirm default-Yes; should be default-Cancel.** `ui/main_window.py:282-285`. Destructive (irreversible) UI. Subsumed by F4 (custom dialog).
+- ✅ **F30 — Settings re-read on every approve.** `ui/main_window.py:307-310`. Fix: cache at app start; invalidate via signal on settings-change.
+- ✅ **F31 — Theme not whitelisted in `read_ui`.** `persistence/settings.py:201-203`. Spec 10 says only `"dark-colourful"` is valid. Fix: add `ALLOWED_THEMES = frozenset({"dark-colourful"})`.
+- ✅ **F32 — Date-suffix regex matches pre-sanitise; spec says post-sanitise.** `domain/album.py:30`. Same set rejected in practice (sanitiser doesn't change date pattern), but spec-vs-code drift. Fix: add comment naming the equivalence; OR match against `sanitise_title(n)`.
+
+**Tier 3 — structural / cosmetic (LOW + INFO):**
+
+- ✅ **F33 — Library walked 2-3 times per export pass.** `services/export.py:140-185, 216-269`. Fix: pass `rendered: list[(Path, Track)]` to `_render_m3u`.
+- ✅ **F34 — Inline imports in `main_window.py` `_on_approve` / `_on_reopen`.** Lines 267, 302, 307, 318. Fix: move to module-top.
+- ✅ **F35 — Unicode em-dash in template `<title>` + `·` in footer.** `services/templates/report.html.j2:5, 251`. Fix: replace with ASCII `-` (template not linted by ruff).
+- ✅ **F36 — Performed-by template line is unreachable.** `services/templates/report.html.j2:192`. Predicate `all_artist and not artist` always False because `artist = columns["all_artist"]`. Fix: drop the line, or rewrite predicate against the mixed-artist case.
+- ✅ **F37 — `report_paths_for` `cover_uri` MIME hardcoded `image/jpeg`.** `services/report.py:107-110`. PNG cover_override would mislabel. Fix: detect via Pillow, or stream raw bytes through Pillow → JPEG always.
+- ✅ **F38 — Approve runs synchronously on GUI thread.** `ui/main_window.py:285-294`. 5s budget per Spec 09 §Performance freezes UI. **Defer to v0.5.1** — Phase 4 ships synchronous; threaded approve is a hardening pass.
+- ✅ **F39 — Focus restoration after approve dialog close.** WCAG §2.4.3. Fix: `self.top_bar.btn_reopen.setFocus()` post-success.
+- ✅ **F40 — `EXPORT_LOG_RETAIN = 10` truncates user-edited logs silently.** Cosmetic.
+
+**Closed without change:**
+
+- ✅ **Verified — `xdg-open` argv injection.** `subprocess.Popen([list], …)` — list-form, no shell. Safe.
+- ✅ **Verified — Jinja2 `select_autoescape(["html", "xml"])` blocks the XSS class.** `services/report.py:206`.
+- ✅ **Verified — Single-template, two-output rendering, no `_vN` suffix, lyrics 32 KB cap, three-state composer column, page-break + word-wrap CSS, single-file portability, name regex DoS-safe** — all match spec.
+
+##### 🔥 Round 2 indie-review (2026-04-30 post-fix)
+
+Single-lane cold-eyes follow-up against the round-1 fixed code. 3 surviving findings (2 HIGH, 1 MEDIUM); all closed.
+
+- ✅ **G1 [HIGH] — `_show_toast` typo `self.toast` vs `self._toast`.** `ui/main_window.py`. Round-1 introduced the bug; every toast (success, failure, reopen-partial) silently logged-only. Fixed: read `self._toast` via `getattr` to keep the test-isolation safety.
+- ✅ **G2 [HIGH] — `_needs_regen` set in `rescan()` but never consumed on a draft mutation.** Spec 08 §`_commit_export` Drift-detection ("next mutation re-runs the full sequence") was unwired. Fixed: added `AlbumStore.schedule_export(album_id, library)` method calling `regenerate_album_exports(strict=False)` and clearing the flag; wired from main_window's `_on_target_changed`, `_on_track_toggled`, `_on_reorder_done`.
+- ✅ **G3 [MEDIUM] — `_commit_export` partial-promote never raised in strict mode.** A failed promote let approve continue to `step:render-tmp` against a half-promoted folder. Fixed: added `strict` parameter to `_commit_export`; `regenerate_album_exports` passes its own `strict` through; failure raises `ExportFailed`.
+
+##### ✅ Round 3 indie-review confirmation pass (2026-04-30)
+
+Single-lane cold-eyes verification against the round-2 fixed code. **0 findings introduced by round-2 fixes.** 1 pre-existing dead branch flagged (`_key_in_text_field` line 482 — pre-existing, not Phase 4). 1 hygiene finding (G2 — `_needs_regen` not discarded on `delete()`); fixed inline.
+
+- ✅ **H1 [LOW, hygiene] — `_needs_regen.discard(album_id)` and `_approve_in_flight.discard(album_id)` on `delete()`.** Stale ids accumulating across long delete-heavy sessions. Fixed.
+
+##### ✅ Full-codebase audit (2026-04-30)
+
+Final tool sweep across the entire `src/album_builder/` + `tests/` tree:
+
+- **ruff** (src + tests): All checks passed.
+- **bandit** (-ll, full src tree): 0 medium+ findings.
+- **semgrep** (p/security-audit + p/python, 42 files): 0 findings.
+- **gitleaks** (src/ + tests/): no leaks.
+- **pytest**: 467 passed, 11 skipped (audio integration gates).
+
+**v0.5.0 — Phase 4: Export & Approval — shipped 2026-04-30 on `milnet01/album-builder@main` (commits `9bd98de` feature + `feb49b5` CLAUDE.md refresh).**
+
+---
+
 ## ✅ v0.4.2 — Phase 3B Tier 3 sweep (2026-04-30)
 
 Patch release closing the `/indie-review` Tier 3 structural / cosmetic queue. Same-day follow-up to v0.4.1; no user-facing feature changes (one user-visible polish: body font-size now 11.5px to match Spec 11 §Typography exactly, was ~14.7px from `11pt` at 96dpi).
@@ -547,246 +783,8 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 - 📋 **LOW — README WeasyPrint system-deps.** Genuinely Phase 4 prep (no WeasyPrint dependency until then). Add when `requirements.txt` pulls it in.
 - 📋 **INFO — `track_at()` only used by tests.** Phase 2 will use it for click-to-play row → Track resolution. Keep.
 
----
 
-## 🔭 Upcoming phases
-
-### 📋 v0.5.0 — Phase 4: Export & Approval (planned)
-
-M3U + symlink folder per album, hard-lock approval state, PDF + HTML report generation via WeasyPrint. Specs: 08, 09.
-
-#### 📝 Phase 4 prep — Round 1 spec sweep (2026-04-30)
-
-Pre-implementation cold-eyes review of the Phase 4 surface (Specs 02 §approve/§unapprove, 08, 09, 10 §atomic-write/§schemas, 11 §Glyphs/§Branding). 4 parallel review lanes (Spec 08 deep-dive, Spec 09 deep-dive, cross-spec consistency, test-contract coverage) returned 60 raw findings → 39 unique actionable items below after dedup. Goal: every BLOCKER + HIGH closes by spec edit before Phase 4 implementation begins.
-
-**Priority A — design / contract (BLOCKER + HIGH):**
-
-- ✅ **A1 — `_commit_export` is not actually atomic at the per-symlink granularity.** Spec 08 §Generation algorithm L77 promises "the staging-then-replace sequence"; §`_commit_export` L115–118 wipes live symlinks then per-link-replaces from staging — a kill between step 1 (wipe) and step 2 (first move) leaves zero symlinks + a stale M3U. Fix: rewrite the §`_commit_export` contract as "eventually consistent within bounded time" — explicit recovery rule "on launch OR before next mutation, count(live symlinks where is_symlink) ≠ count(track_paths) ⇒ trigger regeneration." Document the kill-9 window as a known short-window race that the next pass repairs. (Lane A BLOCKER.)
-- ✅ **A2 — Atomic-pair cleanup for half-rendered reports has no defined trigger.** Spec 09 §canonical approve sequence row "3c/3d" says half-pair → delete both on next launch, but no spec names *who* runs that scan. Spec 10 §Errors stale-`.tmp` rule covers JSON only. Fix: extend Spec 10 §Errors to walk `Albums/<slug>/reports/`, deleting both members of any pair where exactly one of `(html, pdf)` for a given date stem exists; cross-link from Spec 09. (Lanes B + C BLOCKER.)
-- ✅ **A3 — `#EXTINF` artist-title rendering rule unspecified.** Spec 08 §Outputs L59 shows `#EXTINF:281,18 Down - something more (calm)` by example. Null-artist handling, embedded ` - ` in title, missing-duration fallback are silent. Fix: explicit format rule + null-artist path + duration fallback (0 if mutagen returns None). (Lane A HIGH.)
-- ✅ **A4 — Symlink filename "100 chars" is codepoints vs bytes ambiguous.** Spec 08 §Symlink filenames L65. UTF-8 multi-byte titles will hit ext4 `NAME_MAX=255` at a different point than 100 codepoints. Fix: "100 Unicode codepoints, then verify UTF-8 byte length ≤ 255 and shorten further if needed." (Lane A HIGH.)
-- ✅ **A5 — `track_path` str-vs-Path coercion ambiguous in algorithm body.** Spec 08 §Generation algorithm L97 calls `.suffix.lower()` on the loop var; `album.track_paths` are strings per Spec 10. Fix: explicit `Path(p)` coercion in the pseudocode. (Lane A HIGH.)
-- ✅ **A6 — Stale `.export.new` on launch has no trigger.** Spec 08 §Behavior rules L128 says "wipe as the first step of the next export pass." Nothing triggers an export pass on launch if the user opens the app and quits without mutating. Fix: add `AlbumStore.load()`-time bullet "if `.export.new` exists, schedule a regeneration; if no mutation occurs, wipe `.export.new` unconditionally on the next clean shutdown." (Lane A HIGH.)
-- ✅ **A7 — Cross-filesystem `os.replace` rule for staging missing.** Spec 08 §`_commit_export` L118: `os.replace(staging/"playlist.m3u8", folder/"playlist.m3u8")` is atomic only when source + dest share a filesystem. Fix: assert "staging MUST be a sibling under the same album folder" with a TC. (Lane A HIGH.)
-- ✅ **A8 — Spec 10 atomic-write contract carve-out for staging not explicit on either side.** Spec 08 §Generation algorithm L104 uses bare `.write_text` for the staging M3U; Spec 10 §Atomic write protocol L37 is unconditional. Fix: add a `§Atomic write — staging-folder exception` paragraph to Spec 10 stating that writes inside a transactional staging dir that itself promotes atomically are exempt; cross-link from Spec 08. (Lane A HIGH.)
-- ✅ **A9 — Empty album (`track_paths == []`) export behavior silent.** Spec 08 doesn't say whether export still generates an empty M3U + zero symlinks, or skips the regeneration entirely. Fix: explicit §Behavior rules clause — empty album writes a one-line `#EXTM3U` file and zero symlinks; no warnings. (Lane A HIGH.)
-- ✅ **A10 — `>99` tracks numbering format silent.** Spec 08 §Symlink filenames says `{NN:02d}`. Spec 10 §`album.json` schema caps `target_count` at 99 (Spec 04 enforces UI), but `track_paths` self-heal can raise `target_count` above the cap. Fix: clamp at 99 with a warning, OR widen format to `{i:03d}` when `len > 99`. Pick one and add §Errors row + TC. (Lane A HIGH.)
-- ✅ **A11 — `_v2` suffix path is unreachable as written.** Spec 09 §File naming L134 + TC-09-04/11 assume same-day re-approve finds prior reports. But Spec 02 §unapprove step 2.i deletes `reports/` recursively, so re-approve always finds an empty directory. Fix: drop the `_vN` rule + delete TC-09-04 and TC-09-11; document "re-approve overwrites within the empty reports/ dir; date-only filename." (Lane B HIGH.)
-- ✅ **A12 — Approve race-window vs Spec 08 skip-with-warning contradiction.** Spec 02 §approve says missing tracks are an error, never a skip. Spec 09 step 2 calls Spec 08 export, which has a unconditional skip-with-warning rule. Fix: Spec 09 step 2 must call Spec 08 in *strict mode* (any missing path raises and aborts the sequence). Spec 08 §Errors row gets a one-line carve-out: "Approve gates this earlier; the skip path is for draft live re-export only." (Lanes B + C HIGH.)
-- ✅ **A13 — Spec 02 §approve §Behavior step 1 wording suggests double-verification.** Step 1 reads "Re-verify all `track_paths` exist (race-window check)" implying preconditions ran a *prior* check. Spec 09 has only one verification (canonical step 1). Fix: align Spec 02 step 1 to "Verify all `track_paths` exist — single check, per Spec 09 §canonical approve sequence step 1; preconditions snapshot the count, this re-checks existence." (Lane C HIGH.)
-- ✅ **A14 — Spec 09 hardcodes glyph codepoints inline (Theme J recurrence).** §The approve flow uses literal `✓` and prose "small lock icon"; Spec 11 §Glyphs canonicalises both as `Glyphs.CHECK` / `Glyphs.LOCK`. Fix: Spec 09 references `Glyphs.CHECK (Spec 11 §Glyphs)` and `Glyphs.LOCK (Spec 11 §Glyphs)` instead of literal codepoints. (Lane C HIGH.)
-- ✅ **A15 — `Albums/<slug>/` source-of-truth not pinned in Spec 02 §create.** Step 3 uses relative `Albums/`; doesn't say "resolve against `settings.albums_folder`." A reader could implement against CWD. Fix: change to "the album folder is created at `<settings.albums_folder>/<slug>/` (Spec 10 §`settings.json`)." (Lane C HIGH.)
-
-**Priority B — missing test contracts (HIGH):**
-
-- ✅ **A16 — Split TC-08-10 into 10a (hardlink fallback) + 10b (copy fallback).** Different UX semantics (suppressed dialog vs required dialog with default-no). Currently one TC line conflates both. (Lane D HIGH.)
-- ✅ **A17 — Add TC-08-14 — `library.refresh()` precedes every export pass.** Spec 08 §Disk-read checks line is prose-only. (Lane D HIGH.)
-- ✅ **A18 — Add TC-08-15 — symlink 64-byte sanity check after creation.** Spec 08 §Disk-read checks line is prose-only. (Lane D HIGH.)
-- ✅ **A19 — Add TC-08-16 — `.export-log` rotation (last 10 runs).** Spec 08 §Disk-read checks line is prose-only. (Lane D HIGH.)
-- ✅ **A20 — Add TC-09-18 — `xdg-open reports/` is gated on `settings.ui.open_report_folder_on_approve`.** Spec 09 §approve flow step 6. (Lane D HIGH.)
-- ✅ **A21 — Add TC-09-20 — Reopen confirm dialog text, default-button "Cancel."** Spec 09 §The reopen flow step 2. (Lane D HIGH.)
-- ✅ **A22 — Add TC-09-22 — Per-track section page-break CSS (`break-inside: avoid`).** Spec 09 §Per-track sections. (Lane D HIGH.)
-- ✅ **A23 — Add TC-09-24 — 50-track render <5 s + ">50 tracks: rendering may take a moment" hint.** Spec 09 §Performance budget. (Lane D HIGH.)
-- ✅ **A24 — Add TC-09-26 — long-line lyrics word-wrap, no overflow.** Spec 09 §Errors row. (Lane D HIGH.)
-- ✅ **A25 — Add TC-09-27 — approve serialises with in-flight export (queue or lock).** Spec 09 §Errors row. (Lane D HIGH.)
-
-**Priority C — clarifications + edge cases (MEDIUM):**
-
-- ✅ **A26 — Spec 08 §Symlink filenames trim order specified.** "Trim leading/trailing whitespace AND dots — repeat until stable." (Lane A MEDIUM.)
-- ✅ **A27 — Spec 08 §Outputs `#PLAYLIST:` / `#EXTART:` emit predicate.** Emit `#PLAYLIST:` iff `album.name` non-empty; emit `#EXTART:` iff all tracks share an artist. (Lane A MEDIUM.)
-- ✅ **A28 — Spec 08 §Robustness collision dedup placement.** `track A.mp3` vs `track A (2).mp3` — show explicit example with extension. (Lane A MEDIUM.)
-- ✅ **A29 — Spec 08 §Errors no-mutagen-readable-title fallback.** Distinct from post-sanitisation empty (which uses `track-{NN}`). (Lane A MEDIUM.)
-- ✅ **A30 — Spec 08 §Errors album-folder-deleted-mid-session.** `mkdir(exist_ok=True)` recreates silently — Spec 02's deletion semantics mean the folder is in `.trash/`; export should detect deletion and abort with a toast, not silently recreate. (Lane A MEDIUM.)
-- ✅ **A31 — Spec 09 `version_string()` `ImportError` fallback.** Return `'unknown'` on import failure; never abort render. Tighten TC-09-02 accordingly. (Lane B MEDIUM.)
-- ✅ **A32 — Spec 09 §Technology single-string-for-both-outputs claim clarified.** Confirm (or amend): rendered HTML string is identical for both writes; print-only CSS is gated behind `@media print` so HTML displays correctly in browsers. (Lane B MEDIUM.)
-- ✅ **A33 — Spec 09 §Errors partial-composer-column case.** Some tracks have a composer, some don't — currently §Track listing only handles "all share." Fix: composer column shown in full when ≥1 track has a composer; missing entries render as em-dash. (Lane B MEDIUM.)
-- ✅ **A34 — Spec 09 §Errors lyrics block size cap.** 100 KB single-track lyrics inflates the PDF. Fix: cap rendered block at e.g. 32 KB with "(... truncated)" suffix; full text remains in source LRC. (Lane B MEDIUM.)
-- ✅ **A35 — Spec 09 §Errors re-entrant approve.** Approve clicked while a previous approve worker is still rendering. Fix: button disables for the duration; queued click is dropped. (Lane B MEDIUM.)
-- ✅ **A36 — Spec 10 §Atomic write protocol gets a `§Atomic pair (multi-file transactions)` subsection.** Names the invariant Spec 09 step 3 enforces; recovery rule lives here, not buried in Spec 09 prose. (Lane C MEDIUM.)
-- ✅ **A37 — Spec 09 §canonical approve sequence step references switch from numeric to named anchors.** `step:verify-paths`, `step:export-staging`, `step:export-commit`, `step:render-tmp`, `step:render-rename-html`, `step:render-rename-pdf`, `step:write-marker`, `step:flip-status`. The crash-recovery table cites the named anchors. Future renumbering can't silently invalidate the recovery contract. (Lane C MEDIUM.)
-- ✅ **A38 — Sharpen TC-02-13 + TC-02-19.** Enumerate the four artefacts (`playlist.m3u8`, symlink set, PDF, HTML, marker) with non-zero size assertion; enumerate three crash points (post-step-2b, post-step-3d, post-step-4) for idempotency. (Lane D MEDIUM.)
-- ✅ **A39 — Sharpen TC-09-08 (cover resize threshold).** ≤ 10 MB AND ≤ 800×800 → pass-through; > 10 MB OR > 800×800 → resize. (Lane D MEDIUM.)
-
-**Deferred / closed-by-policy (LOW):**
-
-- ✅ **L1 — Spec 08 title `(M3U + Symlink Folder)`.** Stays as written; "M3U" refers to the format here, consistent with Spec 00 §Glossary which calls it the format. No change.
-- ✅ **L2 — "Toast" not in Spec 00 §Glossary.** Cross-spec UI term; defined implicitly by Spec 11 surface conventions. Out of Phase 4 prep scope; bookmark for v0.6+ glossary expansion.
-- ✅ **L3 — `reports/` deletion ordering note in Spec 09.** Folded into A37 (named anchors) — when steps are named, ordering becomes load-bearing automatically.
-- ✅ **L4 — Concurrent export passes for two albums.** Implicit from Spec 10 §Debounce ("Multiple albums are debounced independently"). No new spec text required.
-- ✅ **L5 — `reports/` is a user-symlink (shenanigans).** Out of v1 threat model (single-user single-machine); explicitly out of scope per Spec 00.
-- ✅ **L6 — TC-11-10 ↔ TC-09-02 duplication.** Intentional cross-spec link per Spec 11's "mirror" wording. No change.
-
-#### 📝 Phase 4 prep — Round 2 spec sweep (2026-04-30)
-
-Single consolidated cold-eyes pass against the round-1 fixed spec set. 18 issues, mostly drift-by-fix (named-anchor renumbering missed leftovers, undefined references introduced by the rename, mojibake from ASCII-only convention applied to a glyph-codepoint citation). Pattern matches expectations: round 1 introduced named anchors; round 2 catches the citations the rename missed.
-
-**Priority A — internal contradictions (BLOCKER + HIGH):**
-
-- ✅ **B1 — Spec 09 §Outputs lines 178–179 still carry `[_vN]` after the §File naming rewrite excised the rule.** Direct contradiction inside the same spec. Fix: drop `[_vN]` from both `<album-name> - YYYY-MM-DD[_vN].pdf` and `.html` lines.
-- ✅ **B2 — Spec 02 §approve §Behavior bullet 2 retains numeric "step 1 and step 2" reference.** Should cite `step:verify-paths` and `step:export-staging`.
-- ✅ **B3 — Spec 08 contains two stale "Spec 09 step 2" / "Spec 09 step 1" numeric citations.** Inline algorithm comment + TC-08-05a body. Should be `step:export-staging` and `step:verify-paths`.
-- ✅ **B5 — TC-09-26 has mojibake `ὑ2` instead of the lock codepoint.** ASCII-only convention applied wrongly. Fix: rewrite as `\U0001F512` per the project's ASCII-source convention.
-- ✅ **B6 — Spec 11 §Glyphs has no named constants; Spec 09 references `Glyphs.CHECK` / `Glyphs.LOCK` as if they were defined.** Fix: add a "Constants exposed in `theme.Glyphs`" subsection to Spec 11 §Glyphs mapping each glyph to a Python identifier.
-
-**Priority B — drift / semantic gap (MEDIUM):**
-
-- ✅ **B7 — Spec 02 `Albums/<slug>/` half-conversion drift.** §delete, §Outputs, the companions table, TC-02-05, TC-02-15 still use the literal `Albums/<slug>/`. Fix: add a one-line preamble — "Throughout this spec, `Albums/<slug>/` is shorthand for `<settings.albums_folder>/<slug>/`."
-- ✅ **B12 — Spec 09 §The reopen flow step 3 inlines the unapprove substeps instead of cross-referencing.** Fix: replace inline enumeration with "per Spec 02 §unapprove step 2.{i,ii,iii}."
-- ✅ **B13 — `step:render-rename-pdf` recovery row references a Spec 02 self-heal that doesn't exist.** Fix: weaken to "no self-heal needed; the marker is the source of truth."
-- ✅ **B14 — Spec 10 §Atomic pair scan uses `album.sanitised_name` without defining it.** Fix: add one-liner — "`album.sanitised_name` is `sanitise_title(album.name)` per Spec 09 §File naming."
-- ✅ **B15 — Atomic-pair glob can false-match on date-suffix album names** (e.g. `"Daily - 2026-04-30"`). Fix: add constraint — UI-side validation rejects album names ending in ` - YYYY-MM-DD`.
-
-**Priority C — cosmetic / docs hygiene (LOW):**
-
-- ✅ **B8 — Spec 09 doesn't state symmetric "approve regenerates symlinks/M3U; unapprove keeps them."** Fix: add a one-line note to §The reopen flow.
-- ✅ **B10 — Spec 08 inline comment "album.track_paths is list[str] per Spec 10" is misleading.** Fix: clarify — "list[str] on disk per Spec 10; coerce to Path here."
-- ✅ **B11 — TC-08-03 has no width=3 example.** Fix: add a one-line example for `len > 99`.
-- ✅ **B16 — Spec 10 TC-10-22/23 missing `(Phase 4)` tag.** Fix: tag consistently OR amend §Test contract preamble.
-- ✅ **B17 — Spec 11 §Branding "Generated by [icon] Album Builder" vs Spec 09 footer mismatch.** Fix: pick one — add icon to Spec 09 cover-page footer, OR drop "[icon]" from Spec 11.
-
-**Closed-without-change (LOW):**
-
-- ✅ **B4 / B9 — Spec 08 in-algorithm "step N" self-references.** Closed by B3 (only cross-spec citations need updating).
-- ✅ **B18 — Spec 11 §Album cover placeholder.** Confirmed clean.
-- ✅ **TC-09-04 / TC-09-11 / TC-09-23 tombstones.** Confirmed acceptable cleanup approach.
-
-#### 📝 Phase 4 prep — Round 3 spec sweep (2026-04-30)
-
-Single consolidated cold-eyes pass against the round-2 fixed spec set. 3 issues found — **convergence indicator**: round 1 = 39 actionable; round 2 = 17; round 3 = 3.
-
-- ✅ **C1 [HIGH] — Spec 02 §unapprove narration line 89 contradicts Spec 09's `step:render-rename-pdf` recovery contract.** Reads "Spec 09 self-heals this on next load by regenerating the report." No such "regenerate-on-load" self-heal exists in Spec 09 (recovery table says "no self-heal needed; user re-approves"). Fix: rewrite the sentence to match the actual contract — marker presence wins, a load-time toast prompts re-approve.
-- ✅ **C2 [MEDIUM] — Spec 10 §Atomic pair attributes the album-name regex constraint to "Spec 02 §rename" but neither Spec 02 §rename nor §create surfaces the rule.** A Spec-02-only reader would never see it. Fix: add the validation rule to Spec 02 §create + §rename + §Errors table; cross-reference Spec 10 §Atomic pair as the rationale.
-- ✅ **C3 [LOW] — Spec 11 §Constants exposed in `theme.Glyphs` includes `CLOSE` (`×`, U+00D7) but the visual §Glyphs table above does not.** Small narrative contradiction. Fix: add a `×` row to the upper visual table (toast close affordance) for parity.
-
-#### 🚧 Phase 4 — v0.5.0 implementation in progress (2026-04-30)
-
-**Modules added:**
-- `src/album_builder/services/export.py` (442 LoC) — `sanitise_title`, `_render_m3u`, `regenerate_album_exports` (strict + non-strict), `_commit_export` (eventually-consistent commit), drift-detection `is_export_fresh`, fs-caps cache, `.export-log` rotation, stale-staging cleanup.
-- `src/album_builder/services/report.py` (335 LoC) — Jinja2 + WeasyPrint pipeline, `version_string()` `ImportError` fallback, three-state composer/artist column, 32 KB lyrics cap, cover normalise (Pillow OR-threshold), atomic-pair writes.
-- `src/album_builder/services/templates/report.html.j2` — single template with `@media print` rules, `break-inside: avoid` page-break CSS, `overflow-wrap: anywhere` for long lyrics, `data:`-URI inlining.
-- `src/album_builder/persistence/atomic_pair.py` (112 LoC) — `scan_reports_dir` load-time half-pair + stale-`.tmp` cleanup.
-
-**Modules edited:**
-- `src/album_builder/domain/album.py` — `_DATE_SUFFIX_RE` validation in `_validate_name`.
-- `src/album_builder/services/album_store.py` — `approve(library=...)` orchestrates `step:verify-paths` → export(strict=True) → report → marker → status; `unapprove` deletes `reports/` first; `rescan` triggers stale-staging wipe + atomic-pair scan per album.
-- `src/album_builder/persistence/settings.py` — `UiSettings` + `read_ui` / `write_ui` for `open_report_folder_on_approve`.
-- `src/album_builder/ui/main_window.py` — `_on_approve` shows pre-flight summary with warnings + disables button during render + emits success toast + `xdg-open`s reports folder gated on settings; `_on_reopen` confirm dialog matches Spec 09 verbatim text with default-Cancel.
-
-**Tests added (52 new):**
-- `tests/services/test_TC_08_export.py` — TC-08-01..19 covering sanitise rules, M3U render predicates, symlink filename + width, idempotence, missing-track strict/loose modes, real-file preservation, dedup-by-title, drift detection, control-char rejection.
-- `tests/services/test_TC_09_report.py` — TC-09-01..26 covering full template render, version fallback, three-state composer rule, cover resize threshold, lyrics cap, atomic-pair half-rename recovery, page-break CSS, single-file portability.
-- `tests/persistence/test_TC_10_atomic_pair.py` — TC-10-21..24 covering pair-completed / pair-repaired / tmps-swept stats, name regex validation.
-
-**Test count:** 415 → 467 passing (+52). Ruff clean. Audit + indie-review iterations queued next.
-
-##### 🔍 /audit 2026-04-30 (post-implementation)
-
-Tools: ruff, bandit (-ll), semgrep (p/security-audit + p/python on 42 files), gitleaks, pyright. **All clean — 0 actionable findings.** (Pyright surfaced 1 false-positive on weasyprint import resolution; system pyright doesn't see venv.)
-
-##### 🔥 /indie-review 2026-04-30 (6-lane parallel cold-eyes review)
-
-Author-bias flagged: parent session authored entire Phase 4 surface; cold-eyes lanes are the mitigation. Findings consolidated below; cross-cutting themes flagged by ≥2 lanes are the highest-confidence signal.
-
-**Cross-cutting themes (caught by ≥2 reviewers):**
-
-- 🔥 **Theme M — Bare `except Exception` swallowing real bugs.** `services/album_store.py:145` (rescan self-heal) + `ui/main_window.py:311` (post-approve niceties). Both correctly worried about hiding refactor regressions.
-- 🔥 **Theme N — Atomic-pair recovery hole between rename-A and rename-B.** `services/report.py:289-298` deletes `pdf_tmp` but leaves orphan `html_final` — Spec 10 §Atomic pair "delete BOTH". Cross-confirmed by services/report H2 + persistence/atomic_pair (load-time scan handles it on next launch, but in-process recovery doesn't match spec).
-- 🔥 **Theme O — Drift-detection / fallback-chain zombie infrastructure.** services/export L1 confirms `is_export_fresh` zero callers; `fs_supports_symlinks` + `_FS_CAPS_CACHE_PATH` machinery (50 LoC) zero callers. Spec 08 promises both.
-- 🔥 **Theme P — Atomic pair `_unique_tmp_path` glob mismatch with Spec 10 sketch.** `report.py` writes `<final>.<pid>.<uuid8>.tmp` per Spec 10 protocol; the load-time scan's `*.tmp` glob in `atomic_pair.py:41` matches correctly, but Spec 10 §Atomic pair line 92 sketch shows literal `<file>.tmp` — spec sketch should be tightened.
-
-**Tier 1 — ship-this-week (CRITICAL + HIGH that breaks shipping invariants):**
-
-- ✅ **F1 [CRITICAL] — Drift-detection unwired (Theme O).** `services/export.py:188-208` defines `is_export_fresh` with zero callers; `services/album_store.py:138-147` calls `cleanup_stale_staging` and discards its return value (documented as "caller may flag the album `needs_regen`"). Spec 08 line 167 mandates `AlbumStore.load()` to set `needs_regen` on count mismatch; current code can never repair a kill-mid-`_commit_export` short of user mutation. Fix: add `needs_regen` attribute, wire scan in `rescan()`, trigger regeneration via Qt signal on next mutation.
-- ✅ **F2 [CRITICAL] — Hardlink/copy fallback chain unimplemented (Theme O, scope decision).** `services/export.py:257` calls `link.symlink_to(...)` with no `try/except OSError`; `fs_supports_symlinks` + `_load_fs_caps` + `_save_fs_caps` + `_fs_key` + `_FS_CAPS_CACHE_PATH` are zombie code (50 LoC). FAT32/vfat album folder produces a stack trace instead of spec'd fallback. **Decision: scope-out the FAT32 fallback for v0.5.0 (not a real-world Linux desktop case)** — delete the dead infrastructure + amend Spec 08 §Errors to mark "Album folder on FS without symlink support" as v0.6+ defer.
-- ✅ **F3 [CRITICAL] — `assert staging.parent == folder` disappears under `python -O`.** `services/export.py:416`. Spec 08 line 147 explicitly contrasts "asserted, not just commented" — but `assert` is exactly the wrong tool. Fix: replace with `if … != …: raise RuntimeError(...)`.
-- ✅ **F4 [CRITICAL] — Pre-flight approve dialog uses default Qt Yes/No.** `ui/main_window.py:282-285`. Spec 09 §The approve flow step 3 mandates literal "Approve and generate report" / "Cancel" labels with destructive styling; default-Cancel per UX safety. Today: localised "Yes/No" defaults to Yes. Fix: replace `QMessageBox.question(...)` with custom `QMessageBox` mirroring `_on_reopen` shape.
-- ✅ **F5 [CRITICAL] — `_show_toast` `statusBar()` fallback materialises a permanent status bar.** `ui/main_window.py:349-351`. Calling `statusBar()` instantiates the widget. `hasattr(self, "statusBar")` is always True (inherited method). Fix: drop the fallback; toast widget is always present in normal init.
-- ✅ **F6 [CRITICAL] — `render_report` writes tmp via bare `open()` not `atomic_write_text`.** `services/report.py:264-276`. Spec 09 §step:render-tmp says "Write reports/… via Spec 10 atomic_write_text"; current code does `fsync(fh.fileno())` but skips parent-dir fsync. Fix: route through `atomic_io._atomic_write` or replicate its dir-fsync. (Note: the contract is satisfied at the file level; this is dir-level durability.)
-- ✅ **F7 [HIGH] — `_commit_export` partial-failure leaks staging files (Theme N adjacent).** `services/export.py:286-291`. The for-loop calls `os.replace` per entry; ENOSPC mid-loop leaves half the new symlinks plus stale ones from previous order. Fix: catch OSError, log, skip stale-unlink step so previous order survives.
-- ✅ **F8 [HIGH] — Atomic-pair recovery hole, in-process (Theme N).** `services/report.py:289-298`. On second `os.replace` failure, `html_final` orphan stays. Fix: in `except OSError` branch, also attempt `html_final.unlink()` matching Spec 10 "delete both".
-- ✅ **F9 [HIGH] — `library=None` branch in `approve()` silently skips export+report.** `services/album_store.py:313-322`. Spec 09 mandates steps 2-3; legacy compatibility branch produces "approved album with no artefacts" — exact invariant the spec forbids. Fix: drop the branch (update the legacy test to pass a fake library) or raise on `None`.
-- ✅ **F10 [HIGH] — `pairs_repaired` increments even when `unlink` failed.** `persistence/atomic_pair.py:90-102`. Stat lies to caller. Fix: increment only when both unlinks succeed; same for `tmps_swept`.
-- ✅ **F11 [HIGH] — `_DATE_STEM_RE` is dead code.** `persistence/atomic_pair.py:23`. Module-top regex never used; inline copy at line 60 does the actual matching. Fix: delete the global; use the inline form (or refactor inline → global).
-- ✅ **F12 [HIGH] — `·` glyph hardcoded in toast message (Theme J recurrence).** `ui/main_window.py:305`. Spec 11 §Constants single-source rule. Fix: add `Glyphs.MIDDOT = "·"` (or `Glyphs.SEP`) and reference it.
-- ✅ **F13 [HIGH] — `except Exception` in `_on_approve` post-niceties (Theme M).** `ui/main_window.py:311`. Fix: narrow to `(OSError, ImportError)`.
-- ✅ **F14 [HIGH] — `except OSError` in `rescan()` self-heal too narrow (Theme M).** `services/album_store.py:145`. `scan_reports_dir` could raise `re.error` in a future edit; `cleanup_stale_staging` could raise `ValueError` on bad input. Fix: add inline comment naming the policy ("OSError only — logic errors propagate to surface bugs"); broader catch with explicit raise-on-non-OSError.
-- ✅ **F15 [HIGH] — Approve-failure leaves user with no toast surface.** `ui/main_window.py:285-294`. Spec 09 §Errors row "Disk full at PDF write time → Toast error". Fix: emit toast on OSError alongside (or instead of) the QMessageBox.warning.
-- ✅ **F16 [HIGH] — Pillow optional + raw-bytes-survive masks decode failure.** `services/report.py:86-88`. With Pillow missing AND corrupt bytes, broken bytes flow into the data URI; WeasyPrint may abort. Fix: make Pillow a hard runtime dep (it's installed in venv), drop the `try/except ImportError`.
-
-**Tier 2 — hardening sweep (MEDIUM):**
-
-- ✅ **F17 — TOCTOU window between `step:verify-paths` and `step:export-staging`.** `services/album_store.py:307-315`. Mitigation is `strict=True` in export; pre-flight is UX only. Fix: add comment naming the mitigation so a future cleanup-pass author doesn't delete one half.
-- ✅ **F18 — Re-entrant `approve()` not guarded at service layer.** `services/album_store.py:290`. Contract delegated to UI button-disabling. Fix: add `_approve_in_flight: set[UUID]` guard.
-- ✅ **F19 — `unapprove()` partial-rmtree leaves indeterminate state.** `services/album_store.py:336-342`. EBUSY/EACCES mid-tree raises; album stays APPROVED with half-deleted reports/. Fix: catch OSError, retry once, then surface clear "manual cleanup needed" toast.
-- ✅ **F20 — 64-byte sanity check doesn't verify zero-length.** `services/export.py:259-263`. `fh.read(64)` returns `b""` for both zero-length AND short-file-no-error; warning never fires. Fix: check return-value bytes against a minimum threshold.
-- ✅ **F21 — M3U round-trip parse promised but not implemented.** `services/export.py:268`. Spec 08 line 186. Fix: scope-out for v0.5.0 (move to v0.6+ in spec) — round-trip is sanity, not safety.
-- ✅ **F22 — Toast surface for control-char rejection.** `services/export.py:162` (`_render_m3u`) and `:245-247` (`_build_staging`). Fix: return `(created, warnings)` tuple from `regenerate_album_exports` so caller can surface a toast.
-- ✅ **F23 — Permissions error in album folder gives stack trace, not toast.** `services/export.py:412-414`. `staging.mkdir()` raises `PermissionError`; no try-block around it. Fix: catch + raise `ExportFailed` with user-friendly message.
-- ✅ **F24 — `_append_export_log` write failure kills successful export.** `services/export.py:326`. Fix: wrap in try/except; log-and-continue (best-effort).
-- ✅ **F25 — `pairs_repaired`/`tmps_swept` accuracy + glob-escape sanitised_name.** `persistence/atomic_pair.py:41`. Album name with `[` or `]` (sanitiser doesn't strip these) silently fails to match. Fix: `glob.escape(sanitised_name)`.
-- ✅ **F26 — Both-finals + stale-tmp branch missing in scan.** `persistence/atomic_pair.py:88-110`. State not in spec recovery table but spirit ("never half-good") implies stale `.tmp` should be swept. Fix: add `else: unlink(tmps)` arm.
-- ✅ **F27 — `version_string()` falls back only on `ImportError`.** `services/report.py:49`. `AttributeError` (no `__version__` attr) raises. Fix: catch `(ImportError, AttributeError)`.
-- ✅ **F28 — Reopen confirm dialog has no warning icon, no destructive styling.** `ui/main_window.py:325-332`. TC-09-20 last sentence. Fix: `setIcon(QMessageBox.Icon.Warning)` + `setObjectName("DestructiveButton")` + QSS rule.
-- ✅ **F29 — Approve confirm default-Yes; should be default-Cancel.** `ui/main_window.py:282-285`. Destructive (irreversible) UI. Subsumed by F4 (custom dialog).
-- ✅ **F30 — Settings re-read on every approve.** `ui/main_window.py:307-310`. Fix: cache at app start; invalidate via signal on settings-change.
-- ✅ **F31 — Theme not whitelisted in `read_ui`.** `persistence/settings.py:201-203`. Spec 10 says only `"dark-colourful"` is valid. Fix: add `ALLOWED_THEMES = frozenset({"dark-colourful"})`.
-- ✅ **F32 — Date-suffix regex matches pre-sanitise; spec says post-sanitise.** `domain/album.py:30`. Same set rejected in practice (sanitiser doesn't change date pattern), but spec-vs-code drift. Fix: add comment naming the equivalence; OR match against `sanitise_title(n)`.
-
-**Tier 3 — structural / cosmetic (LOW + INFO):**
-
-- ✅ **F33 — Library walked 2-3 times per export pass.** `services/export.py:140-185, 216-269`. Fix: pass `rendered: list[(Path, Track)]` to `_render_m3u`.
-- ✅ **F34 — Inline imports in `main_window.py` `_on_approve` / `_on_reopen`.** Lines 267, 302, 307, 318. Fix: move to module-top.
-- ✅ **F35 — Unicode em-dash in template `<title>` + `·` in footer.** `services/templates/report.html.j2:5, 251`. Fix: replace with ASCII `-` (template not linted by ruff).
-- ✅ **F36 — Performed-by template line is unreachable.** `services/templates/report.html.j2:192`. Predicate `all_artist and not artist` always False because `artist = columns["all_artist"]`. Fix: drop the line, or rewrite predicate against the mixed-artist case.
-- ✅ **F37 — `report_paths_for` `cover_uri` MIME hardcoded `image/jpeg`.** `services/report.py:107-110`. PNG cover_override would mislabel. Fix: detect via Pillow, or stream raw bytes through Pillow → JPEG always.
-- ✅ **F38 — Approve runs synchronously on GUI thread.** `ui/main_window.py:285-294`. 5s budget per Spec 09 §Performance freezes UI. **Defer to v0.5.1** — Phase 4 ships synchronous; threaded approve is a hardening pass.
-- ✅ **F39 — Focus restoration after approve dialog close.** WCAG §2.4.3. Fix: `self.top_bar.btn_reopen.setFocus()` post-success.
-- ✅ **F40 — `EXPORT_LOG_RETAIN = 10` truncates user-edited logs silently.** Cosmetic.
-
-**Closed without change:**
-
-- ✅ **Verified — `xdg-open` argv injection.** `subprocess.Popen([list], …)` — list-form, no shell. Safe.
-- ✅ **Verified — Jinja2 `select_autoescape(["html", "xml"])` blocks the XSS class.** `services/report.py:206`.
-- ✅ **Verified — Single-template, two-output rendering, no `_vN` suffix, lyrics 32 KB cap, three-state composer column, page-break + word-wrap CSS, single-file portability, name regex DoS-safe** — all match spec.
-
-##### 🔥 Round 2 indie-review (2026-04-30 post-fix)
-
-Single-lane cold-eyes follow-up against the round-1 fixed code. 3 surviving findings (2 HIGH, 1 MEDIUM); all closed.
-
-- ✅ **G1 [HIGH] — `_show_toast` typo `self.toast` vs `self._toast`.** `ui/main_window.py`. Round-1 introduced the bug; every toast (success, failure, reopen-partial) silently logged-only. Fixed: read `self._toast` via `getattr` to keep the test-isolation safety.
-- ✅ **G2 [HIGH] — `_needs_regen` set in `rescan()` but never consumed on a draft mutation.** Spec 08 §`_commit_export` Drift-detection ("next mutation re-runs the full sequence") was unwired. Fixed: added `AlbumStore.schedule_export(album_id, library)` method calling `regenerate_album_exports(strict=False)` and clearing the flag; wired from main_window's `_on_target_changed`, `_on_track_toggled`, `_on_reorder_done`.
-- ✅ **G3 [MEDIUM] — `_commit_export` partial-promote never raised in strict mode.** A failed promote let approve continue to `step:render-tmp` against a half-promoted folder. Fixed: added `strict` parameter to `_commit_export`; `regenerate_album_exports` passes its own `strict` through; failure raises `ExportFailed`.
-
-##### ✅ Round 3 indie-review confirmation pass (2026-04-30)
-
-Single-lane cold-eyes verification against the round-2 fixed code. **0 findings introduced by round-2 fixes.** 1 pre-existing dead branch flagged (`_key_in_text_field` line 482 — pre-existing, not Phase 4). 1 hygiene finding (G2 — `_needs_regen` not discarded on `delete()`); fixed inline.
-
-- ✅ **H1 [LOW, hygiene] — `_needs_regen.discard(album_id)` and `_approve_in_flight.discard(album_id)` on `delete()`.** Stale ids accumulating across long delete-heavy sessions. Fixed.
-
-##### ✅ Full-codebase audit (2026-04-30)
-
-Final tool sweep across the entire `src/album_builder/` + `tests/` tree:
-
-- **ruff** (src + tests): All checks passed.
-- **bandit** (-ll, full src tree): 0 medium+ findings.
-- **semgrep** (p/security-audit + p/python, 42 files): 0 findings.
-- **gitleaks** (src/ + tests/): no leaks.
-- **pytest**: 467 passed, 11 skipped (audio integration gates).
-
-**v0.5.0 — Phase 4: Export & Approval — implementation complete, ready to ship.**
-
-
-
-
-#### ✅ Phase 4 prep — Round 4 confirmation pass (2026-04-30)
-
-Single cold-eyes pass against the round-3 fixed spec set. **Zero findings.** Round-3 fixes (album-name regex constraint published byte-identical across 5 sites; Spec 02 §unapprove load-time-toast narration; Spec 11 §Glyphs `×` row addition) are internally consistent and consistent across specs.
-
-**Verdict: READY FOR IMPLEMENTATION.** The Phase 4 spec set (specs 02, 08, 09, 10, 11) is implementer-ready with no surviving BLOCKER, HIGH, MEDIUM, or LOW issues.
-
-**Convergence:** round 1 = 39 actionable findings; round 2 = 17; round 3 = 3; round 4 = 0. Specs grew from 996 → ~1,140 lines net and gained 16 new TC clauses (TC-08-02a, TC-08-05a, TC-08-10a, TC-08-10b, TC-08-14..19; TC-09-09a, TC-09-09b, TC-09-12a, TC-09-16a, TC-09-18..26; TC-10-21..24). 3 TCs were tombstoned (TC-09-04, TC-09-11, TC-09-23).
-
-### 📋 Future / deferred
+## 🔭 Future / deferred
 
 - Group-by-artist tabs (Spec 00 roadmap)
 - Tap-along LRC editor for manual alignment correction
@@ -798,6 +796,6 @@ Single cold-eyes pass against the round-3 fixed spec set. **Zero findings.** Rou
 
 ---
 
-*Last reviewed: 2026-04-28 — Tier 1 + Tier 2 + Tier 3 sweeps landed (cross-cutting Themes 1/2/3 closed); `/debt-sweep` triaged 7 findings (5 trivial fixed inline, 2 behavioural — `tracks_changed` deferred to Phase 2, missing-tags placeholder test added). 2 Tier-3 items intentionally carried forward (README WeasyPrint deps for Phase 4 prep; `track_at()` Phase 2 use confirmed). Phase 1 is feature-complete and hardened.*
+*Last reviewed: 2026-04-30 — v0.5.0 (Phase 4: Export & Approval) shipped. 4-round pre-implementation spec sweep (39 → 17 → 3 → 0 findings) + implementation + 3-round post-implementation `/audit` + `/indie-review` (40 → 3 → 0 findings) + full-codebase audit (ruff/bandit/semgrep/gitleaks all clean). 467 passing tests (+52 since v0.4.2). Specs 02 / 08 / 09 / 10 / 11 grew from 996 → ~1,140 lines with 16 new TC contracts. Phases 1–4 are feature-complete and hardened.*
 
 *Round-1 spec sweep landed 2026-04-28 (32 issues across all 13 specs: schema-ownership canonicalised to Spec 10, approve-with-missing contradiction resolved, Specs 06–12 received TC-NN-MM IDs at speccing time, global keyboard-shortcuts table added to Spec 00, canonical approve sequence pinned in Spec 09, Spec 11 §Glyphs added to single-source `⋮⋮ ▲▼ ●○ 🔒 ✓ ▶ ⏸` etc.). Round-2 sweep landed 2026-04-28 (28 follow-ups: timestamp-encoding precision pin, atomic-write-tmp-strategy alignment, plan timestamp helper, approve/unapprove side-effect ordering, plan TC crosswalk extended to TC-10/TC-11/TC-01-P2). Round-3 sweep landed 2026-04-28 (15 follow-ups: state-diagram terminology, splitter ratios on save, glyph literals in widgets, approved-album badge, rename self-collision, UTC normalisation, TC-10-09 + TC-10-20 strengthened, delete emit order). Round-4 confirmation pass 2026-04-28 verified all fixes landed cleanly with 0 surviving HIGH issues and 0 new contradictions. **Documentation set is implementation-ready for Phase 2.**
