@@ -186,6 +186,21 @@ huggingface behaviour proves unreliable in practice.
 7. Track with audio < 2 s — pill "audio too short to align". ✓
    (`test_start_alignment_rejects_short_audio`.)
 
+### 🔍 Audit 2026-04-30
+
+Tools run: ruff, bandit, semgrep (`p/security-audit` + `p/python`), gitleaks, trivy fs, pyright, shellcheck. Six tools clean (0 findings each); pyright surfaced 65 raw → 3 actionable (95% noise from PyQt6 stub conservatism: `objectName=` kwarg, `Optional[X]` returns from `QListWidget.item()` / `QMenu.addAction()`, parameter-name mismatch on `resizeEvent` overrides, mutagen import resolution on system-Python pyright). Filtered manually given small volume.
+
+- 📋 **LOW — `LibraryPane.set_library` annotation lags `Library.tracks` shape change.** `src/album_builder/ui/library_pane.py:263`. `library.tracks` is `tuple[Track, ...]` since the Tier 3 sweep but `_model.set_tracks` declares `list[Track]`. Widen to `Sequence[Track]`; runtime is fine.
+- 📋 **LOW — `AlbumOrderPane._rerender_after_move` calls `setText` on `QWidget` static type.** `src/album_builder/ui/album_order_pane.py:168`. `self.list.itemWidget(item)` returns `QWidget` per stubs; the concrete row widget is `_OrderRowWidget` which defines `setText`. Narrow via `isinstance(widget, _OrderRowWidget)` so a future row-widget swap fails at type-check time, not runtime.
+- 📋 **LOW — `LibraryPane.row_accent_at` return annotation too narrow.** `src/album_builder/ui/library_pane.py:285,293`. Declared `-> str | None` but `TrackTableModel.data()` for the toggle column's sort role returns `tuple[bool, str]` (Tier 2 fix L5-H2). The callsite uses the title column so the actual returned value is `str | None`, but pyright can't narrow statically. Annotate `Any`, or split `data()` by role.
+
+Also recommended (not code findings):
+
+- 📋 **INFO — Add `pyrightconfig.json` at project root pointing at `.venv`.** Recovers the 4 `mutagen` unresolved-import diagnostics on every audit run.
+- 📋 **INFO — Persist `.gitleaks.toml` allowlist in-repo.** Eliminates the per-run `/tmp` shim for path-regexp scope. Same for the gitleaks/trivy `--skip-dirs` set.
+
+Calibration: 0 actionable security findings (4th run; cf. 2026-04-28 audit which was 0 actionable post-Phase-2). 95% noise rate on pyright is consistent with PyQt6 stub maturity.
+
 ---
 
 ## ✅ v0.3.0 — Phase 3A: Audio Playback (2026-04-28)
