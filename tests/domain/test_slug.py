@@ -45,9 +45,22 @@ def test_slugify_strips_diacritics() -> None:
     assert slugify("Émile") == "emile"
     assert slugify("Café Tacvba") == "cafe-tacvba"
     assert slugify("Naïve") == "naive"
-    assert slugify("Łódź") == "odz"  # Polish ł has no NFKD decomposition; drops
     # German ß casefolds to "ss" (Unicode-aware lower).
     assert slugify("Straße") == "strasse"
+
+
+# Tier 3 (slug Latin-1 ligatures): Æ/Œ/Ð/Þ/Ø/Ł have no canonical NFKD
+# decomposition. Without the explicit table they'd silently drop, mapping
+# distinct names to colliding slugs (e.g. "Sigur Rós ÆON" -> "sigur-ros-on").
+def test_slugify_latin1_ligatures() -> None:
+    assert slugify("Æon") == "aeon"
+    assert slugify("Œuvre") == "oeuvre"
+    assert slugify("Ðauði") == "daudi"
+    assert slugify("Þingvellir") == "thingvellir"
+    assert slugify("Ørnen") == "ornen"
+    assert slugify("Łódź") == "lodz"
+    # Two ligatures in one name still produce a clean slug.
+    assert slugify("Æ-Œ") == "ae-oe"
 
 
 # Spec: TC-02-04, TC-02-08

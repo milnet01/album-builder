@@ -89,6 +89,14 @@ class Library:
         return cls(folder=folder, tracks=tuple(tracks))
 
     def find(self, path: Path) -> Track | None:
+        # `Path.resolve()` is O(depth) plus a stat() syscall per component;
+        # callers that lookup by path in a tight loop should pre-resolve
+        # once and pass the resolved path. We re-resolve here defensively
+        # because `Track.from_path` already resolved at scan time, so
+        # comparing apples-to-apples requires the same canonical form.
+        # Memoising would force this method to invalidate on Library
+        # construction; the frozen dataclass + tuple of tracks keeps this
+        # simple. (L1-M3 — documented behaviour, not a fix.)
         target = Path(path).resolve()
         for t in self.tracks:
             if t.path == target:

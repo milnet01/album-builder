@@ -35,8 +35,13 @@ def _validate_target(t: int) -> int:
     return t
 
 
-@dataclass
+@dataclass(eq=False)
 class Album:
+    # eq=False: identity is by `id` (UUID), not field-by-field. Two reads of
+    # the same album from disk often differ only by `updated_at` millisecond
+    # drift; field-by-field equality would mark them unequal and break
+    # `album in some_list` / `dict[album]` use-cases. UUID is immutable and
+    # globally unique so it's the correct identity key. (L1-M2.)
     id: UUID
     name: str
     target_count: int
@@ -46,6 +51,14 @@ class Album:
     created_at: datetime
     updated_at: datetime
     approved_at: datetime | None = None
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Album):
+            return NotImplemented
+        return self.id == other.id
+
+    def __hash__(self) -> int:
+        return hash(self.id)
 
     def __post_init__(self) -> None:
         # Defensive invariant for direct dataclass construction (load from JSON,

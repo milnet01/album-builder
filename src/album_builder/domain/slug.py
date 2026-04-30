@@ -2,6 +2,8 @@
 
 Names are user-supplied free-text (1-80 chars, validated by Album.create);
 slugs are URL/filesystem-safe ASCII. Derivation rules:
+- Manual transliteration table for common Latin-1 ligatures that NFKD
+  doesn't decompose (Æ -> ae, Œ -> oe, Ð -> d, Þ -> th, Ø -> o, Ł -> l)
 - NFKD-normalise + strip combining marks so accented Latin chars survive
   ("Émile" -> "emile" rather than "album")
 - Lowercase
@@ -22,6 +24,22 @@ from pathlib import Path
 
 _NON_SLUG = re.compile(r"[^a-z0-9]+")
 
+# Latin-1 ligatures and Latin-Extended letters that NFKD does NOT decompose
+# (they're already a single code point with no canonical decomposition into
+# base + combining mark). Without this table they'd be dropped silently by
+# the ASCII-encode step, producing surprising slugs ("Sigur Ros AEon" ->
+# "sigur-ros-on"). Applied after casefold so we only need lowercase keys.
+_LIGATURES: dict[str, str] = {
+    "æ": "ae",
+    "œ": "oe",
+    "ð": "d",   # Old Norse / Icelandic Eth
+    "þ": "th",  # Old Norse / Icelandic Thorn
+    "ø": "o",   # Norwegian / Danish slashed o
+    "ł": "l",   # Polish slashed L
+    "đ": "d",   # Croatian / Vietnamese
+    "ħ": "h",   # Maltese
+}
+
 
 def slugify(name: str) -> str:
     # NFKD splits an accented character into base + combining mark; the
@@ -29,6 +47,9 @@ def slugify(name: str) -> str:
     # U+007F). German "ß" stays as "ss" via NFKC's compatibility step
     # being a no-op here, so we apply str.casefold() last to fold those.
     folded = unicodedata.normalize("NFKD", name).casefold()
+    # Apply the manual ligature table BEFORE the ASCII-encode drops them.
+    if any(ch in folded for ch in _LIGATURES):
+        folded = "".join(_LIGATURES.get(ch, ch) for ch in folded)
     ascii_only = folded.encode("ascii", "ignore").decode("ascii")
     s = _NON_SLUG.sub("-", ascii_only).strip("-")
     return s or "album"

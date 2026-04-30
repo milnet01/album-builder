@@ -13,6 +13,11 @@ from pathlib import Path
 # Spec 07 §Outputs: timestamp form is `[mm:ss.xx]`. We accept 1-3 minute
 # digits (some LRC tools emit 3 for very long tracks) and 1-3 fraction
 # digits (centisecond is two; some encoders emit milliseconds = three).
+# Upper bound: 999 minutes ≈ 16h39m. Tracks longer than that aren't a
+# real-world album use case; if one ever shows up, `_format_stamp` will
+# silently render the high-order digits truncated and the parser won't
+# match — both layers fail the same way (the file is treated as having
+# no parseable timestamps). (L1-M4 — documented; not a code fix.)
 _STAMP = re.compile(r"\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\]")
 _TAG_HEADER = re.compile(r"^\[(?:ti|ar|al|au|by|length|offset|re|ve):.*\]$")
 _SECTION_MARKER = re.compile(r"^\[[^\]]+\]$")

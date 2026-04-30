@@ -2,20 +2,22 @@
 
 from __future__ import annotations
 
-# Force Qt's offscreen QPA platform before any pytest-qt fixture imports
-# QApplication. Without this, every test using qtbot/QApplication briefly
-# composites a real top-level window — visible to whatever desktop is
-# hosting the runner (and very visible in another terminal where the
-# test was kicked off). `setdefault` lets a CI override (e.g.
-# QT_QPA_PLATFORM=minimal) still win.
 import os
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import shutil
 from pathlib import Path
 
 import pytest
 from mutagen.id3 import APIC, COMM, ID3, TALB, TCOM, TIT2, TPE1, TPE2, USLT
+
+# Force Qt's offscreen QPA platform before any pytest-qt fixture imports
+# QApplication. Without this, every test using qtbot/QApplication briefly
+# composites a real top-level window — visible to whatever desktop is
+# hosting the runner (and very visible in another terminal where the
+# test was kicked off). `setdefault` lets a CI override (e.g.
+# QT_QPA_PLATFORM=minimal) still win. NB: this runs at module-import
+# time, which precedes any `@pytest.fixture`-driven QApplication creation
+# below, so the order is correct even though it sits below the imports.
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 SILENT_MP3 = FIXTURES_DIR / "silent_1s.mp3"

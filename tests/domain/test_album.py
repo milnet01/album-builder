@@ -245,3 +245,31 @@ def test_album_unapprove_asserts_target_invariant() -> None:
     a.track_paths.extend([Path("/abs/b.mp3"), Path("/abs/c.mp3")])
     with pytest.raises(AssertionError, match="invariant"):
         a.unapprove()
+
+
+# Tier 3 (L1-M2): Album equality is UUID-identity, not field-by-field.
+# Two reads of the same album from disk often differ only by `updated_at`
+# millisecond drift — default-dataclass __eq__ marks them unequal and
+# breaks `album in some_list` / `dict[album]` callers.
+def test_album_equality_is_uuid_identity() -> None:
+    from datetime import UTC, datetime
+    from uuid import uuid4
+    aid = uuid4()
+    base = dict(
+        name="x",
+        target_count=3,
+        track_paths=[Path("/a.mp3")],
+        status=AlbumStatus.DRAFT,
+        cover_override=None,
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    a1 = Album(id=aid, updated_at=datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC), **base)
+    a2 = Album(id=aid, updated_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=UTC), **base)
+    assert a1 == a2
+    a3 = Album(id=uuid4(), updated_at=base["created_at"], **base)
+    assert a1 != a3
+    # Hashable: usable as dict key / set member.
+    assert hash(a1) == hash(a2)
+    assert {a1, a2, a3} == {a1, a3}
+    # Foreign objects compare unequal, not raise.
+    assert a1 != "not an album"
