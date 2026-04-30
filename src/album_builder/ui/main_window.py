@@ -44,7 +44,7 @@ from album_builder.services.alignment_status import AlignmentStatus, compute_sta
 from album_builder.services.export import ExportFailed
 from album_builder.services.library_watcher import LibraryWatcher
 from album_builder.services.lyrics_tracker import LyricsTracker
-from album_builder.services.player import Player
+from album_builder.services.player import Player, PlayerState
 from album_builder.services.report import list_warnings, report_paths_for
 from album_builder.ui.album_order_pane import AlbumOrderPane
 from album_builder.ui.library_pane import LibraryPane
@@ -219,6 +219,10 @@ class MainWindow(QMainWindow):
         self.now_playing_pane.lyrics_panel.align_now_requested.connect(
             self._on_align_now_clicked
         )
+        # Spec 06 TC-06-19: per-row PLAY/PAUSE glyph mirrors player state.
+        # The two panes are agnostic of the Player; main_window pushes the
+        # (active-path, playing) tuple on every state_changed.
+        self._player.state_changed.connect(self._on_player_state_changed_for_rows)
         self.splitter.splitterMoved.connect(lambda *_: self._state_save_timer.start())
 
         # Spec 00 keyboard shortcuts (closes indie-review Theme E).
@@ -522,7 +526,29 @@ class MainWindow(QMainWindow):
             "Transport shortcuts are suppressed while typing in a text field.",
         )
 
+    def _on_player_state_changed_for_rows(self, state) -> None:
+        """Spec 06 TC-06-19: push (active-source, is-playing) into both
+        panes so the per-row glyph reflects current player state. Source-
+        swaps come through here too, since set_source emits state_changed
+        on its ERROR -> STOPPED reset path; cross-row swaps happen inside
+        _on_preview_play and the play() call there triggers state_changed."""
+        path = self._player.source()
+        playing = state == PlayerState.PLAYING
+        self.library_pane.set_active_play_state(path, playing)
+        self.album_order_pane.set_active_play_state(path, playing)
+
     def _on_preview_play(self, path: Path) -> None:
+        # Spec 06 TC-06-17/18: same-row click on the active source
+        # toggles play/pause without reloading. PLAYING -> PAUSED via
+        # Player.toggle(); PAUSED/STOPPED -> PLAYING via the same toggle
+        # path. ERROR is handled below as a fresh load (the spec's
+        # documented ERROR -> STOPPED reset path).
+        active_source = self._player.source()
+        state = self._player.state()
+        if path == active_source and state in (PlayerState.PLAYING, PlayerState.PAUSED):
+            self._player.toggle()
+            return
+
         track = next(
             (t for t in self._library_watcher.library().tracks if t.path == path),
             None,

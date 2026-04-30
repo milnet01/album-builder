@@ -1,6 +1,6 @@
 # 06 — Audio Playback
 
-**Status:** Draft · **Last updated:** 2026-04-28 · **Depends on:** 00, 01, 10, 11 · **Blocks:** 07
+**Status:** Draft · **Last updated:** 2026-04-30 · **Depends on:** 00, 01, 10, 11 · **Blocks:** 07
 
 ## Purpose
 
@@ -15,7 +15,14 @@ Play tracks for preview and karaoke-style listening. Provide play/pause, seek, p
   - Scrubber (a horizontal slider showing playback position; click or drag to seek)
   - Total duration `m:ss`
   - Volume slider (linear, 0–100%, persisted to settings)
-- Per-row preview-play button on every library and middle-pane row: clicking it loads that track and starts playback. The previously-playing track is replaced (single-stream playback only — no queue, no gapless).
+- Per-row preview-play button on every library and middle-pane row: clicking it acts as a **load-or-toggle** control against the single shared player.
+  - If the row's track is **not** the active source, click loads that track and starts playback. The previously-playing track is replaced (single-stream playback only — no queue, no gapless).
+  - If the row's track **is** the active source and the player is `PLAYING`, click pauses (same effect as the transport bar's play/pause button on the same source).
+  - If the row's track **is** the active source and the player is `PAUSED`, click resumes from the current position via `Player.toggle()` — no `set_source` call.
+  - If the row's track is the active source but the player is `STOPPED` (e.g. natural end-of-track reached), click **restarts** the source — falls through to the fresh-load path (`set_source` + `play`), which restarts position from 0 and re-runs the auto-align gate. This is treated as "restart" rather than "resume" because STOPPED-after-end leaves position past the end; resuming would be a no-op.
+  - If the row's track **is** the active source and the player is in `ERROR`, click is treated as a fresh load: it re-runs `set_source(path)` (which performs the documented ERROR → STOPPED reset, see §Implementation notes) and then `play()`. The row glyph reverts to `Glyphs.PLAY` while in ERROR.
+  - Pause via the row button is identical to pause via the transport — it does not reset position, does not reload the source, does not re-emit `last_played_track_path`. (Because no `set_source` call is made, Spec 07's `auto_align_on_play` gate is not re-evaluated either.)
+  - The row glyph mirrors player state with a four-state mapping: `PLAYING` on the active source → `Glyphs.PAUSE`; `PAUSED` / `STOPPED` / `ERROR` on the active source, **or** any non-active row → `Glyphs.PLAY`. Glyph updates ride `state_changed` and source-swap only — never per-position-tick. Each glyph flip touches only the previously-active and newly-active rows (the rest of the list re-renders nothing). The row's accessible-name source flips correspondingly so screen readers announce the action the click will perform — for the album-order pane this is `QPushButton.accessibleName` ("Preview-play <title>" ↔ "Pause <title>"); for the library pane it is the model's `Qt.ItemDataRole.AccessibleTextRole` on the play column.
 - Keyboard shortcuts:
   - **Space** — play / pause (when focus isn't in a text field)
   - **Left / Right** — seek −5 s / +5 s
@@ -50,6 +57,7 @@ Play tracks for preview and karaoke-style listening. Provide play/pause, seek, p
 | Condition | Behavior |
 |---|---|
 | Source file missing on play | Stop playback, show toast "Track file not found: <path>", emit `error` signal. The library marks it missing on next watcher tick. |
+| Active source's file removed between load and a same-row click | Treated as a fresh load against the now-missing path: `set_source` runs (ERROR → STOPPED reset path applies), `play()` then fails the same way "Source file missing on play" does — toast + `error` signal, library marks missing. The row glyph stays/reverts to `Glyphs.PLAY` once the ERROR settles. |
 | Codec / decoder failure (e.g., corrupt MP3) | Same as missing — toast + error. App stays usable. |
 | Required GStreamer plugins missing | One-shot warning dialog at first playback failure: "Audio codecs unavailable. On openSUSE: install `gstreamer-plugins-good` and `gstreamer-plugins-libav`." |
 | User clicks preview while another track is playing | Replace immediately; no fade. |
@@ -79,8 +87,14 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-06-12** — Keyboard shortcut Space toggles play/pause when focus is on the main window; suppressed when focus is in a `QLineEdit` / `QTextEdit`. (Validates the Spec 00 keyboard table rule.)
 - **TC-06-13** — Left / Right shortcuts seek by ±5 s; Shift+Left / Shift+Right seek by ±30 s. Suppressed in text fields.
 - **TC-06-14** — Buffering indicator appears on `MediaStatus.BufferingMedia`, disappears on `BufferedMedia`. Transport remains interactive.
-- **TC-06-15** — Per-row preview-play button on a library row loads + plays that track; the previously-playing track stops.
+- **TC-06-15** — Per-row preview-play button on a library row, when the row's track is **not** the active source, loads + plays that track; the previously-playing track stops. (Cross-row case.) **TC-06-15 supersedes the v0.4.0 signal-only assertion** in `tests/ui/test_library_pane.py::test_library_pane_emits_preview_play_request`; the contract now also requires that the player observably stops the prior source and starts the new one (verified via `Player.state()` + `Player.source()`).
 - **TC-06-16** — End-of-track behavior is `stop` (not auto-advance) — `state_changed(stopped)` fires, no next track loaded.
+- **TC-06-17** — Per-row preview-play button on the **active+playing** row pauses the source (state transitions PLAYING → PAUSED) without reloading: `Player.source()` is unchanged, `position()` is preserved (within one position-tick of the click), and no second `set_source` call is observed. Applies to library and album-order panes.
+- **TC-06-18** — Per-row preview-play button on the **active+paused** row resumes the source (state transitions PAUSED → PLAYING) without reloading. Applies to library and album-order panes.
+- **TC-06-19** — Per-row glyph reflects state with the four-state mapping in §user-visible-behavior:
+  - For the **library pane**, the play column's `Qt.ItemDataRole.DisplayRole` returns `Glyphs.PAUSE` for the row whose track is the active source AND state is `PLAYING`; `Glyphs.PLAY` for every other row. The corresponding `Qt.ItemDataRole.AccessibleTextRole` returns `"Pause <title>"` vs `"Preview-play <title>"`.
+  - For the **album-order pane**, the row's `QPushButton.text()` returns the same glyphs and `QPushButton.accessibleName()` returns the same accessible strings.
+  - On `state_changed` or source-swap, only the previously-active and newly-active rows emit `dataChanged` / repaint (the rest of the list is untouched — testable by counting `dataChanged` row-range hits or by patching `_OrderRowWidget.set_active`).
 
 (Visual-regression and "real audio" smoke tests stay out of the test contract — they're manual.)
 

@@ -61,10 +61,11 @@ class NowPlayingPane(QFrame):
         layout.addWidget(self.placeholder_label)
 
         # Spec 07 lyrics panel — replaces the v0.3.0 LyricsPlaceholder.
+        # TC-07-16: lyrics panel absorbs the leftover vertical space below
+        # the now-playing metadata (stretch=1) — no competing addStretch
+        # after it, otherwise the slack would go to the spacer instead.
         self.lyrics_panel = LyricsPanel()
-        layout.addWidget(self.lyrics_panel)
-
-        layout.addStretch(1)
+        layout.addWidget(self.lyrics_panel, stretch=1)
 
         self.transport = TransportBar(player)
         layout.addWidget(self.transport)

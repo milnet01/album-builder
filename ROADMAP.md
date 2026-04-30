@@ -8,6 +8,30 @@ Working roadmap for the Album Builder app. Tracks completed phases, in-flight fi
 
 ---
 
+## ✅ v0.5.2 — UX fix-pass: lyrics-pane fill + row-button play/pause toggle (2026-04-30)
+
+User-reported UX gaps spotted on the v0.5.1 build:
+
+1. **Lyrics pane was small.** `LyricsPanel` called `setFixedHeight(150)` and `NowPlayingPane` finished its `QVBoxLayout` with `addStretch(1)` after the panel — together those two pinned the lyrics block to ~150 px and let empty space accumulate underneath. On a tall window the lyrics area looked stranded in the upper third of the right pane.
+2. **Per-row ▶ button was load-only.** Clicking the row's preview-play button on the *currently-playing* row reloaded the source from scratch (set_source + play), instead of toggling pause as the transport bar's main play/pause button does. The transport's play/pause button worked correctly — only the per-row button lacked the toggle.
+
+**Spec amendments (signed off via 2-pass cold-eyes review, 7 → 0 findings):**
+
+- **Spec 06 §user-visible-behavior** — per-row preview-play button is now a **load-or-toggle** control with explicit four-state glyph mapping (`PLAYING`-on-active-source → `Glyphs.PAUSE`; PAUSED / STOPPED / ERROR / non-active → `Glyphs.PLAY`). Adds an ERROR-state same-row-click bullet (re-runs `set_source` + `play()`) and an Errors-table row for "active source's file removed between load and a same-row click."
+- **Spec 06 test contract** — TC-06-15 amended to flag that it supersedes the v0.4.0 signal-only assertion in `test_library_pane_emits_preview_play_request`; new TC-06-17 (active+playing → pause without reload), TC-06-18 (active+paused → resume), TC-06-19 (per-row glyph mapping with library-pane vs album-order-pane a11y bifurcation + dataChanged-row-range observable for the perf claim).
+- **Spec 07 §Lyrics panel** — panel now **fills the available right-pane height** below now-playing metadata, with a 150 px minimum (the pre-amendment fixed value) enforced via `setMinimumHeight` instead of `setFixedHeight`. New TC-07-16 with a measurable `qtbot` assertion (`resize(420, 800)` → `lyrics_panel.height() >= 300`).
+
+**Shipped:**
+
+- ✅ Step 3 — failing tests for TC-06-17/18/19 + TC-07-16 (10 of 11 red on the implementation-side, 1 already passing as the existing cross-row case).
+- ✅ Step 4 — implementation (lifted `setFixedHeight(150)` → `setMinimumHeight(150)`, dropped competing `addStretch` after the lyrics panel, added `LibraryPane.set_active_play_state` + `AlbumOrderPane.set_active_play_state`, routed `Player.state_changed` + source-swap into both panes from `MainWindow`, added load-or-toggle dispatch in `_on_preview_play`).
+- ✅ Step 5/6 — `/audit` + `/indie-review` in parallel (1 audit + 5 review findings, all L). Round 1 folded inline: pyright `None`-guard on `album_order_pane.py:173`, spec-06 PAUSED-vs-STOPPED split (PAUSED→toggle, STOPPED→fresh-load+restart), TC-06-15 marker disambiguation on the v0.4.0 test, and 2 new TC-06-19 tests for the album-order pane (set_album re-render preservation + set_active call-count observable). Round 2 convergence confirmed clean.
+- ✅ Step 8/9 — flipped status to ✅; commit pending; push pending user OK.
+
+**Convergence trace:** spec amendments 1-pass cold-eyes review (7 → 0 findings), implementation, post-implementation `/audit` + `/indie-review` (6 → 0 findings). 471 → 484 passing tests (+13: 11 new TC-06-17/18/19 + TC-07-16 contracts and 2 round-1-fold-out additions). Ruff clean. Manual smoke-launch on the `Tracks/` corpus completed without error.
+
+---
+
 ## ✅ v0.5.1 — Outstanding-roadmap sweep (2026-04-30)
 
 Same-day follow-up to v0.5.0 closing every actionable `📋` item still surviving in `ROADMAP.md` after the v0.5.0 ship: audit-tooling configs (`pyrightconfig.json`, `.gitleaks.toml`), version-file drift, the long-deferred `ACCENT_ROLE` extraction, the `settings.json` `schema_version` stamp gap (final piece of Theme B recurrence), Phase-4-shipped README dependency note. Also flips every stale `📋` cross-cutting summary line to `✅` where the underlying themes had been closed in per-item Tier fixes but the high-level summary was never updated.

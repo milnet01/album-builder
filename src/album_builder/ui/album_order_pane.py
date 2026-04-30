@@ -41,12 +41,13 @@ class _OrderRowWidget(QWidget):
     state; the widget is just a viewport visual.
     """
 
-    def __init__(self, text: str, path: Path, on_preview, parent=None) -> None:
+    def __init__(self, text: str, path: Path, title: str, on_preview, parent=None) -> None:
         super().__init__(parent)
         self._path = path
+        self._title = title
         self.btn_play = QPushButton(Glyphs.PLAY, objectName="RowPlay")
         self.btn_play.setFixedSize(24, 24)
-        self.btn_play.setAccessibleName(f"Preview-play {text}")
+        self.btn_play.setAccessibleName(f"Preview-play {self._title}")
         self.btn_play.setToolTip("Preview-play this track")
         self.btn_play.clicked.connect(lambda: on_preview(self._path))
 
@@ -60,6 +61,20 @@ class _OrderRowWidget(QWidget):
 
     def setText(self, text: str) -> None:
         self.label.setText(text)
+
+    def set_active(self, *, playing: bool) -> None:
+        """Spec 06 TC-06-19: flip the row's glyph + a11y between PAUSE
+        ("clicking will pause the active source") and PLAY ("clicking
+        will load + play this row"). The button click itself still emits
+        the same preview signal — main_window dispatches load-vs-toggle."""
+        if playing:
+            self.btn_play.setText(Glyphs.PAUSE)
+            self.btn_play.setAccessibleName(f"Pause {self._title}")
+            self.btn_play.setToolTip("Pause this track")
+        else:
+            self.btn_play.setText(Glyphs.PLAY)
+            self.btn_play.setAccessibleName(f"Preview-play {self._title}")
+            self.btn_play.setToolTip("Preview-play this track")
 
 
 class AlbumOrderPane(QFrame):
@@ -88,6 +103,12 @@ class AlbumOrderPane(QFrame):
         )
         self.list.model().rowsMoved.connect(self._on_rows_moved)
         layout.addWidget(self.list)
+
+        # Spec 06 TC-06-17/18/19: track which row is the active+playing
+        # source so set_album / re-renders preserve the glyph. The pair
+        # is a tuple so set_active_play_state can diff cheaply.
+        self._active_path: Path | None = None
+        self._active_playing: bool = False
 
     def set_album(self, album: Album | None, tracks: list[Track]) -> None:
         self._album = album
@@ -120,10 +141,46 @@ class AlbumOrderPane(QFrame):
                 if t is not None and t.is_missing:
                     item.setData(MISSING_ROLE, True)
                 self.list.addItem(item)
-                row_widget = _OrderRowWidget(row_text, p, self._emit_preview)
+                row_widget = _OrderRowWidget(row_text, p, title, self._emit_preview)
+                # Spec 06 TC-06-19: re-applying the active state on a
+                # set_album re-render preserves the PAUSE glyph if the
+                # active source happens to be in the new track list.
+                if self._active_playing and p == self._active_path:
+                    row_widget.set_active(playing=True)
                 item.setSizeHint(QSize(0, row_widget.sizeHint().height() + 4))
                 self.list.setItemWidget(item, row_widget)
         self.list.blockSignals(False)
+
+    def set_active_play_state(self, path: Path | None, playing: bool) -> None:
+        """Spec 06 TC-06-17/18/19 — flip the per-row PLAY/PAUSE glyph for
+        the previously-active row (back to PLAY) and the newly-active row
+        (to PAUSE if `playing`, else PLAY). Untouched rows do not repaint."""
+        prev_path = self._active_path
+        prev_playing = self._active_playing
+        if prev_path == path and prev_playing == playing:
+            return
+        self._active_path = path
+        self._active_playing = playing
+        # Affected rows: the previously-active one (revert its glyph) and
+        # the newly-active one (set its glyph to PAUSE if playing).
+        affected: set[Path] = set()
+        if prev_path is not None:
+            affected.add(prev_path)
+        if path is not None:
+            affected.add(path)
+        for i in range(self.list.count()):
+            item = self.list.item(i)
+            if item is None:
+                continue
+            row_path_str = item.data(Qt.ItemDataRole.UserRole)
+            row_path = Path(row_path_str) if row_path_str else None
+            if row_path is None or row_path not in affected:
+                continue
+            widget = self.list.itemWidget(item)
+            if not isinstance(widget, _OrderRowWidget):
+                continue
+            row_active = (row_path == path) and playing
+            widget.set_active(playing=row_active)
 
     def _emit_preview(self, path: Path) -> None:
         self.preview_play_requested.emit(path)

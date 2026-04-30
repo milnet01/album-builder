@@ -44,6 +44,11 @@ class TrackTableModel(QAbstractTableModel):
         self._selected_paths: set[Path] = set()
         self._toggle_enabled: list[bool] = []
         self._album_status: AlbumStatus = AlbumStatus.DRAFT
+        # Spec 06 TC-06-17/18/19: per-row preview-play button is a
+        # load-or-toggle. The play column's glyph + a11y text reflect
+        # whether *this* track is the active+playing source.
+        self._active_path: Path | None = None
+        self._active_playing: bool = False
 
     def set_tracks(self, tracks: Sequence[Track]) -> None:
         # Contract: set_tracks() resets only the per-row enable cache,
@@ -91,6 +96,29 @@ class TrackTableModel(QAbstractTableModel):
     def selected_paths(self) -> set[Path]:
         return set(self._selected_paths)
 
+    def set_active_play_state(self, path: Path | None, playing: bool) -> None:
+        """Mark `path` as the active source and whether it is currently
+        playing. Emits dataChanged for the play column on the previously-
+        active and newly-active rows only — Spec 06 TC-06-19's
+        "rest of the list re-renders nothing" observable.
+        """
+        prev_path = self._active_path
+        prev_playing = self._active_playing
+        if prev_path == path and prev_playing == playing:
+            return
+        self._active_path = path
+        self._active_playing = playing
+        play_col = next(
+            i for i, c in enumerate(COLUMNS) if c[1] == "_play"
+        )
+        rows: set[int] = set()
+        for i, t in enumerate(self._tracks):
+            if t.path == prev_path or t.path == path:
+                rows.add(i)
+        for r in rows:
+            idx = self.index(r, play_col)
+            self.dataChanged.emit(idx, idx)
+
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: B008
         return 0 if parent.isValid() else len(self._tracks)
 
@@ -117,12 +145,22 @@ class TrackTableModel(QAbstractTableModel):
         is_approved = self._album_status == AlbumStatus.APPROVED
 
         if attr == "_play":
-            # Spec 06 per-row preview-play.
+            # Spec 06 per-row preview-play. TC-06-19: the row whose track
+            # is the active source AND state == PLAYING shows the PAUSE
+            # glyph + "Pause <title>" a11y text — a click pauses the
+            # source. Every other row shows PLAY + "Preview-play <title>".
+            is_active_playing = (
+                self._active_playing and track.path == self._active_path
+            )
             if role == Qt.ItemDataRole.DisplayRole:
-                return Glyphs.PLAY
+                return Glyphs.PAUSE if is_active_playing else Glyphs.PLAY
             if role == Qt.ItemDataRole.AccessibleTextRole:
+                if is_active_playing:
+                    return f"Pause {track.title}"
                 return f"Preview-play {track.title}"
             if role == Qt.ItemDataRole.ToolTipRole:
+                if is_active_playing:
+                    return "Pause this track"
                 return "Preview-play this track"
             if role == Qt.ItemDataRole.UserRole:
                 # Sortable but uninformative; group by title casefold so a
@@ -286,6 +324,12 @@ class LibraryPane(QFrame):
 
     def set_library(self, library: Library) -> None:
         self._model.set_tracks(library.tracks)
+
+    def set_active_play_state(self, path: Path | None, playing: bool) -> None:
+        """Spec 06 TC-06-17/18/19 — surface the player's active+playing state
+        so the play-column glyph mirrors it. Pure pass-through; the model
+        owns the diff + dataChanged emit."""
+        self._model.set_active_play_state(path, playing)
 
     def set_current_album(self, album: Album | None) -> None:
         self._current_album = album

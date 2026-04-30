@@ -38,7 +38,12 @@ class LyricsPanel(QFrame):
     def __init__(self, palette: Palette | None = None, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("LyricsPanel")
-        self.setFixedHeight(150)
+        # Spec 07 TC-07-16: minimum height pins the floor (the v0.4.0
+        # fixed-height value), not the ceiling — the panel grows with the
+        # right pane below the now-playing metadata. Pre-amendment this
+        # was setFixedHeight(150), which stranded the lyrics in 150 px no
+        # matter how tall the window got.
+        self.setMinimumHeight(150)
         # L7-M1: callers should pass an explicit palette so a v2 theme
         # switch propagates here. The default fallback to
         # `Palette.dark_colourful()` is retained for backwards-compat

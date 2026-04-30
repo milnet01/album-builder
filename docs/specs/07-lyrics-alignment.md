@@ -1,6 +1,6 @@
 # 07 — Lyrics Alignment & Display
 
-**Status:** Draft · **Last updated:** 2026-04-28 · **Depends on:** 00, 01, 06, 10, 11
+**Status:** Draft · **Last updated:** 2026-04-30 · **Depends on:** 00, 01, 06, 10, 11
 
 ## Purpose
 
@@ -10,7 +10,7 @@ Show synchronized scrolling lyrics in the now-playing pane. The line being sung 
 
 ### Lyrics panel (right pane, below now-playing metadata)
 
-- Shows the loaded track's lyrics, three lines tall by default, with the current line vertically centred and visually emphasized.
+- Shows the loaded track's lyrics. The panel **fills the available vertical space** in the right pane below the now-playing metadata + above the transport bar — it grows and shrinks with the window/splitter rather than locking to a fixed line count. Minimum visible height is **150 px** (the v0.4.0 fixed-height value, which historically rendered ~3 lines + the status pill at the default theme), enforced via `setMinimumHeight(150)` so a narrow window still shows the now-line in context. The current line is vertically centred within the visible area; lines above scroll into the past-region, lines below into the future-region. (Amended 2026-04-30 — pre-amendment the panel was `setFixedHeight(150)`, which left most of the right pane empty when the window was tall enough to give the lyrics room.)
 - Three styles, scrolling automatically as playback progresses:
   - **past** lines — dim, smaller text
   - **now** line — bright accent colour (yellow/amber from theme), bold, larger
@@ -160,6 +160,10 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-07-13** — Alignment opt-in: with `auto_align_on_play = false` (default), loading a track with `not yet aligned` status does not start an alignment job.
 - **TC-07-14** — `LRC` cache hit: opening a track that already has a fresh `.lrc` (mtime ≥ audio mtime) skips re-alignment and goes straight to `ready`.
 - **TC-07-15** — Visual: `now`-line styling uses `accent-warm` (Spec 11), `past` uses `text-disabled`, `future` uses `text-tertiary`.
+- **TC-07-16** — Layout: the lyrics panel occupies the full available height of the right pane between the now-playing metadata block and the transport bar. Concretely:
+  (a) `LyricsPanel` does **not** call `setFixedHeight`; it calls `setMinimumHeight(150)` instead.
+  (b) `NowPlayingPane` adds the lyrics panel to its `QVBoxLayout` with non-zero stretch and does **not** add a competing `addStretch()` after it, so the lyrics panel absorbs the leftover vertical space.
+  (c) Measurable assertion: with a `qtbot.addWidget(now_playing_pane)` + `now_playing_pane.resize(420, 800)` + `qApp.processEvents()`, `lyrics_panel.height()` is at least `300` (i.e. at least 2x the 150 px minimum — the panel actually grew rather than just being allowed to). On the offscreen pytest-qt platform, geometry is finalised after `resize()` + a processed event-loop tick; no `show()` is required for `height()` to return a non-zero value once the layout has run.
 
 (Slow-integration "real alignment" tests stay opt-in / `@pytest.mark.slow` — they're not part of the default test contract.)
 

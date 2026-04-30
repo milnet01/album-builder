@@ -219,7 +219,10 @@ def test_approved_album_toggle_has_tooltip(populated_pane) -> None:
     assert "approved" in tip.lower()
 
 
-# Spec: TC-06-15 — preview-play column emits Path on click.
+# Spec: TC-06-15 (signal contract) — preview-play column emits Path on click.
+# The amended TC-06-15 (v0.5.2) covers the player-observable swap; that
+# assertion lives in test_TC_06_17_18_19_row_play_pause::test_cross_row_
+# click_swaps_source. This test is the still-useful signal-emit half.
 def test_library_pane_emits_preview_play_request(populated_pane) -> None:
     pane, lib = populated_pane
     captured = []
