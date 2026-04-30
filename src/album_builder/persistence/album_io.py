@@ -197,6 +197,17 @@ def save_album_for_unapprove(folder: Path, album: Album) -> None:
     _write_album_json(folder, album)                  # step 3
 
 
+def _write_migration_bak(path: Path, original_bytes: bytes, from_version: int) -> None:
+    """Persist `<path>.v<from_version>.bak` with the pre-migration bytes
+    (Spec 10 §79). On failure, log + continue — the rewrite of the migrated
+    form is independent and must not be blocked by a missed backup."""
+    bak = path.parent / f"{path.name}.v{from_version}.bak"
+    try:
+        bak.write_bytes(original_bytes)
+    except OSError as exc:
+        logger.warning("failed to write migration backup %s: %s", bak, exc)
+
+
 def load_album(folder: Path) -> Album:
     path = folder / ALBUM_JSON
     if not path.exists():
@@ -205,25 +216,46 @@ def load_album(folder: Path) -> Album:
         # Spec 10: album.json is UTF-8, no BOM. Pinning encoding here avoids
         # an ASCII-default decode on a stripped-down server locale (the file
         # may legitimately contain non-ASCII album/track names).
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
+        raw_bytes = path.read_bytes()
+        raw = json.loads(raw_bytes.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
         raise AlbumDirCorrupt(f"{path}: unparseable ({exc})") from exc
+
+    from_version = raw.get("schema_version") if isinstance(raw, dict) else None
 
     try:
         data = migrate_forward(raw, current=CURRENT_SCHEMA_VERSION, migrations=MIGRATIONS)
     except (SchemaTooNewError, UnreadableSchemaError) as exc:
         raise AlbumDirCorrupt(str(exc)) from exc
 
-    album, needs_rewrite = _deserialize(data)
+    # L2-M4: Spec 10 §152 — malformed UUID / status / timestamp / required
+    # field surfaces as AlbumDirCorrupt (caller skips with toast), not as
+    # a bare KeyError/ValueError that crashes the rescan loop.
+    try:
+        album, needs_rewrite = _deserialize(data)
+    except (KeyError, ValueError, TypeError) as exc:
+        raise AlbumDirCorrupt(f"{path}: malformed album fields ({exc})") from exc
+
+    # L2-H3: Spec 10 §79 — preserve original bytes at `<file>.v<old>.bak`
+    # before the migrated form is written back. Latent until v2 schema
+    # migration lands; mechanism shipped pre-emptively.
+    migrated = (
+        isinstance(from_version, int)
+        and data.get("schema_version") != from_version
+    )
+    if migrated:
+        _write_migration_bak(path, raw_bytes, from_version)
 
     # Self-heal: relative paths normalised + target_count bumped if needed
     # (TC-10-09 + TC-04-09). _deserialize already applied the heal to the
     # in-memory Album; we just write it back so the next reader sees a
-    # canonical file.
-    if needs_rewrite:
-        logger.warning(
-            "%s: relative paths or target_count<len(track_paths) self-healed", path,
-        )
+    # canonical file. A migration also forces a rewrite so the v<new>
+    # bytes land at the canonical path.
+    if needs_rewrite or migrated:
+        if needs_rewrite:
+            logger.warning(
+                "%s: relative paths or target_count<len(track_paths) self-healed", path,
+            )
         save_album(folder, album)
 
     # Self-heal: marker / status mismatch  -- TC-02-17, TC-02-18

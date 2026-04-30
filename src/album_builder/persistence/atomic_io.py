@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
+import errno
+import logging
 import os
 import uuid
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+# Errnos that legitimately indicate "this filesystem / platform does not
+# support directory fsync" — silently skipped. Anything else is a real
+# I/O problem and must propagate. (Indie-review L2-H1.)
+_DIR_FSYNC_SKIP_ERRNOS = {errno.EINVAL, errno.ENOTSUP}
 
 
 def _unique_tmp_path(path: Path) -> Path:
@@ -25,18 +34,19 @@ def _fsync_dir(directory: Path) -> None:
     POSIX rename(2) is atomic at process-time but the directory entry is
     metadata; durability requires fsync(parent). Some filesystems (notably
     network mounts, certain FUSE backends) reject directory-handle fsync
-    with EINVAL or ENOTSUP - swallow those cases since the rename itself
-    already succeeded and the data file was fsynced. Other OSError types
-    are unexpected and propagate."""
+    with EINVAL or ENOTSUP — those are silent skips. Real failures
+    (EIO, EACCES, ENOENT) propagate so callers can distinguish a missed
+    durability barrier from a "platform doesn't support it" no-op."""
     try:
         fd = os.open(directory, os.O_DIRECTORY)
-    except OSError:
-        return  # platform doesn't expose a directory fd; skip silently
+    except OSError as exc:
+        if exc.errno in _DIR_FSYNC_SKIP_ERRNOS:
+            return
+        raise
     try:
         os.fsync(fd)
     except OSError as exc:
-        # EINVAL / ENOTSUP on filesystems that don't support directory fsync.
-        if exc.errno not in (22, 95):  # EINVAL=22, ENOTSUP=95 on Linux
+        if exc.errno not in _DIR_FSYNC_SKIP_ERRNOS:
             raise
     finally:
         os.close(fd)
@@ -46,10 +56,12 @@ def _atomic_write(path: Path, mode: str, content, *, encoding: str | None = None
     """Shared core for both text and bytes atomic writes.
 
     Sequence: open tmp -> write -> flush -> fsync(file) -> os.replace ->
-    fsync(parent). Any exception in the write path unlinks the tmp file
+    fsync(parent). Any exception BEFORE os.replace unlinks the tmp file
     so the directory doesn't accumulate `.tmp` debris on a failed write.
-    `encoding` is forwarded to `open()` only for text-mode writes;
-    binary-mode `open()` rejects the kwarg, so it must be omitted there."""
+    A failure during the post-rename parent-fsync is logged-and-continued:
+    the data is already on disk under its final name, so propagating that
+    as "save failed" would mislead the caller into a retry loop. (Indie-
+    review L2-H2.)"""
     tmp = _unique_tmp_path(path)
     try:
         kwargs = {"encoding": encoding} if encoding is not None else {}
@@ -58,9 +70,6 @@ def _atomic_write(path: Path, mode: str, content, *, encoding: str | None = None
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
-        # Durability: fsync the parent directory so the rename survives
-        # power loss as well as the write itself.
-        _fsync_dir(path.parent)
     except Exception:
         if tmp.exists():
             try:
@@ -68,6 +77,15 @@ def _atomic_write(path: Path, mode: str, content, *, encoding: str | None = None
             except OSError:
                 pass
         raise
+    # Best-effort durability for the rename itself; data is already at the
+    # final name so we cannot lose it from here. A log line is enough.
+    try:
+        _fsync_dir(path.parent)
+    except OSError as exc:
+        logger.warning(
+            "post-rename fsync of %s failed: %s; data already at final name",
+            path.parent, exc,
+        )
 
 
 def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> None:

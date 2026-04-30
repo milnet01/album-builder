@@ -222,3 +222,93 @@ def test_to_iso_rejects_naive_datetime() -> None:
     naive = _dt(2026, 4, 28, 12, 0, 0)  # tzinfo=None
     with pytest.raises(ValueError, match="aware datetime"):
         _to_iso(naive)
+
+
+# Indie-review L2-M4: malformed UUID / timestamp / status / name fields
+# inside a structurally-valid JSON payload must surface as AlbumDirCorrupt
+# (Spec 10 §152), not as a bare KeyError / ValueError leaking past the
+# load_album guard. Caller (AlbumStore.rescan) treats AlbumDirCorrupt as
+# "skip with toast"; everything else crashes the rescan loop.
+def test_load_malformed_uuid_raises_albumdircorrupt(tmp_path: Path) -> None:
+    folder = tmp_path / "x"
+    folder.mkdir()
+    folder.joinpath("album.json").write_text(json.dumps({
+        "schema_version": 1,
+        "id": "not-a-uuid",
+        "name": "x",
+        "target_count": 1,
+        "track_paths": [],
+        "status": "draft",
+        "cover_override": None,
+        "created_at": "2026-04-28T00:00:00.000Z",
+        "updated_at": "2026-04-28T00:00:00.000Z",
+        "approved_at": None,
+    }))
+    with pytest.raises(AlbumDirCorrupt):
+        load_album(folder)
+
+
+def test_load_malformed_status_raises_albumdircorrupt(tmp_path: Path) -> None:
+    folder = tmp_path / "x"
+    folder.mkdir()
+    folder.joinpath("album.json").write_text(json.dumps({
+        "schema_version": 1,
+        "id": "00000000-0000-0000-0000-000000000001",
+        "name": "x",
+        "target_count": 1,
+        "track_paths": [],
+        "status": "wishlist",  # not a valid AlbumStatus
+        "cover_override": None,
+        "created_at": "2026-04-28T00:00:00.000Z",
+        "updated_at": "2026-04-28T00:00:00.000Z",
+        "approved_at": None,
+    }))
+    with pytest.raises(AlbumDirCorrupt):
+        load_album(folder)
+
+
+def test_load_missing_required_field_raises_albumdircorrupt(tmp_path: Path) -> None:
+    folder = tmp_path / "x"
+    folder.mkdir()
+    folder.joinpath("album.json").write_text(json.dumps({
+        "schema_version": 1,
+        # Missing `id`, `name`, etc.
+    }))
+    with pytest.raises(AlbumDirCorrupt):
+        load_album(folder)
+
+
+# Indie-review L2-H3 (Theme C recurrence): album.json migration also
+# preserves a v<old>.bak before rewriting (Spec 10 §79). Latent until
+# v2 schema lands; exercised here with a synthetic migration.
+def test_album_migration_preserves_bak_with_original_bytes(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from album_builder.persistence import album_io
+
+    folder = tmp_path / "x"
+    folder.mkdir()
+    path = folder / "album.json"
+    original_payload = {
+        "schema_version": 0,
+        "id": "00000000-0000-0000-0000-000000000001",
+        "name": "x",
+        "target_count": 1,
+        "track_paths": [],
+        "status": "draft",
+        "cover_override": None,
+        "created_at": "2026-04-28T00:00:00.000Z",
+        "updated_at": "2026-04-28T00:00:00.000Z",
+        "approved_at": None,
+    }
+    original_bytes = json.dumps(original_payload, indent=2).encode("utf-8")
+    path.write_bytes(original_bytes)
+
+    monkeypatch.setitem(
+        album_io.MIGRATIONS, 0, lambda d: {**d, "schema_version": 1}
+    )
+
+    album_io.load_album(folder)
+    bak = folder / "album.json.v0.bak"
+    assert bak.exists(), f"expected {bak} to be written"
+    assert bak.read_bytes() == original_bytes

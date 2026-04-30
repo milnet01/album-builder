@@ -71,6 +71,9 @@ def _coerce_path(value: object) -> Path | None:
         return None
 
 
+_MIN_WINDOW_DIM = 100  # Spec 10 §state.json: width/height >= 100, clamped on load.
+
+
 def _coerce_window(value: object) -> WindowState:
     if not isinstance(value, dict):
         return WindowState()
@@ -81,7 +84,13 @@ def _coerce_window(value: object) -> WindowState:
             # bool is a subclass of int; reject it explicitly because the
             # spec field is a pixel count.
             if isinstance(raw, int) and not isinstance(raw, bool):
-                setattr(out, field_name, raw)
+                # L2-M2: width/height clamp to spec minimum (100). x/y are
+                # any int — the WM may have left the window off-screen and
+                # the OS clamps on apply.
+                if field_name in ("width", "height"):
+                    setattr(out, field_name, max(_MIN_WINDOW_DIM, raw))
+                else:
+                    setattr(out, field_name, raw)
             else:
                 logger.warning(
                     "state.json: window.%s=%r is not int; defaulting",
@@ -89,10 +98,13 @@ def _coerce_window(value: object) -> WindowState:
                 )
     if "splitter_sizes" in value:
         raw = value["splitter_sizes"]
+        # L2-M3: Spec 10 says all `>= 0` (zero is a legit collapsed pane);
+        # the previous `n > 0` filter silently reset the layout when the
+        # user collapsed one of the three splitter regions.
         if (
             isinstance(raw, list)
             and len(raw) == 3
-            and all(isinstance(n, int) and not isinstance(n, bool) and n > 0 for n in raw)
+            and all(isinstance(n, int) and not isinstance(n, bool) and n >= 0 for n in raw)
         ):
             out.splitter_sizes = list(raw)
         else:
@@ -107,7 +119,9 @@ def load_state(project_root: Path) -> AppState:
     if not path.exists():
         return AppState()
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw_bytes = path.read_bytes()
+        raw = json.loads(raw_bytes.decode("utf-8"))
+        from_version = raw.get("schema_version") if isinstance(raw, dict) else None
         data = migrate_forward(raw, current=CURRENT_SCHEMA_VERSION, migrations=MIGRATIONS)
     except (json.JSONDecodeError, OSError, SchemaTooNewError, UnreadableSchemaError) as exc:
         # Spec 10 TC-10-12: corrupt state.json -> defaults + REWRITE so the
@@ -125,11 +139,37 @@ def load_state(project_root: Path) -> AppState:
         logger.warning("%s: top-level value is not an object; defaulting", path)
         return AppState()
 
-    return AppState(
+    state = AppState(
         current_album_id=_coerce_uuid(data.get("current_album_id")),
         last_played_track_path=_coerce_path(data.get("last_played_track_path")),
         window=_coerce_window(data.get("window")),
     )
+
+    # L2-H3: Spec 10 §79 mandates `<file>.v<old>.bak` on schema migration.
+    # Latent until v2 lands; ship the mechanism now so the first migration
+    # author doesn't re-discover this requirement.
+    if (
+        isinstance(from_version, int)
+        and data.get("schema_version") != from_version
+    ):
+        _write_migration_bak(path, raw_bytes, from_version)
+        try:
+            save_state(project_root, state)
+        except OSError as exc:
+            logger.warning("%s: failed to rewrite migrated state (%s)", path, exc)
+
+    return state
+
+
+def _write_migration_bak(path: Path, original_bytes: bytes, from_version: int) -> None:
+    """Persist `<path>.v<from_version>.bak` with the pre-migration bytes
+    (Spec 10 §79). On failure, log + continue — the rewrite of the migrated
+    form is independent and must not be blocked by a missed backup."""
+    bak = path.parent / f"{path.name}.v{from_version}.bak"
+    try:
+        bak.write_bytes(original_bytes)
+    except OSError as exc:
+        logger.warning("failed to write migration backup %s: %s", bak, exc)
 
 
 def save_state(project_root: Path, state: AppState) -> None:

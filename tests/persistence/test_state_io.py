@@ -99,3 +99,58 @@ def test_malformed_window_block_falls_back_to_default(tmp_path: Path) -> None:
     # WindowState defaulted on type/value error; stray key dropped silently.
     assert state.window.width == 1400
     assert state.window.height == 900
+
+
+# Indie-review L2-M2: Spec 10 §state.json constraint table mandates
+# `window.width` / `window.height` >= 100 (clamped on load). A persisted
+# 0x0 window from a buggy prior session must not survive the load.
+def test_window_dims_clamped_to_min_100(tmp_path: Path) -> None:
+    (tmp_path / ".album-builder").mkdir()
+    (tmp_path / ".album-builder" / "state.json").write_text(json.dumps({
+        "schema_version": 1,
+        "window": {"width": 50, "height": 0, "x": 100, "y": 80},
+    }))
+    state = load_state(tmp_path)
+    assert state.window.width == 100
+    assert state.window.height == 100
+
+
+# Indie-review L2-M3: Spec 10 §state.json says `splitter_sizes` length 3,
+# all >= 0 (zero is legitimate — user collapsed a pane). The previous
+# `n > 0` filter silently reset the layout.
+def test_splitter_sizes_accepts_zero(tmp_path: Path) -> None:
+    (tmp_path / ".album-builder").mkdir()
+    (tmp_path / ".album-builder" / "state.json").write_text(json.dumps({
+        "schema_version": 1,
+        "window": {"splitter_sizes": [5, 0, 5]},
+    }))
+    state = load_state(tmp_path)
+    assert state.window.splitter_sizes == [5, 0, 5]
+
+
+# Indie-review L2-H3 (Theme C recurrence): Spec 10 §79 mandates that
+# schema migration writes `<file>.v<old>.bak` preserving the original
+# bytes before rewriting the migrated form. Latent until v2 schema lands;
+# exercised here with a synthetic v0 -> v1 migration.
+def test_state_migration_preserves_bak_with_original_bytes(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from album_builder.persistence import state_io
+
+    state_dir = tmp_path / ".album-builder"
+    state_dir.mkdir()
+    state_path = state_dir / "state.json"
+    original_bytes = json.dumps(
+        {"schema_version": 0, "current_album_id": None}, indent=2
+    ).encode("utf-8")
+    state_path.write_bytes(original_bytes)
+
+    # Register a synthetic v0 -> v1 migration just for this test.
+    monkeypatch.setitem(
+        state_io.MIGRATIONS, 0, lambda d: {**d, "schema_version": 1}
+    )
+
+    state_io.load_state(tmp_path)
+    bak = state_dir / "state.json.v0.bak"
+    assert bak.exists(), f"expected {bak} to be written before migrated rewrite"
+    assert bak.read_bytes() == original_bytes
