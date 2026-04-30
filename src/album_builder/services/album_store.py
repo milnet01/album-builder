@@ -40,11 +40,16 @@ class AlbumStore(QObject):
         super().__init__(parent)
         self._albums_dir = Path(albums_dir)
         self._albums_dir.mkdir(parents=True, exist_ok=True)
-        self._check_trash_same_filesystem()
         self._albums: dict[UUID, Album] = {}
         self._folders: dict[UUID, Path] = {}
         self._current_id: UUID | None = None
         self._writer = DebouncedWriter(parent=self)
+        # L5-M1: cross-FS check is now triggered on first lazy `.trash`
+        # creation inside delete() rather than at construction (where the
+        # `.trash` directory typically doesn't exist yet so the check
+        # silently passed). One-shot via this flag.
+        self._trash_fs_checked = False
+        self._check_trash_same_filesystem()
         self.rescan()
 
     def _check_trash_same_filesystem(self) -> None:
@@ -54,17 +59,21 @@ class AlbumStore(QObject):
         filesystems, voiding atomicity (a power loss mid-copy leaves a
         half-copied trash dir). The default config has `.trash` as a
         subdirectory of `Albums/` (same FS guaranteed), but a user could
-        symlink it elsewhere for capacity reasons. Surface the issue at
-        construction so the user sees it before the first delete."""
+        symlink it elsewhere for capacity reasons. The check is one-shot:
+        construction-time inspection (when `.trash` exists already) and
+        first-delete inspection (lazy creation case, L5-M1)."""
+        if self._trash_fs_checked:
+            return
         import os as _os
         trash = self._albums_dir / TRASH_DIRNAME
         if not trash.exists():
-            return  # default case: created lazily on first delete, same FS
+            return  # nothing to compare yet; recheck after first delete.
         try:
             albums_dev = _os.stat(self._albums_dir).st_dev
             trash_dev = _os.stat(trash).st_dev
         except OSError:
             return  # can't stat - skip the check rather than crash startup
+        self._trash_fs_checked = True
         if albums_dev != trash_dev:
             logger.warning(
                 "%s and %s are on different filesystems; trash moves will "
@@ -82,16 +91,23 @@ class AlbumStore(QObject):
 
         Single-threaded assumption: the AlbumStore lives on Qt's main event
         loop and rescan() is called only from the main thread (typically at
-        startup or in response to a foreground signal). The clear()-then-
-        rebuild sequence is NOT lock-protected; a future AlbumStoreWatcher
-        that calls rescan() asynchronously while a CRUD method runs would
-        race and could resurrect deleted albums. If async re-scanning is
-        ever added, gate the body on a re-entrancy flag or move to a
-        diff-based update.
+        startup or in response to a foreground signal). The local-dict-then-
+        swap sequence below means a partial-iteration failure leaves the
+        existing in-memory state alone (L5-M2); the previous clear()-then-
+        rebuild left the store empty when iterdir() raised PermissionError.
         """
-        self._albums.clear()
-        self._folders.clear()
-        for entry in sorted(self._albums_dir.iterdir() if self._albums_dir.exists() else []):
+        new_albums: dict[UUID, Album] = {}
+        new_folders: dict[UUID, Path] = {}
+        try:
+            entries = sorted(self._albums_dir.iterdir() if self._albums_dir.exists() else [])
+        except OSError as exc:
+            # PermissionError / OSError on iterdir leaves the store untouched
+            # rather than blanked. The caller can retry once the underlying
+            # FS issue is resolved.
+            logger.warning("rescan: cannot list %s (%s); keeping existing state",
+                           self._albums_dir, exc)
+            return
+        for entry in entries:
             if not entry.is_dir() or entry.name == TRASH_DIRNAME:
                 continue
             # Skip dotfile / dunder directories silently (e.g. __pycache__,
@@ -109,8 +125,13 @@ class AlbumStore(QObject):
                 # _deserialize bug) shouldn't abort the whole rescan.
                 logger.exception("unexpected error loading %s: %s", entry, exc)
                 continue
-            self._albums[album.id] = album
-            self._folders[album.id] = entry
+            new_albums[album.id] = album
+            new_folders[album.id] = entry
+        # Atomic-ish swap: only replace in-memory state once the full read
+        # succeeded. A partial iterdir failure (above) returns early with
+        # the prior state intact.
+        self._albums = new_albums
+        self._folders = new_folders
 
     def list(self) -> list[Album]:
         # Spec 00 §Sort order: case-insensitive, locale-aware. casefold() is
@@ -205,6 +226,8 @@ class AlbumStore(QObject):
         if folder is not None and folder.exists():
             trash = self._albums_dir / TRASH_DIRNAME
             trash.mkdir(exist_ok=True)
+            # L5-M1: cross-FS check on first lazy `.trash` creation.
+            self._check_trash_same_filesystem()
             # Microsecond precision (UTC, matching the rest of the codebase)
             # so two rapid deletes of albums sharing a folder name (delete -
             # recreate - delete cycle) don't land on the same trash path

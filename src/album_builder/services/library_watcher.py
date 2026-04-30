@@ -43,26 +43,41 @@ class LibraryWatcher(QObject):
         self._rebind_watch()
 
     def _rebind_watch(self) -> None:
-        """Bind the watcher to `self._folder` AND its parent.
+        """Bind the watcher to `self._folder` AND its parent, idempotently.
 
         Watching the parent is what lets us recover from "user moves Tracks/
         aside, recreates it" (TC-01-P2-04 path). With only a self._folder
         watch, the deletion fires once, then the recreation goes unnoticed
         because the inotify watch was on a now-orphan inode. Watching the
         parent picks the recreation up via directoryChanged on the parent.
-        """
-        if self._watcher.directories():
-            self._watcher.removePaths(self._watcher.directories())
+
+        L5-H2: compute add/remove diffs against the watcher's current set
+        rather than removeAll-then-addAll. The naive sequence has an
+        inotify event-loss window: events that fire between the remove
+        and the add are dropped on the floor."""
+        desired: list[str] = []
         if self._folder.exists():
-            self._watcher.addPath(str(self._folder))
-        # Also watch the parent so a delete-recreate cycle of the folder
-        # itself fires events. Parent is typically stable (a project root or
-        # user home), so the extra watch costs nothing.
+            desired.append(str(self._folder))
         parent = self._folder.parent
         if parent.exists() and parent != self._folder:
-            self._watcher.addPath(str(parent))
+            desired.append(str(parent))
 
-    def _on_dir_changed(self, _path: str) -> None:
+        current = set(self._watcher.directories())
+        wanted = set(desired)
+        to_remove = sorted(current - wanted)
+        to_add = sorted(wanted - current)
+        if to_remove:
+            self._watcher.removePaths(to_remove)
+        if to_add:
+            self._watcher.addPaths(to_add)
+
+    def _on_dir_changed(self, path: str) -> None:
+        # L5-M4: the parent-folder watch fires on any sibling-directory
+        # change inside the parent. Filter to events whose path is either
+        # our tracked folder OR our exact parent (signal that the folder
+        # itself was added/removed/renamed). Sibling changes are ignored.
+        if path != str(self._folder) and path != str(self._folder.parent):
+            return
         self._debounce.start()
 
     def library(self) -> Library:

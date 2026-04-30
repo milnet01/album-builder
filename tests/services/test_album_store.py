@@ -358,3 +358,72 @@ def test_delete_current_album_state_consistent_at_signal_emit_time(
 
     assert seen["current_at_emit"] == a2.id
     assert seen["a1_present"] is False
+
+
+# Indie-review L5-M2: rescan() must not blank the store on a partial-read
+# failure. The previous code clear()'d both dicts before iterating, so a
+# PermissionError on `iterdir()` (or partway through) left the store empty
+# with no rebuild. Build into a local dict and swap on success instead.
+def test_rescan_failure_preserves_existing_state(
+    qapp, tmp_path: Path, monkeypatch,
+) -> None:
+    store = AlbumStore(tmp_path)
+    a = store.create(name="kept", target_count=3)
+    assert [b.name for b in store.list()] == ["kept"]
+
+    # Simulate a transient iterdir failure on the next rescan.
+    real_iterdir = Path.iterdir
+
+    def fail_iterdir(self):
+        if self == tmp_path:
+            raise PermissionError("simulated iterdir failure")
+        return real_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", fail_iterdir)
+    store.rescan()
+    monkeypatch.setattr(Path, "iterdir", real_iterdir)
+
+    # Existing album survived the failed rescan.
+    assert store.get(a.id) is not None
+    assert [b.name for b in store.list()] == ["kept"]
+
+
+# Indie-review L5-M1: cross-FS trash warning must fire on the first delete
+# that lazily creates `.trash`, not just at construction (the construction-
+# time check skipped because `.trash` didn't exist yet).
+def test_cross_fs_trash_warning_fires_at_lazy_trash_creation(
+    qapp, tmp_path: Path, monkeypatch, caplog,
+) -> None:
+    import logging
+    import os as _os
+
+    # Construct without `.trash` — the construct-time check sees no
+    # `.trash` and silently returns.
+    store = AlbumStore(tmp_path)
+
+    # Stub stat() to report different st_dev for albums_dir vs the to-be-
+    # created `.trash` so the cross-FS check would fire if the delete-time
+    # check is wired up correctly.
+    real_stat = _os.stat
+
+    def fake_stat(p, *args, **kwargs):
+        s = real_stat(p, *args, **kwargs)
+        if str(p).rstrip("/").endswith(".trash"):
+            class _Stub:
+                st_dev = s.st_dev + 1  # different fs
+                st_mode = s.st_mode
+                st_size = s.st_size
+                st_mtime = s.st_mtime
+            return _Stub()
+        return s
+
+    monkeypatch.setattr(_os, "stat", fake_stat)
+
+    a = store.create(name="x", target_count=1)
+    with caplog.at_level(logging.WARNING):
+        store.delete(a.id)
+
+    assert any(
+        "different filesystem" in rec.message.lower()
+        for rec in caplog.records
+    ), f"expected cross-FS warning at delete time; got: {[r.message for r in caplog.records]}"
