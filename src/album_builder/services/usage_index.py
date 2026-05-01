@@ -49,6 +49,12 @@ class UsageIndex(QObject):
         # because rebuild() walks store.list() from scratch.
         self.rebuild()
 
+    @property
+    def store(self) -> AlbumStore:
+        """The AlbumStore this index queries - exposed for callers that
+        need to look up album names at tooltip-show time (Spec 13)."""
+        return self._store
+
     def rebuild(self) -> None:
         """Rebuild the index from the AlbumStore's approved albums.
 

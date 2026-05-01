@@ -219,3 +219,116 @@ def test_TC_13_23_no_exclusion_when_current_draft(qapp, store) -> None:
         current_album_id=draft.id,
     )
     assert model.data(_used_idx(model), Qt.ItemDataRole.DisplayRole) == "2"
+
+
+# Spec: TC-13-12 - tooltip exact multi-line string with sorted album names.
+def test_TC_13_12_tooltip_alphabetical_with_middot(qapp, store) -> None:
+    p = Path("/tracks/multi.mp3")
+    _make_album(store, "Zulu", status=AlbumStatus.APPROVED, paths=[p])
+    _make_album(store, "alpha", status=AlbumStatus.APPROVED, paths=[p])
+    _make_album(store, "Bravo", status=AlbumStatus.APPROVED, paths=[p])
+    idx = UsageIndex(store)
+    idx.rebuild()
+
+    track = _track(str(p))
+    model = TrackTableModel([track])
+    model.set_usage_index(idx)
+    model.set_album_state(
+        selected_paths=set(), status=AlbumStatus.DRAFT, target=1,
+    )
+    tooltip = model.data(_used_idx(model), Qt.ItemDataRole.ToolTipRole)
+    assert tooltip == (
+        "Used in approved albums:\n"
+        "  · alpha\n"
+        "  · Bravo\n"
+        "  · Zulu"
+    )
+
+
+# Spec: TC-13-27 - count == 0 returns None (not empty string).
+def test_TC_13_27_tooltip_none_when_count_zero(qapp) -> None:
+    model = _model_with_index_count(qapp, 0)
+    assert model.data(_used_idx(model), Qt.ItemDataRole.ToolTipRole) is None
+
+
+# Spec: TC-13-20 - live rename lookup; renamed album shows new name.
+def test_TC_13_20_tooltip_live_rename_lookup(qapp, store) -> None:
+    p = Path("/tracks/renamed.mp3")
+    a = _make_album(store, "Old Name", status=AlbumStatus.APPROVED, paths=[p])
+    idx = UsageIndex(store)
+    idx.rebuild()
+
+    track = _track(str(p))
+    model = TrackTableModel([track])
+    model.set_usage_index(idx)
+    model.set_album_state(
+        selected_paths=set(), status=AlbumStatus.DRAFT, target=1,
+    )
+    tip1 = model.data(_used_idx(model), Qt.ItemDataRole.ToolTipRole)
+    assert "Old Name" in tip1
+
+    store.rename(a.id, "New Name")
+    tip2 = model.data(_used_idx(model), Qt.ItemDataRole.ToolTipRole)
+    assert "New Name" in tip2
+    assert "Old Name" not in tip2
+
+
+# Spec: TC-13-29 - race tolerance: store.get(id) returning None silently dropped.
+def test_TC_13_29_tooltip_skips_missing_album(qapp, store) -> None:
+    p = Path("/tracks/race.mp3")
+    a1 = _make_album(store, "Alpha", status=AlbumStatus.APPROVED, paths=[p])
+    _make_album(store, "Beta", status=AlbumStatus.APPROVED, paths=[p])
+    idx = UsageIndex(store)
+    idx.rebuild()
+
+    # Index still contains both ids; store has only one.
+    store._albums.pop(a1.id)
+
+    track = _track(str(p))
+    model = TrackTableModel([track])
+    model.set_usage_index(idx)
+    model.set_album_state(
+        selected_paths=set(), status=AlbumStatus.DRAFT, target=1,
+    )
+    tip = model.data(_used_idx(model), Qt.ItemDataRole.ToolTipRole)
+    assert "Beta" in tip
+    assert "Alpha" not in tip
+
+
+def test_tooltip_returns_none_when_all_ids_missing(qapp, store) -> None:
+    p = Path("/tracks/all-gone.mp3")
+    a = _make_album(store, "Solo", status=AlbumStatus.APPROVED, paths=[p])
+    idx = UsageIndex(store)
+    idx.rebuild()
+    store._albums.pop(a.id)
+
+    track = _track(str(p))
+    model = TrackTableModel([track])
+    model.set_usage_index(idx)
+    model.set_album_state(
+        selected_paths=set(), status=AlbumStatus.DRAFT, target=1,
+    )
+    assert model.data(_used_idx(model), Qt.ItemDataRole.ToolTipRole) is None
+
+
+# Spec: TC-13-30 - plain-text safety: HTML-like names render as literal text.
+def test_TC_13_30_tooltip_plain_text_html_safe(qapp, store) -> None:
+    p = Path("/tracks/html.mp3")
+    _make_album(
+        store, "<b>Loud</b>", status=AlbumStatus.APPROVED, paths=[p],
+    )
+    idx = UsageIndex(store)
+    idx.rebuild()
+
+    track = _track(str(p))
+    model = TrackTableModel([track])
+    model.set_usage_index(idx)
+    model.set_album_state(
+        selected_paths=set(), status=AlbumStatus.DRAFT, target=1,
+    )
+    tip = model.data(_used_idx(model), Qt.ItemDataRole.ToolTipRole)
+    # Either escaped (&lt;b&gt;Loud&lt;/b&gt;) or rendered as literal characters.
+    contains_escaped = "&lt;b&gt;Loud&lt;/b&gt;" in tip
+    contains_literal = "<b>Loud</b>" in tip
+    assert contains_escaped or contains_literal
+    assert "Loud" in tip

@@ -24,6 +24,54 @@ if TYPE_CHECKING:
 # "warning" / None for the QSS attribute selector at paint time.
 ACCENT_ROLE = Qt.ItemDataRole.UserRole + 2
 
+
+def _plain_text_safe(name: str) -> str:
+    """Return `name` HTML-escaped for safe QToolTip embedding.
+
+    Qt's QToolTip auto-detects rich text via `Qt.mightBeRichText` (a
+    fast heuristic that flags strings containing tag-like patterns).
+    Escaping unconditionally means an album named `<b>Loud</b>` shows
+    up as literal `&lt;b&gt;Loud&lt;/b&gt;` rather than rendered HTML;
+    plain ASCII names pass through unchanged. Spec 13 §Tooltip + TC-13-30.
+
+    `Qt.convertFromPlainText` is NOT used here - it wraps in `<p>` tags
+    and substitutes non-breaking spaces, which is right for full-body
+    conversion but wrong for per-line list items embedded in a parent
+    multi-line string.
+    """
+    import html
+    return html.escape(name, quote=False)
+
+
+def _build_usage_tooltip(album_ids, store) -> str | None:
+    """Build the Used-column tooltip body for a track on N approved albums.
+
+    Looks up each album's name from the store at call time (lazy - so a
+    rename between rebuild and tooltip-show reflects on next hover). If
+    `store.get(album_id)` returns None (album removed in a race), the
+    id is silently skipped. If the resulting list is empty, returns
+    None (Qt suppresses the tooltip).
+
+    Names are sorted case-insensitively. Each line is indented with two
+    spaces and prefixed by `Glyphs.MIDDOT`. HTML-like names are made
+    plain-text-safe via `_plain_text_safe`.
+
+    Spec 13 §Tooltip + TC-13-12, 20, 29, 30.
+    """
+    names: list[str] = []
+    for aid in album_ids:
+        album = store.get(aid)
+        if album is None:
+            continue  # race tolerance: album removed mid-cascade
+        names.append(album.name)
+    if not names:
+        return None
+    names.sort(key=str.casefold)
+    safe_names = [_plain_text_safe(n) for n in names]
+    body = "\n".join(f"  {Glyphs.MIDDOT} {n}" for n in safe_names)
+    return f"Used in approved albums:\n{body}"
+
+
 COLUMNS: list[tuple[str, str]] = [
     ("▶", "_play"),   # PLAY glyph - Spec 06 per-row preview-play
     ("Title", "title"),
@@ -244,9 +292,12 @@ class TrackTableModel(QAbstractTableModel):
                     return "Used in 1 other approved album"
                 return f"Used in {count} other approved albums"
             if role == Qt.ItemDataRole.ToolTipRole:
-                # Tooltip body lands in Task 9. For now: count == 0 -> None
-                # (suppress); count >= 1 -> None (placeholder until T9).
-                return None
+                if count == 0 or usage is None:
+                    return None
+                ids = usage.album_ids_for(
+                    track.path, exclude=self._current_album_id,
+                )
+                return _build_usage_tooltip(ids, usage.store)
             if role == ACCENT_ROLE:
                 return None  # Used column doesn't participate in accent strip
             return None  # any other role: explicit None, never fall through
