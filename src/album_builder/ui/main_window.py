@@ -353,6 +353,15 @@ class MainWindow(QMainWindow):
             self.top_bar.btn_approve.setEnabled(True)
         if approve_failed:
             return
+        # Spec 13 §Behavior rules: rebuild before the pane refresh chain
+        # so the Used column paints once with correct counts (not stale
+        # then fresh across two frames). Wrapped in try/except so a
+        # rebuild failure does not roll back the successful approve;
+        # next album lifecycle signal recovers (TC-13-08(b)).
+        try:
+            self._usage_index.rebuild()
+        except Exception:
+            logger.exception("usage_index.rebuild after approve failed")
         self.top_bar.set_current(album_id)
         self.library_pane.set_current_album(self._store.get(album_id))
         self.album_order_pane.set_album(
@@ -395,6 +404,11 @@ class MainWindow(QMainWindow):
             self._show_toast(f"Reopen partial: {exc}")
             QMessageBox.warning(self, "Reopen failed", str(exc))
             return
+        # Spec 13 §Behavior rules - rebuild before pane refresh chain.
+        try:
+            self._usage_index.rebuild()
+        except Exception:
+            logger.exception("usage_index.rebuild after reopen failed")
         self.top_bar.set_current(album_id)
         self.library_pane.set_current_album(self._store.get(album_id))
         self.album_order_pane.set_album(
