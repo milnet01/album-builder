@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
+from uuid import UUID
 
 from PyQt6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt, pyqtSignal
 from PyQt6.QtWidgets import QFrame, QHeaderView, QLabel, QLineEdit, QTableView, QVBoxLayout
@@ -12,6 +14,9 @@ from album_builder.domain.album import Album, AlbumStatus
 from album_builder.domain.library import Library
 from album_builder.domain.track import Track
 from album_builder.ui.theme import Glyphs
+
+if TYPE_CHECKING:
+    from album_builder.services.usage_index import UsageIndex
 
 # Mirror of `MISSING_ROLE` / `TITLE_ROLE` in album_order_pane.py: per-pane
 # user-role offsets above Qt.ItemDataRole.UserRole, named so callers don't
@@ -49,6 +54,13 @@ class TrackTableModel(QAbstractTableModel):
         # whether *this* track is the active+playing source.
         self._active_path: Path | None = None
         self._active_playing: bool = False
+        # Spec 13 §Self-exclusion: when the current album is itself
+        # approved, exclude its id from cross-album counts. None when
+        # current is a draft (no exclusion) or no album is selected.
+        self._current_album_id: UUID | None = None
+        # Spec 13 §Layer placement: live reference to the UsageIndex.
+        # None until LibraryPane.__init__ wires it via set_usage_index.
+        self._usage_index: UsageIndex | None = None
 
     def set_tracks(self, tracks: Sequence[Track]) -> None:
         # Contract: set_tracks() resets only the per-row enable cache,
@@ -66,11 +78,19 @@ class TrackTableModel(QAbstractTableModel):
         self.endResetModel()
 
     def set_album_state(
-        self, *, selected_paths: set[Path], status: AlbumStatus, target: int,
+        self, *,
+        selected_paths: set[Path],
+        status: AlbumStatus,
+        target: int,
+        current_album_id: UUID | None = None,
     ) -> None:
         self.beginResetModel()
         self._selected_paths = selected_paths
         self._album_status = status
+        # Spec 13 §Self-exclusion: stored on every set_album_state so the
+        # existing reset envelope carries the new exclusion target for
+        # the Used column without a separate dataChanged emit.
+        self._current_album_id = current_album_id
         at_target = len(selected_paths) >= target
         is_approved = status == AlbumStatus.APPROVED
         self._toggle_enabled = [
@@ -78,6 +98,14 @@ class TrackTableModel(QAbstractTableModel):
             for track in self._tracks
         ]
         self.endResetModel()
+
+    def set_usage_index(self, usage_index: UsageIndex) -> None:
+        """Inject the UsageIndex reference. Called once from LibraryPane.__init__.
+
+        Live reference, not snapshot - subsequent data() calls read live
+        counts via usage_index.count_for(...). Spec 13 §Behavior rules.
+        """
+        self._usage_index = usage_index
 
     def track_at(self, row: int) -> Track:
         return self._tracks[row]
