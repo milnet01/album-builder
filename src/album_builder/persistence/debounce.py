@@ -35,6 +35,15 @@ class DebouncedWriter(QObject):
 
     def _fire(self, key: Hashable) -> None:
         fn = self._pending.pop(key, None)
+        # L3-M4: drop the timer entry too, so `_timers` bounds itself to
+        # active-burst keys instead of accumulating one entry per distinct
+        # key the writer has ever seen. The next schedule() for `key`
+        # reconstructs a fresh QTimer; cost is one QTimer ctor per quiet
+        # window per key, which is well below the 250 ms idle floor.
+        timer = self._timers.pop(key, None)
+        if timer is not None:
+            timer.stop()
+            timer.deleteLater()
         if fn is None:
             return
         try:
@@ -57,6 +66,7 @@ class DebouncedWriter(QObject):
         timer = self._timers.pop(key, None)
         if timer is not None:
             timer.stop()
+            timer.deleteLater()
         self._pending.pop(key, None)
 
     def flush_all(self) -> None:

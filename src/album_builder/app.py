@@ -123,6 +123,22 @@ def acquire_single_instance_lock() -> QSharedMemory | None:
     failure" (returns None but logs to stderr so the user has something to
     debug from). The two paths look identical to the caller because the
     raise handshake is harmless when there's no peer.
+
+    L7-M1 (v1 acceptance): the attach/detach/create dance has a microsecond-
+    wide TOCTOU window during owner shutdown. If two new instances both run
+    this function while the previous owner is mid-shutdown, both can see a
+    stale segment via ``attach()``, both can ``detach()`` (use-count: 2->1
+    then 1->0), and both ``create()`` calls can succeed against an empty
+    namespace -- briefly producing two "owners". Closing the race fully
+    requires an OS-level coordinator (``fcntl.flock`` on a file in
+    ``$XDG_RUNTIME_DIR``) layered above the SHM segment. We accept the race
+    as v1 because the trigger requires two human double-clicks landing
+    within the same OS scheduler tick on a single-user desktop with no
+    automation pressure -- the realistic blast radius is "second window
+    appears momentarily and gets discarded by the user", not data loss
+    (Spec 10 atomic-write writes serialise via ``os.replace`` regardless
+    of which instance issues them). Promote to flock-based coordination if
+    a daemon / autostart / kiosk deployment ever lands.
     """
     lock = QSharedMemory(SHARED_KEY)
     if lock.attach():

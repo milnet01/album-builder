@@ -8,6 +8,19 @@ Working roadmap for the Album Builder app. Tracks completed phases, in-flight fi
 
 ---
 
+## ✅ v0.5.3 — Deferred-items sweep: timer-GC + TOCTOU doc (2026-05-01)
+
+Closed the two surviving `📋` markers in `ROADMAP.md` after the v0.5.2 ship — the only remaining non-`✅` items in the document. Both were Phase-3B Tier-3 deferrals from the v0.4.0 indie-review:
+
+- **L3-M4 — `DebouncedWriter._timers` unbounded growth.** `persistence/debounce.py:_fire` now pops + `deleteLater()`s the QTimer alongside the existing `_pending.pop`; `cancel()` adds the symmetric `deleteLater()` so the QObject child list stays clean. The dict bounds itself to active-burst keys regardless of key cardinality (one QTimer ctor per quiet window per key — vanishing cost below the 250 ms idle floor). Two regression tests added (`test_fire_garbage_collects_timer_entry`, `test_flush_all_garbage_collects_timer_entries`).
+- **L7-M1 — Stale-segment recovery TOCTOU (accepted as v1).** `acquire_single_instance_lock` docstring (`app.py:117-141`) now spells out the v1-acceptance rationale: trigger requires two human double-clicks within one OS scheduler tick, realistic blast radius is a transient second window (not data loss — atomic writes serialise via `os.replace` regardless of which instance issues them), and the promotion path is `fcntl.flock` on `$XDG_RUNTIME_DIR` if a daemon/autostart/kiosk deployment ever lands. No code change — the deferral status was always "document as v1 acceptance," and that's what shipped.
+
+**Test count:** 500 → 502 passing (+2 TC L3-M4 contracts). Ruff clean. No `/audit` run — total diff is ~30 LOC of code + ~22 LOC of tests across two files; the regression coverage is local and deterministic.
+
+**ROADMAP state after this sweep:** every status marker in the document is `✅`. Next outstanding work is the `🔭 Future / deferred` queue (7 product features), which requires Phase 5 brainstorm-first treatment.
+
+---
+
 ## ✅ v0.5.2 — UX fix-pass: lyrics-pane fill + row-button play/pause toggle (2026-04-30)
 
 User-reported UX gaps spotted on the v0.5.1 build:
@@ -691,7 +704,7 @@ Plan: [`docs/plans/2026-04-28-phase-2-albums.md`](docs/plans/2026-04-28-phase-2-
 - ✅ **HIGH — `atomic_write_text` parent-dir fsync.** New `_fsync_dir` helper called after `os.replace` in both atomic-write helpers; best-effort (swallows EINVAL/ENOTSUP on filesystems without directory-fsync support). Commit `c997729`. (L3-H1)
 - ✅ **HIGH — `DebouncedWriter._fire` callback lacks exception guard.** Wrapped in try/except + `logger.exception` so disk-full mid-callback no longer silently drops the write. Regression test schedules a raising callback + survivor. Commit `c997729`. (L3-H4)
 - ✅ **MEDIUM — `XDG_CONFIG_HOME` relative-path acceptance.** `settings.settings_dir` rejects relative + empty values per the freedesktop Base Dir Spec; falls back to `~/.config/album-builder`. Two regression tests. Commit `c997729`. (L3-M3)
-- 📋 **LOW (deferred to Tier 3) — `DebouncedWriter._timers` unbounded growth.** Bounded by album count today; revisit when high-cardinality keys land. (L3-M4)
+- ✅ **LOW — `DebouncedWriter._timers` unbounded growth.** Closed in v0.5.3 sweep: `_fire` now pops + `deleteLater()`s the QTimer alongside the existing `_pending` pop, and `cancel()` adds the symmetric `deleteLater()`. The dict bounds itself to active-burst keys regardless of key cardinality (one QTimer ctor per quiet window per key — well below the 250 ms idle floor). Two TC L3-M4 regression tests added. (L3-M4)
 
 **Services (L4):**
 
@@ -729,7 +742,7 @@ Plan: [`docs/plans/2026-04-28-phase-2-albums.md`](docs/plans/2026-04-28-phase-2-
 - ✅ **MEDIUM — `acquire_single_instance_lock` doesn't distinguish error classes.** Inspects `lock.error()`; logs to stderr on non-`AlreadyExists` failures. Commit `8aa06d5`. (L7-M2)
 - ✅ **MEDIUM — SHM detach + server.close not in `finally`.** `app.exec()` wrapped in try/finally. Commit `8aa06d5`. (L7-M3)
 - ✅ **MEDIUM — Window geometry restore not bounds-checked.** `max(400, w) / max(300, h) / max(0, x|y)` clamp on restore. Commit `8aa06d5`. (L7-L1)
-- 📋 **LOW (accepted as v1) — Stale-segment recovery TOCTOU.** Microsecond race window during owner shutdown; documented in code as v1 acceptance. (L7-M1)
+- ✅ **LOW (accepted as v1) — Stale-segment recovery TOCTOU.** Closed in v0.5.3 sweep by promoting the v1-acceptance rationale into `acquire_single_instance_lock`'s docstring (`app.py:117-141`): names the trigger (two human double-clicks within one OS scheduler tick), the realistic blast radius (a transient second window, not data loss — atomic writes serialise via `os.replace` regardless of issuer), and the upgrade path (`fcntl.flock` on `$XDG_RUNTIME_DIR` if a daemon/autostart/kiosk deployment ever lands). (L7-M1)
 
 **Documentation (L8):**
 
@@ -854,6 +867,8 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 
 ---
 
-*Last reviewed: 2026-04-30 — v0.5.0 (Phase 4: Export & Approval) shipped. 4-round pre-implementation spec sweep (39 → 17 → 3 → 0 findings) + implementation + 3-round post-implementation `/audit` + `/indie-review` (40 → 3 → 0 findings) + full-codebase audit (ruff/bandit/semgrep/gitleaks all clean). 467 passing tests (+52 since v0.4.2). Specs 02 / 08 / 09 / 10 / 11 grew from 996 → ~1,140 lines with 16 new TC contracts. Phases 1–4 are feature-complete and hardened.*
+*Last reviewed: 2026-05-01 — v0.5.3 (deferred-items sweep) shipped: closed L3-M4 (DebouncedWriter timer GC) and L7-M1 (stale-segment TOCTOU v1-acceptance doc). 502 passing tests; ruff clean. ROADMAP is fully `✅`-flipped — only `🔭 Future / deferred` features remain.*
+
+*Previously: 2026-04-30 — v0.5.0 (Phase 4: Export & Approval) shipped. 4-round pre-implementation spec sweep (39 → 17 → 3 → 0 findings) + implementation + 3-round post-implementation `/audit` + `/indie-review` (40 → 3 → 0 findings) + full-codebase audit (ruff/bandit/semgrep/gitleaks all clean). 467 passing tests (+52 since v0.4.2). Specs 02 / 08 / 09 / 10 / 11 grew from 996 → ~1,140 lines with 16 new TC contracts. Phases 1–4 are feature-complete and hardened.*
 
 *Round-1 spec sweep landed 2026-04-28 (32 issues across all 13 specs: schema-ownership canonicalised to Spec 10, approve-with-missing contradiction resolved, Specs 06–12 received TC-NN-MM IDs at speccing time, global keyboard-shortcuts table added to Spec 00, canonical approve sequence pinned in Spec 09, Spec 11 §Glyphs added to single-source `⋮⋮ ▲▼ ●○ 🔒 ✓ ▶ ⏸` etc.). Round-2 sweep landed 2026-04-28 (28 follow-ups: timestamp-encoding precision pin, atomic-write-tmp-strategy alignment, plan timestamp helper, approve/unapprove side-effect ordering, plan TC crosswalk extended to TC-10/TC-11/TC-01-P2). Round-3 sweep landed 2026-04-28 (15 follow-ups: state-diagram terminology, splitter ratios on save, glyph literals in widgets, approved-album badge, rename self-collision, UTC normalisation, TC-10-09 + TC-10-20 strengthened, delete emit order). Round-4 confirmation pass 2026-04-28 verified all fixes landed cleanly with 0 surviving HIGH issues and 0 new contradictions. **Documentation set is implementation-ready for Phase 2.**

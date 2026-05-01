@@ -83,6 +83,32 @@ def test_schedule_after_cancel_works(app, qtbot) -> None:
     assert calls == ["second"]
 
 
+# Spec: L3-M4 (indie-review 2026-04-30, Phase 3B Tier 3 deferral closed v0.5.3)
+def test_fire_garbage_collects_timer_entry(app, qtbot) -> None:
+    """After a scheduled callback fires, the QTimer is dropped from `_timers`
+    instead of leaking. Bounds the dict to active-burst keys regardless of
+    key cardinality (today: album UUID + literal "state"; tomorrow: any
+    high-cardinality scheme that lands)."""
+    w = DebouncedWriter(idle_ms=20)
+    w.schedule("k", lambda: None)
+    assert "k" in w._timers
+    qtbot.wait(80)
+    assert "k" not in w._timers
+
+
+# Spec: L3-M4 (indie-review 2026-04-30, Phase 3B Tier 3 deferral closed v0.5.3)
+def test_flush_all_garbage_collects_timer_entries(app, qtbot) -> None:
+    """flush_all() also drops timer entries: after one flush, schedule for the
+    same key reconstructs a fresh QTimer rather than reusing a stale one."""
+    w = DebouncedWriter(idle_ms=10_000)
+    w.schedule("a", lambda: None)
+    w.schedule("b", lambda: None)
+    assert {"a", "b"} <= set(w._timers)
+    w.flush_all()
+    assert "a" not in w._timers
+    assert "b" not in w._timers
+
+
 # Indie-review L3-H4: a raising callback must not escape into Qt's slot
 # dispatcher (which silently drops the write per Spec 10 §Errors). The
 # writer must keep accepting subsequent schedules.
