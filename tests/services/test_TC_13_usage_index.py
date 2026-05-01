@@ -83,3 +83,50 @@ def test_TC_13_07_drafts_excluded(qapp, store) -> None:
     idx.rebuild()
     assert idx.count_for(p) == 0
     assert idx.album_ids_for(p) == ()
+
+
+# Spec: TC-13-04 - album_removed signal triggers rebuild; counts drop.
+def test_TC_13_04_album_removed_triggers_rebuild(qapp, store) -> None:
+    p = Path("/tracks/x.mp3")
+    a1 = _make_album(store, "A1", status=AlbumStatus.APPROVED, paths=[p])
+    _make_album(store, "A2", status=AlbumStatus.APPROVED, paths=[p])
+
+    idx = UsageIndex(store)
+    idx.rebuild()
+    assert idx.count_for(p) == 2
+
+    store.delete(a1.id)
+    # Single removal: rebuild fires via auto-subscription; count drops.
+    assert idx.count_for(p) == 1
+
+
+# Spec: TC-13-04 mass-removal sub-case: all approved removed -> empty index.
+def test_TC_13_04_mass_removal(qapp, store) -> None:
+    p = Path("/tracks/y.mp3")
+    a1 = _make_album(store, "A1", status=AlbumStatus.APPROVED, paths=[p])
+    a2 = _make_album(store, "A2", status=AlbumStatus.APPROVED, paths=[p])
+    a3 = _make_album(store, "A3", status=AlbumStatus.APPROVED, paths=[p])
+
+    idx = UsageIndex(store)
+    idx.rebuild()
+    assert idx.count_for(p) == 3
+
+    store.delete(a1.id)
+    store.delete(a2.id)
+    store.delete(a3.id)
+    assert idx.count_for(p) == 0
+
+
+# Spec: TC-13-04 partner - album_added (a draft) does not change counts.
+def test_album_added_draft_does_not_change_counts(qapp, store) -> None:
+    p = Path("/tracks/z.mp3")
+    _make_album(store, "Approved", status=AlbumStatus.APPROVED, paths=[p])
+
+    idx = UsageIndex(store)
+    idx.rebuild()
+    assert idx.count_for(p) == 1
+
+    # Adding a DRAFT album with the same path doesn't bump the count
+    # (drafts excluded from index).
+    _make_album(store, "Draft", status=AlbumStatus.DRAFT, paths=[p])
+    assert idx.count_for(p) == 1

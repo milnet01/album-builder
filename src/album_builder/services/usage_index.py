@@ -36,6 +36,18 @@ class UsageIndex(QObject):
         super().__init__(parent)
         self._store = store
         self._index: dict[Path, tuple[UUID, ...]] = {}
+        # Spec 13 §Inputs: subscribe to lifecycle signals that change the
+        # set of approved albums or the tracks on them. album_renamed is
+        # NOT subscribed - rename doesn't change index keys (only album.name,
+        # which the tooltip looks up lazily at hover-show time).
+        store.album_added.connect(self._on_album_changed)
+        store.album_removed.connect(self._on_album_changed)
+
+    def _on_album_changed(self, _payload: object) -> None:
+        # Single handler for both signals - both just trigger a rebuild.
+        # The payload (Album for added, UUID for removed) isn't needed
+        # because rebuild() walks store.list() from scratch.
+        self.rebuild()
 
     def rebuild(self) -> None:
         """Rebuild the index from the AlbumStore's approved albums.
