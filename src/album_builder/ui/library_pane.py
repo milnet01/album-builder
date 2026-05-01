@@ -7,13 +7,32 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from PyQt6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt, pyqtSignal
-from PyQt6.QtWidgets import QFrame, QHeaderView, QLabel, QLineEdit, QTableView, QVBoxLayout
+from PyQt6.QtCore import (
+    QAbstractTableModel,
+    QModelIndex,
+    QObject,
+    QRectF,
+    QSize,
+    QSortFilterProxyModel,
+    Qt,
+    pyqtSignal,
+)
+from PyQt6.QtGui import QBrush, QColor, QFont, QPainter
+from PyQt6.QtWidgets import (
+    QFrame,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
+    QTableView,
+    QVBoxLayout,
+)
 
 from album_builder.domain.album import Album, AlbumStatus
 from album_builder.domain.library import Library
 from album_builder.domain.track import Track
-from album_builder.ui.theme import Glyphs
+from album_builder.ui.theme import Glyphs, Palette
 
 if TYPE_CHECKING:
     from album_builder.services.usage_index import UsageIndex
@@ -379,6 +398,76 @@ def _column_index(name: str) -> int:
     return next(i for i, c in enumerate(COLUMNS) if c[1] == name)
 
 
+class UsageBadgeDelegate(QStyledItemDelegate):
+    """Paints the cross-album popularity badge for the Used column.
+
+    Spec 13 §The badge: filled rounded-rectangle pill with the integer
+    count when DisplayRole is non-empty; no-op (delegates to super)
+    when DisplayRole is empty (count == 0).
+
+    sizeHint() returns super().sizeHint(...) so row height is governed
+    by the existing row-height heuristic, not the badge.
+
+    Constructor accepts an optional `palette` mirroring the LyricsPanel
+    construct-with-optional-palette idiom (ui/lyrics_panel.py:49-52);
+    defaults to `Palette.dark_colourful()` for back-compat with
+    construction-without-palette tests.
+    """
+
+    _PILL_RADIUS = 10
+    _PILL_FONT_SIZE_PX = 11
+    _PILL_FONT_WEIGHT = 600
+
+    def __init__(
+        self,
+        parent: QObject | None = None,
+        *,
+        palette: Palette | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._palette = palette or Palette.dark_colourful()
+
+    def paint(
+        self,
+        painter: QPainter,
+        option: QStyleOptionViewItem,
+        index: QModelIndex,
+    ) -> None:
+        text = index.data(Qt.ItemDataRole.DisplayRole)
+        if not text:
+            super().paint(painter, option, index)
+            return
+
+        fill_colour = QColor(self._palette.accent_primary_1)
+        text_colour = QColor("#ffffff")
+
+        cell = option.rect
+        pill_w = min(22, cell.width() - 4)
+        pill_h = min(16, cell.height() - 2)
+        pill_x = cell.x() + (cell.width() - pill_w) // 2
+        pill_y = cell.y() + (cell.height() - pill_h) // 2
+        pill_rect = QRectF(pill_x, pill_y, pill_w, pill_h)
+
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setBrush(QBrush(fill_colour))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(pill_rect, self._PILL_RADIUS, self._PILL_RADIUS)
+
+        font = QFont(painter.font())
+        font.setPixelSize(self._PILL_FONT_SIZE_PX)
+        font.setWeight(QFont.Weight(self._PILL_FONT_WEIGHT))
+        painter.setFont(font)
+        painter.setPen(text_colour)
+        painter.drawText(pill_rect, Qt.AlignmentFlag.AlignCenter, str(text))
+        painter.restore()
+
+    def sizeHint(
+        self, option: QStyleOptionViewItem, index: QModelIndex,
+    ) -> QSize:
+        return super().sizeHint(option, index)
+
+
 class LibraryPane(QFrame):
     selection_toggled = pyqtSignal(object, bool)        # Type: Path, new_state
     preview_play_requested = pyqtSignal(object)         # Type: Path
@@ -437,6 +526,13 @@ class LibraryPane(QFrame):
         self.table.setColumnWidth(_column_index("composer"), 140)
         self.table.setColumnWidth(_column_index("duration_seconds"), 70)
         self.table.setColumnWidth(toggle_col, 30)
+        # Spec 13 §The badge: column-scoped delegate attachment.
+        # Never setItemDelegate (which would repaint other cells).
+        used_col = _column_index("_used")
+        self.table.setItemDelegateForColumn(
+            used_col, UsageBadgeDelegate(self.table),
+        )
+        self.table.setColumnWidth(used_col, 40)
         self.table.setMinimumWidth(450)
         # Spec 01: default sort is Title ascending.
         self.table.sortByColumn(title_col, Qt.SortOrder.AscendingOrder)
