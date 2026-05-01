@@ -159,3 +159,29 @@ def test_TC_13_08a_rebuild_failure_preserves_prior_index(
     # A subsequent successful rebuild recovers.
     idx.rebuild()
     assert idx.count_for(p) == 1
+
+
+# Spec: TC-13-08(b) - approve succeeds; subsequent rebuild fails;
+# next album lifecycle signal recovers.
+def test_TC_13_08b_approve_then_rebuild_fails_recovers(
+    qapp, store, caplog,
+) -> None:
+    p1 = Path("/tracks/song-x.mp3")
+    a = _make_album(store, "A", status=AlbumStatus.APPROVED, paths=[p1])
+    idx = UsageIndex(store)
+    idx.rebuild()
+    prior = dict(idx._index)
+    assert idx.count_for(p1) == 1
+
+    # Force the next rebuild to fail.
+    with patch.object(store, "list", side_effect=RuntimeError("simulated")):
+        idx.rebuild()
+    # Album state on store is unchanged (still APPROVED).
+    assert store.get(a.id).status == AlbumStatus.APPROVED
+    # Prior index preserved.
+    assert idx._index == prior
+    assert idx.count_for(p1) == 1
+
+    # A subsequent album_added signal triggers a clean rebuild.
+    _make_album(store, "B", status=AlbumStatus.APPROVED, paths=[p1])
+    assert idx.count_for(p1) == 2
