@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -129,4 +130,32 @@ def test_album_added_draft_does_not_change_counts(qapp, store) -> None:
     # Adding a DRAFT album with the same path doesn't bump the count
     # (drafts excluded from index).
     _make_album(store, "Draft", status=AlbumStatus.DRAFT, paths=[p])
+    assert idx.count_for(p) == 1
+
+
+# Spec: TC-13-08(a) - rebuild() raising mid-pass logs + preserves prior index.
+def test_TC_13_08a_rebuild_failure_preserves_prior_index(
+    qapp, store, caplog,
+) -> None:
+    p = Path("/tracks/preserved.mp3")
+    _make_album(store, "Album", status=AlbumStatus.APPROVED, paths=[p])
+
+    idx = UsageIndex(store)
+    idx.rebuild()
+    assert idx.count_for(p) == 1
+    prior_index = dict(idx._index)
+
+    # Force the next rebuild to raise mid-loop by patching store.list.
+    with patch.object(store, "list", side_effect=RuntimeError("simulated")):
+        idx.rebuild()  # must NOT raise
+
+    # Prior index is preserved.
+    assert idx._index == prior_index
+    # logger.exception fired.
+    assert any(
+        "UsageIndex.rebuild failed" in rec.message for rec in caplog.records
+    )
+
+    # A subsequent successful rebuild recovers.
+    idx.rebuild()
     assert idx.count_for(p) == 1
