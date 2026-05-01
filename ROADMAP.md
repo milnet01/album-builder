@@ -864,6 +864,7 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 - Bulk pre-alignment scheduler
 - Light-theme support / themable palette
 - Recursive subfolder scanning under Tracks/
+- **SQLite-backed library + analytics substrate (long-horizon).** Replace the per-album JSON + in-memory derived structures with a SQLite catalogue once the dataset outgrows the current "single-user picks ~10 tracks per album" regime. Triggers worth waiting for: hundreds of approved albums in the user's history, demand for cross-cutting queries (release-year filters, genre/mood metadata, listening history, smart-playlist rules, full-text search at scale), or analytics dashboards. Brought up during the v0.6.0 popularity-indicator brainstorm (2026-05-01) and explicitly parked: the popularity index for v0.6.0 is in-memory derived because the data model is "count items in a list" and current scale is ~5 approved × ~10 tracks. A SQLite migration would require a Spec 10 amendment (or new Spec 14 for db layer), atomic-write strategy redesign, JSON→SQLite migration helper, test-fixture rewrite across `tests/persistence/`, and a corruption-recovery story — separate phase, not bundled into a feature.
 
 ---
 
