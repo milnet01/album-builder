@@ -554,6 +554,35 @@ class LibraryPane(QFrame):
     def set_library(self, library: Library) -> None:
         self._model.set_tracks(library.tracks)
 
+    def set_usage_index(self, usage_index: UsageIndex) -> None:
+        """Inject the UsageIndex reference and connect the changed signal.
+
+        Called once from MainWindow.__init__ after the index has been
+        constructed and seeded. Spec 13 §Behavior rules.
+        """
+        self._model.set_usage_index(usage_index)
+        usage_index.changed.connect(self._on_usage_changed)
+
+    def _on_usage_changed(self) -> None:
+        """Repaint the Used column on UsageIndex.changed.
+
+        Empty-table guard: skip the emit when rowCount == 0 (the bottom-
+        right index would be invalid, undefined behaviour under PyQt6
+        debug builds). If the proxy's active sort column is Used,
+        invalidate the proxy so the rebuilt counts re-sort.
+
+        Spec 13 §Outputs (column-scoped path).
+        """
+        n = self._model.rowCount()
+        if n == 0:
+            return
+        used_col = _column_index("_used")
+        top_left = self._model.index(0, used_col)
+        bottom_right = self._model.index(n - 1, used_col)
+        self._model.dataChanged.emit(top_left, bottom_right, [])
+        if self._proxy.sortColumn() == used_col:
+            self._proxy.invalidate()
+
     def set_active_play_state(self, path: Path | None, playing: bool) -> None:
         """Spec 06 TC-06-17/18/19 — surface the player's active+playing state
         so the play-column glyph mirrors it. Pure pass-through; the model

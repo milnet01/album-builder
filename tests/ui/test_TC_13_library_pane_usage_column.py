@@ -8,12 +8,13 @@ from uuid import uuid4
 
 import pytest
 from PyQt6.QtCore import Qt
+from PyQt6.QtTest import QSignalSpy
 
 from album_builder.domain.album import AlbumStatus
 from album_builder.domain.track import Track
 from album_builder.services.album_store import AlbumStore
 from album_builder.services.usage_index import UsageIndex
-from album_builder.ui.library_pane import COLUMNS, TrackTableModel
+from album_builder.ui.library_pane import COLUMNS, LibraryPane, TrackTableModel
 
 
 def _track(path_str: str, title: str = "T") -> Track:
@@ -359,3 +360,46 @@ def test_TC_13_21_header_accessible_text(qapp) -> None:
     assert model.headerData(
         used_col, Qt.Orientation.Horizontal, Qt.ItemDataRole.DisplayRole,
     ) == "Used"
+
+
+# Spec: TC-13-31 - empty-table guard: rowCount == 0 -> no dataChanged emit.
+def test_TC_13_31_empty_table_guard(qapp, store) -> None:
+    pane = LibraryPane()
+    idx = UsageIndex(store)
+    pane.set_usage_index(idx)
+    assert pane._model.rowCount() == 0
+
+    spy = QSignalSpy(pane._model.dataChanged)
+    idx.changed.emit()  # would normally trigger _on_usage_changed
+    assert len(spy) == 0  # skipped because empty
+
+
+# Spec: TC-13-26 - proxy.invalidate fires when sortColumn == USED_COL.
+def test_TC_13_26_proxy_invalidate_on_used_sort(qapp, store) -> None:
+    pane = LibraryPane()
+    pane._model.set_tracks([_track("/a.mp3"), _track("/b.mp3", title="B")])
+    idx = UsageIndex(store)
+    pane.set_usage_index(idx)
+
+    used_col = next(i for i, c in enumerate(COLUMNS) if c[1] == "_used")
+    pane.table.sortByColumn(used_col, Qt.SortOrder.DescendingOrder)
+
+    spy_invalidate = MagicMock()
+    pane._proxy.invalidate = spy_invalidate
+    idx.changed.emit()
+    spy_invalidate.assert_called_once()
+
+
+def test_proxy_not_invalidated_when_sort_not_used(qapp, store) -> None:
+    pane = LibraryPane()
+    pane._model.set_tracks([_track("/a.mp3"), _track("/b.mp3", title="B")])
+    idx = UsageIndex(store)
+    pane.set_usage_index(idx)
+
+    title_col = next(i for i, c in enumerate(COLUMNS) if c[1] == "title")
+    pane.table.sortByColumn(title_col, Qt.SortOrder.AscendingOrder)
+
+    spy_invalidate = MagicMock()
+    pane._proxy.invalidate = spy_invalidate
+    idx.changed.emit()
+    spy_invalidate.assert_not_called()
