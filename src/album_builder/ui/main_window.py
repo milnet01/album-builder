@@ -43,6 +43,7 @@ from album_builder.services.alignment_service import AlignmentService
 from album_builder.services.alignment_status import AlignmentStatus, compute_status
 from album_builder.services.export import ExportFailed
 from album_builder.services.library_watcher import LibraryWatcher
+from album_builder.services.usage_index import UsageIndex
 from album_builder.services.lyrics_tracker import LyricsTracker
 from album_builder.services.player import Player, PlayerState
 from album_builder.services.report import list_warnings, report_paths_for
@@ -174,7 +175,14 @@ class MainWindow(QMainWindow):
 
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setChildrenCollapsible(False)
+        # Spec 13 §Layer placement: UsageIndex constructed after AlbumStore
+        # has loaded (its __init__ called rescan() synchronously, so _albums
+        # is populated). Parented to MainWindow so its lifetime is bounded;
+        # Qt deletes the index before the model that holds the reference.
+        self._usage_index = UsageIndex(self._store, parent=self)
+        self._usage_index.rebuild()                   # initial seed
         self.library_pane = LibraryPane()
+        self.library_pane.set_usage_index(self._usage_index)
         self.library_pane.set_library(library_watcher.library())
         self.album_order_pane = AlbumOrderPane()
         self.now_playing_pane = NowPlayingPane(self._player)
