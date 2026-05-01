@@ -205,7 +205,18 @@ class TrackTableModel(QAbstractTableModel):
     def headerData(
         self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole
     ):
-        if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
+        if orientation != Qt.Orientation.Horizontal:
+            return None
+        if role == Qt.ItemDataRole.DisplayRole:
+            return COLUMNS[section][0]
+        if role == Qt.ItemDataRole.AccessibleTextRole:
+            # Spec 13 §Accessibility: descriptive accessible name for the
+            # new Used column; other columns return the visible header
+            # string so this role extension does not silently regress
+            # screen-reader behaviour on the rest of the header.
+            attr = COLUMNS[section][1]
+            if attr == "_used":
+                return "Cross-album reuse count"
             return COLUMNS[section][0]
         return None
 

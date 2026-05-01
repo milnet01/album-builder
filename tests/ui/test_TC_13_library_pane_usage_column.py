@@ -332,3 +332,30 @@ def test_TC_13_30_tooltip_plain_text_html_safe(qapp, store) -> None:
     contains_literal = "<b>Loud</b>" in tip
     assert contains_escaped or contains_literal
     assert "Loud" in tip
+
+
+# Spec: TC-13-21 - headerData AccessibleTextRole + non-regression for other columns.
+def test_TC_13_21_header_accessible_text(qapp) -> None:
+    model = TrackTableModel([_track("/a.mp3")])
+    used_col = next(i for i, c in enumerate(COLUMNS) if c[1] == "_used")
+    title_col = next(i for i, c in enumerate(COLUMNS) if c[1] == "title")
+
+    assert model.headerData(
+        used_col, Qt.Orientation.Horizontal, Qt.ItemDataRole.AccessibleTextRole,
+    ) == "Cross-album reuse count"
+
+    # Other columns: AccessibleTextRole returns the visible header text
+    # (no regression to None).
+    assert model.headerData(
+        title_col, Qt.Orientation.Horizontal, Qt.ItemDataRole.AccessibleTextRole,
+    ) == "Title"
+
+    # Vertical orientation: still returns None.
+    assert model.headerData(
+        used_col, Qt.Orientation.Vertical, Qt.ItemDataRole.AccessibleTextRole,
+    ) is None
+
+    # DisplayRole still works (no regression).
+    assert model.headerData(
+        used_col, Qt.Orientation.Horizontal, Qt.ItemDataRole.DisplayRole,
+    ) == "Used"
