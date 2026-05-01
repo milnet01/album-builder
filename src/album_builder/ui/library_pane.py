@@ -218,6 +218,39 @@ class TrackTableModel(QAbstractTableModel):
                 return None
             return None
 
+        # Spec 13 §Behavior rules: explicit early-return discipline for
+        # the _used column. Every role must be handled here (or return
+        # None); the post-branch getattr(track, "_used") fallthrough
+        # below would raise AttributeError because Track has no _used
+        # attribute. (TC-13-28.)
+        if attr == "_used":
+            usage = self._usage_index
+            if usage is None:
+                # Defensive: model queried before the index was injected
+                # (shouldn't happen in normal flow). Behave as count == 0.
+                count = 0
+            else:
+                count = usage.count_for(
+                    track.path, exclude=self._current_album_id,
+                )
+            if role == Qt.ItemDataRole.DisplayRole:
+                return "" if count == 0 else str(count)
+            if role == Qt.ItemDataRole.UserRole:        # sort role
+                return count
+            if role == Qt.ItemDataRole.AccessibleTextRole:
+                if count == 0:
+                    return ""
+                if count == 1:
+                    return "Used in 1 other approved album"
+                return f"Used in {count} other approved albums"
+            if role == Qt.ItemDataRole.ToolTipRole:
+                # Tooltip body lands in Task 9. For now: count == 0 -> None
+                # (suppress); count >= 1 -> None (placeholder until T9).
+                return None
+            if role == ACCENT_ROLE:
+                return None  # Used column doesn't participate in accent strip
+            return None  # any other role: explicit None, never fall through
+
         # Non-toggle column ACCENT_ROLE surfaces accent so the whole row
         # picks it up via the QSS attribute selector at paint time.
         if role == ACCENT_ROLE:
