@@ -182,6 +182,12 @@ def test_TC_13_08b_approve_then_rebuild_fails_recovers(
     assert idx._index == prior
     assert idx.count_for(p1) == 1
 
-    # A subsequent album_added signal triggers a clean rebuild.
+    # A subsequent imperative rebuild push (mirroring MainWindow._on_approve
+    # after a NEW approve) recovers the index. _make_album emits album_added
+    # at create-time when track_paths is empty / status is DRAFT, which is
+    # an early rebuild that doesn't yet see the new approval — the explicit
+    # rebuild() after approve() is what production code (and this test)
+    # needs to call.
     _make_album(store, "B", status=AlbumStatus.APPROVED, paths=[p1])
+    idx.rebuild()
     assert idx.count_for(p1) == 2
