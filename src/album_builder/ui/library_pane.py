@@ -593,13 +593,17 @@ class LibraryPane(QFrame):
         self._current_album = album
         if album is None:
             self._model.set_album_state(
-                selected_paths=set(), status=AlbumStatus.DRAFT, target=0,
+                selected_paths=set(),
+                status=AlbumStatus.DRAFT,
+                target=0,
+                current_album_id=None,
             )
         else:
             self._model.set_album_state(
                 selected_paths=set(album.track_paths),
                 status=album.status,
                 target=album.target_count,
+                current_album_id=album.id,
             )
 
     def toggle_enabled_at(self, source_row: int) -> bool:

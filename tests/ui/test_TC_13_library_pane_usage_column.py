@@ -403,3 +403,37 @@ def test_proxy_not_invalidated_when_sort_not_used(qapp, store) -> None:
     pane._proxy.invalidate = spy_invalidate
     idx.changed.emit()
     spy_invalidate.assert_not_called()
+
+
+def _make_album_obj(name: str, status: AlbumStatus, paths: list[Path]):
+    """Construct a domain-layer Album directly (no AlbumStore round-trip)."""
+    from datetime import UTC, datetime
+    from uuid import uuid4
+    from album_builder.domain.album import Album
+    now = datetime.now(UTC)
+    a = Album(
+        id=uuid4(), name=name, target_count=max(1, len(paths)),
+        track_paths=list(paths), status=AlbumStatus.DRAFT,
+        cover_override=None, created_at=now, updated_at=now,
+    )
+    if status == AlbumStatus.APPROVED:
+        a.approve()
+    return a
+
+
+# Spec: TC-13-24 - set_current_album propagates the album_id into the model.
+def test_TC_13_24_set_current_album_propagates_id(qapp) -> None:
+    pane = LibraryPane()
+    p = Path("/a.mp3")
+    pane._model.set_tracks([_track(str(p))])
+    a = _make_album_obj("Current", AlbumStatus.APPROVED, [p])
+
+    pane.set_current_album(a)
+    assert pane._model._current_album_id == a.id
+
+    pane.set_current_album(None)
+    assert pane._model._current_album_id is None
+
+    draft = _make_album_obj("Draft", AlbumStatus.DRAFT, [p])
+    pane.set_current_album(draft)
+    assert pane._model._current_album_id == draft.id
