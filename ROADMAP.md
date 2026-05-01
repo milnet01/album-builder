@@ -8,6 +8,64 @@ Working roadmap for the Album Builder app. Tracks completed phases, in-flight fi
 
 ---
 
+## ✅ v0.6.0 — Phase 5: Track Usage Indicator (2026-05-01)
+
+Cross-album popularity badge in the library pane. Implements **Spec 13 in full** (TC-13-01..32; 47 new tests). Spec went through 4 cold-eyes review rounds (~30 → ~20 → 3 → 0 actionable findings) before this implementation; plan went through writing-plans + a 21-task TDD execution loop.
+
+**Architecture (in-memory derived; no persistence, no Spec 10 amendment):**
+
+- New `UsageIndex` service (`services/usage_index.py`) — Qt-aware `QObject` with a `changed` `pyqtSignal()`. Auto-subscribes to `AlbumStore.album_added` / `album_removed`; rebuild walks `store.list()` filtered to `AlbumStatus.APPROVED` and populates `dict[Path, tuple[UUID, ...]]`. Try/except wrapper preserves prior index on failure (TC-13-08a/b). `count_for(path, *, exclude=None)` and `album_ids_for(path, *, exclude=None)` are the query API; `exclude=` carries self-exclusion for the current approved album.
+- `TrackTableModel` extensions:
+  - New `_used` column appended to `COLUMNS` (rightmost, after the `✓` toggle).
+  - New `set_usage_index(usage_index)` setter; new `_current_album_id` field.
+  - `set_album_state` extended with `current_album_id` kwarg (default `None` preserves existing call-site behaviour); existing `beginResetModel` envelope carries the new exclusion target without a separate `dataChanged`.
+  - `data()` `_used` branch: explicit early-return for every role (`DisplayRole`, `UserRole` sort, `AccessibleTextRole` singular/plural per WCAG 2.2 §1.3.1, `ToolTipRole`, `ACCENT_ROLE` returns None, every other role returns None — TC-13-28). The `getattr(track, "_used")` post-branch fallthrough that would crash on roles like `DecorationRole` is bypassed by construction.
+  - `headerData` extended with `AccessibleTextRole` branch (`_used` → "Cross-album reuse count", others → display string for non-regression).
+- `LibraryPane` extensions:
+  - `set_usage_index(usage_index)` injects + connects `changed` → `_on_usage_changed`.
+  - `_on_usage_changed`: empty-table guard; column-scoped `dataChanged` over Used col; `proxy.invalidate()` if the active sort column is Used (TC-13-26, 31).
+  - `set_current_album` propagates `album.id` into `set_album_state(current_album_id=...)` (TC-13-24).
+  - New `UsageBadgeDelegate` paints a filled `accent_primary_1` rounded-rectangle pill with white count text; column-scoped via `setItemDelegateForColumn` at construction; column width 40 px; resize mode `Interactive` (matches `_play`/`_toggle` pattern).
+- `MainWindow` integration:
+  - Constructs `UsageIndex(store, parent=self)` after `AlbumStore` rescan, seeds with explicit `rebuild()`, injects via `library_pane.set_usage_index(...)`.
+  - `_on_approve` and `_on_reopen` push `usage_index.rebuild()` between the success guard and the existing pane-refresh chain (Spec 13 §Behavior rules: rebuild before pane refresh so Used column paints once with correct counts). Outer try/except for resilience (TC-13-08(b)).
+
+**Tooltip rendering** (lazy lookup at hover-show time):
+- Album names looked up from `AlbumStore.get(album_id).name` — rename reflects on next hover (TC-13-20).
+- `store.get()` returning `None` (race with `album_removed` cascade) silently skipped (TC-13-29). Empty resulting list → `None` (Qt suppresses).
+- Names sorted case-insensitively (`str.casefold`); per-line bullets via `Glyphs.MIDDOT`; 2-space indent.
+- HTML-like names escaped via `html.escape(name, quote=False)` so `<b>Loud</b>` renders as literal text (TC-13-30).
+- For `count == 0`: `ToolTipRole` returns `None` (suppresses tooltip, TC-13-27).
+
+**Self-exclusion semantics:**
+- Current album is approved + only on current → count = 0 (TC-13-16).
+- Current approved + 2 others → count = 2 (others, current excluded — TC-13-22).
+- Current is draft → no exclusion (TC-13-23).
+- Switching current album propagates new id; existing `set_album_state` reset envelope repaints Used column (TC-13-24).
+
+**A11y:**
+- WCAG 2.2 §1.3.1 (singular/plural) — `AccessibleTextRole` covered.
+- WCAG 2.2 §1.4.3 (contrast AA) — `accent_primary_1` (#6e3df0) on white measures ~5.6:1; TC-13-32 guards against future palette tweaks regressing.
+- WCAG 2.2 §2.4.6 (header accessible name) — "Cross-album reuse count" surfaced via `headerData`.
+- WCAG 2.2 §4.1.3 (status-message announcement on count change) — explicitly **deferred** to roadmap (`QAccessibleEvent` / `QAccessible.updateAccessibility` PyQt6 binding gap documented at v0.4.0 L7-H2).
+
+**Test count:** 502 → 549 passing (+47 across `tests/services/test_TC_13_usage_index.py`, `tests/ui/test_TC_13_library_pane_usage_column.py`, `tests/ui/test_TC_13_usage_badge_delegate.py`, `tests/ui/test_TC_13_palette_contrast.py`, `tests/test_main_window_usage.py`). Ruff clean. No new third-party deps.
+
+**Out of scope (per Spec 13 §Out of scope, parked on roadmap):**
+- SQLite-backed catalogue substrate.
+- Album-order pane (middle) badge.
+- Filter shortcut "hide tracks already on approved albums."
+- Drafts-as-contributors.
+- Approval-date metadata in tooltip.
+- Animated count transitions.
+- `AlbumStore.album_approved` / `album_reopened` signals.
+- WCAG 2.2 §4.1.3 status-message announcement.
+- Performance benchmark TC.
+
+**Convergence trace:** Spec written 2026-05-01 (`ef2bbbb`); Round 2 fix-pass (`783935f`); Round 3 architectural refinement (`24e86c9`); Round 4 nit cleanup (`f3b1763`); Round 4 sibling-edit fix (`154fbfa`); plan written (`e1d57df`); 21-task TDD execution loop landed `d5b6610` through `6a1f766`.
+
+---
+
 ## ✅ v0.5.3 — Deferred-items sweep: timer-GC + TOCTOU doc (2026-05-01)
 
 Closed the two surviving `📋` markers in `ROADMAP.md` after the v0.5.2 ship — the only remaining non-`✅` items in the document. Both were Phase-3B Tier-3 deferrals from the v0.4.0 indie-review:
