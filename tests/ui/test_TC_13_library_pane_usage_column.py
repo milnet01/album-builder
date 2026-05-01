@@ -151,3 +151,71 @@ def test_TC_13_28_early_return_for_unhandled_roles(qapp) -> None:
         Qt.ItemDataRole.ForegroundRole,
     ):
         assert model.data(idx, role) is None
+
+
+def _make_album(store, name: str, *, status: AlbumStatus, paths: list[Path]):
+    album = store.create(name=name, target_count=max(1, len(paths)))
+    for p in paths:
+        album.select(p)
+    if status == AlbumStatus.APPROVED:
+        album.approve()
+    return album
+
+
+# Spec: TC-13-16 - self-exclusion when current is approved + only on current.
+def test_TC_13_16_self_exclusion_only_on_current(qapp, store) -> None:
+    p = Path("/tracks/only-here.mp3")
+    a1 = _make_album(store, "Only", status=AlbumStatus.APPROVED, paths=[p])
+    idx = UsageIndex(store)
+    idx.rebuild()
+
+    track = _track(str(p))
+    model = TrackTableModel([track])
+    model.set_usage_index(idx)
+    model.set_album_state(
+        selected_paths={p}, status=AlbumStatus.APPROVED, target=1,
+        current_album_id=a1.id,
+    )
+    assert model.data(_used_idx(model), Qt.ItemDataRole.DisplayRole) == ""
+
+
+# Spec: TC-13-22 - self-exclusion: current approved + 2 others -> count 2.
+def test_TC_13_22_self_exclusion_with_others(qapp, store) -> None:
+    p = Path("/tracks/three-times.mp3")
+    current = _make_album(
+        store, "Current", status=AlbumStatus.APPROVED, paths=[p],
+    )
+    _make_album(store, "Other A", status=AlbumStatus.APPROVED, paths=[p])
+    _make_album(store, "Other B", status=AlbumStatus.APPROVED, paths=[p])
+    idx = UsageIndex(store)
+    idx.rebuild()
+
+    track = _track(str(p))
+    model = TrackTableModel([track])
+    model.set_usage_index(idx)
+    model.set_album_state(
+        selected_paths={p}, status=AlbumStatus.APPROVED, target=1,
+        current_album_id=current.id,
+    )
+    assert model.data(_used_idx(model), Qt.ItemDataRole.DisplayRole) == "2"
+
+
+# Spec: TC-13-23 - current is draft -> no exclusion, all approved contribute.
+def test_TC_13_23_no_exclusion_when_current_draft(qapp, store) -> None:
+    p = Path("/tracks/in-everything.mp3")
+    _make_album(store, "Approved A", status=AlbumStatus.APPROVED, paths=[p])
+    _make_album(store, "Approved B", status=AlbumStatus.APPROVED, paths=[p])
+    draft = _make_album(
+        store, "Draft", status=AlbumStatus.DRAFT, paths=[p],
+    )
+    idx = UsageIndex(store)
+    idx.rebuild()
+
+    track = _track(str(p))
+    model = TrackTableModel([track])
+    model.set_usage_index(idx)
+    model.set_album_state(
+        selected_paths={p}, status=AlbumStatus.DRAFT, target=1,
+        current_album_id=draft.id,
+    )
+    assert model.data(_used_idx(model), Qt.ItemDataRole.DisplayRole) == "2"
