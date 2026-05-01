@@ -409,6 +409,7 @@ def _make_album_obj(name: str, status: AlbumStatus, paths: list[Path]):
     """Construct a domain-layer Album directly (no AlbumStore round-trip)."""
     from datetime import UTC, datetime
     from uuid import uuid4
+
     from album_builder.domain.album import Album
     now = datetime.now(UTC)
     a = Album(

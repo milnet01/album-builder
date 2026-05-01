@@ -43,10 +43,10 @@ from album_builder.services.alignment_service import AlignmentService
 from album_builder.services.alignment_status import AlignmentStatus, compute_status
 from album_builder.services.export import ExportFailed
 from album_builder.services.library_watcher import LibraryWatcher
-from album_builder.services.usage_index import UsageIndex
 from album_builder.services.lyrics_tracker import LyricsTracker
 from album_builder.services.player import Player, PlayerState
 from album_builder.services.report import list_warnings, report_paths_for
+from album_builder.services.usage_index import UsageIndex
 from album_builder.ui.album_order_pane import AlbumOrderPane
 from album_builder.ui.library_pane import LibraryPane
 from album_builder.ui.now_playing_pane import NowPlayingPane
