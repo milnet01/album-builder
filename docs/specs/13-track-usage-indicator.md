@@ -1,6 +1,6 @@
 # 13 — Track Usage Indicator (Cross-Album Popularity Badge)
 
-**Status:** Draft · **Last updated:** 2026-05-01 · **Depends on:** 02, 03, 04, 06, 11
+**Status:** Draft · **Last updated:** 2026-05-01 · **Depends on:** 00, 01, 02, 03, 04, 06, 10, 11
 
 ## Purpose
 
@@ -48,7 +48,7 @@ Brainstorm sign-off (2026-05-01): notification-only intent, approved-only scope,
   ```
 - For count == 0, `data(role=Qt.ItemDataRole.ToolTipRole)` returns **`None`** (not empty string) — Qt suppresses tooltips for `None` cleanly, while some styles render a 0-pixel box for `""`.
 - Album names are looked up from `AlbumStore.get(album_id).name` at tooltip-show time. **Race tolerance:** if `store.get(album_id)` returns `None` (e.g. the album was removed between the tooltip-trigger and the name resolution; slot ordering during `album_removed` cascade is unspecified), the builder skips that id silently. If the resulting name list is empty, return `None` so Qt suppresses the tooltip entirely.
-- Album names are rendered as **plain text**. Qt's `QToolTip` auto-detects rich text when content begins with `<`; to avoid an album named `"<b>Loud</b>"` rendering bolded, the tooltip builder either prepends a zero-width space or routes through `Qt::convertFromPlainText`. The chosen plain-text path is verified by TC.
+- Album names are rendered as **plain text**. Qt's `QToolTip` auto-detects rich text when content begins with `<`; to avoid an album named `"<b>Loud</b>"` rendering bolded, the tooltip builder routes through a plain-text-safe path. PyQt6 idiom: `Qt.convertFromPlainText(name)` if the binding is available in the installed PyQt6 version, OR `html.escape(name, quote=False)` plus a single leading zero-width space (`"​"`) prefix on the whole tooltip string as a documented fallback. The implementer picks the available path; the chosen path is verified by TC-13-30.
 - If an album is renamed, the **next** hover-show reflects the new name. Qt does NOT force-refresh a tooltip while it's mounted; the user has to move the cursor off and back. Acceptable for a passive notification.
 
 ### Accessibility
@@ -82,7 +82,7 @@ The library pane (left) and the album-order pane (middle) always reflect the sam
   - `album_added` (payload: `Album`)
   - `album_removed` (payload: `UUID`)
   - `album_renamed` is NOT a rebuild trigger — see §Behavior rules note.
-- Imperative pushes from `MainWindow._on_approve` and `MainWindow._on_reopen` (since `AlbumStore.approve()` / `unapprove()` do not emit lifecycle signals — see Spec 02 §Transitions; introducing those signals is out of scope for this spec).
+- Imperative pushes from `MainWindow._on_approve` and `MainWindow._on_reopen` (since `AlbumStore.approve()` / `unapprove()` do not emit lifecycle signals — Spec 03 §Outputs enumerates the four AlbumStore signals (`album_added` / `album_removed` / `album_renamed` / `current_album_changed`), and `album_approved` / `album_reopened` are absent by construction; introducing those signals is out of scope for this spec).
 - Current album for self-exclusion: `MainWindow._on_current_changed` calls `LibraryPane.set_current_album(album)`; the new `set_album_state(...)` signature carries `current_album_id` to the model.
 
 ## Outputs
