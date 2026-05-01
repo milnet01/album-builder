@@ -63,6 +63,7 @@ Single-source the symbolic glyphs that other UI specs reference. These are Unico
 | `⏸` | `U+23F8` | Spec 06 transport pause button (state: playing) | 18 px, `text-primary` |
 | `🔇` / `🔊` | `U+1F507` / `U+1F50A` | Spec 06 mute / unmute glyphs (mute toggle, also keyboard shortcut M visualiser) | 14 px, `text-primary`; muted state uses `text-secondary` |
 | `x` | `U+0078` | Toast close affordance — ASCII letter `x` rendered as `×`-like via QSS context (Spec 11 implementation) | 12 px, `text-secondary`; hover → `text-primary` |
+| `·` | `U+00B7` (middle dot) | Spec 09 §The approve flow step 5 success-toast separator (`Approved · report at <path>`); Spec 13 tooltip per-line bullet for usage-indicator album-name list | 11–13 px inline, `text-secondary` |
 
 The choice of Unicode (over icon fonts or SVG) keeps the app dependency-free for these UI affordances. The `🔒` and `🔍` glyphs require a font with emoji coverage; on openSUSE Plasma the default `Noto Color Emoji` provides this; the QSS `font-family` stack falls back gracefully.
 
@@ -86,6 +87,7 @@ The single-source `theme.Glyphs` namespace publishes one named constant per row 
 | `Glyphs.MUTE` | `U+1F507` | `"\U0001F507"` escape |
 | `Glyphs.UNMUTE` | `U+1F50A` | `"\U0001F50A"` escape |
 | `Glyphs.CLOSE` | `U+0078` (`x`) | literal ASCII letter (toast close — pragma: existing `theme.Glyphs.CLOSE = "x"` was kept rather than churning the prior Theme J closure for cosmetic perfection. The visual `×` rendering is achieved via QSS font-size + the close-button context, which most users read as a multiplication sign anyway.) |
+| `Glyphs.MIDDOT` | `U+00B7` (`·`) | literal codepoint (BMP, ASCII-source convention applies) |
 
 A consumer that wants the codepoint imports the name; a consumer that wants the rendered glyph reads the same name via the `theme.Glyphs` namespace. There is no other source of truth for these symbols anywhere in the codebase. (Names match the existing `theme.Glyphs` class verbatim — forward-only convention per CLAUDE.md, no retroactive rename.)
 
