@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from album_builder.domain.album import AlbumStatus
 from album_builder.services.album_store import AlbumStore
 from album_builder.services.usage_index import UsageIndex
 
@@ -19,6 +22,64 @@ def test_constructor_and_signal_exposure(qapp, store) -> None:
     # `changed` signal exposed
     assert hasattr(idx, "changed")
     # Empty store -> empty result on lookup of any path.
-    from pathlib import Path
     assert idx.count_for(Path("/nonexistent")) == 0
     assert idx.album_ids_for(Path("/nonexistent")) == ()
+
+
+def _make_album(store, name: str, *, status: AlbumStatus, paths: list[Path]):
+    """Helper: create an album in the store with the given track paths and status."""
+    album = store.create(name=name, target_count=max(1, len(paths)))
+    for p in paths:
+        album.select(p)
+    if status == AlbumStatus.APPROVED:
+        album.approve()
+    return album
+
+
+# Spec: TC-13-01 - rebuild populates index; track on K approved albums returns count K.
+def test_TC_13_01_rebuild_counts_across_approved_albums(qapp, store) -> None:
+    p1 = Path("/tracks/song-a.mp3")
+    p2 = Path("/tracks/song-b.mp3")
+    p3 = Path("/tracks/song-c.mp3")
+    _make_album(store, "Album 1", status=AlbumStatus.APPROVED, paths=[p1, p2])
+    _make_album(store, "Album 2", status=AlbumStatus.APPROVED, paths=[p1, p3])
+    _make_album(store, "Album 3", status=AlbumStatus.APPROVED, paths=[p1])
+
+    idx = UsageIndex(store)
+    idx.rebuild()
+    assert idx.count_for(p1) == 3  # on all three
+    assert idx.count_for(p2) == 1  # only Album 1
+    assert idx.count_for(p3) == 1  # only Album 2
+    assert idx.count_for(Path("/tracks/missing.mp3")) == 0
+
+
+# Spec: TC-13-02 - count_for(exclude=...) skips matching album_id.
+def test_TC_13_02_count_for_with_exclude(qapp, store) -> None:
+    p = Path("/tracks/song.mp3")
+    a1 = _make_album(store, "Album 1", status=AlbumStatus.APPROVED, paths=[p])
+    _make_album(store, "Album 2", status=AlbumStatus.APPROVED, paths=[p])
+    _make_album(store, "Album 3", status=AlbumStatus.APPROVED, paths=[p])
+
+    idx = UsageIndex(store)
+    idx.rebuild()
+    assert idx.count_for(p) == 3
+    assert idx.count_for(p, exclude=a1.id) == 2
+    assert idx.count_for(p, exclude=None) == 3
+
+
+# Spec: TC-13-03 - album_ids_for returns empty tuple for unused tracks.
+def test_TC_13_03_album_ids_for_unused(qapp, store) -> None:
+    idx = UsageIndex(store)
+    idx.rebuild()
+    assert idx.album_ids_for(Path("/never-seen.mp3")) == ()
+
+
+# Spec: TC-13-07 - draft albums never contribute.
+def test_TC_13_07_drafts_excluded(qapp, store) -> None:
+    p = Path("/tracks/draft-only.mp3")
+    _make_album(store, "Draft Album", status=AlbumStatus.DRAFT, paths=[p])
+
+    idx = UsageIndex(store)
+    idx.rebuild()
+    assert idx.count_for(p) == 0
+    assert idx.album_ids_for(p) == ()

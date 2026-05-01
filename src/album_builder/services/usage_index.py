@@ -37,6 +37,33 @@ class UsageIndex(QObject):
         self._store = store
         self._index: dict[Path, tuple[UUID, ...]] = {}
 
+    def rebuild(self) -> None:
+        """Rebuild the index from the AlbumStore's approved albums.
+
+        Full O(approved x tracks_per_album). Drafts never contribute
+        (Spec 13 §Purpose). Emits `changed` on success.
+
+        Resilience (Spec 13 §Errors): if any iteration step raises (e.g.
+        a malformed Album with non-iterable track_paths - should not
+        happen since AlbumStore validates on load), the previous index
+        is preserved and the failure is logged. The next successful
+        rebuild recovers.
+        """
+        from album_builder.domain.album import AlbumStatus
+
+        try:
+            new_index: dict[Path, list[UUID]] = {}
+            for album in self._store.list():
+                if album.status != AlbumStatus.APPROVED:
+                    continue
+                for path in album.track_paths:
+                    new_index.setdefault(path, []).append(album.id)
+            self._index = {p: tuple(ids) for p, ids in new_index.items()}
+        except Exception:
+            logger.exception("UsageIndex.rebuild failed; preserving prior index")
+            return  # do NOT emit `changed` on failure
+        self.changed.emit()
+
     def count_for(self, path: Path, *, exclude: UUID | None = None) -> int:
         ids = self._index.get(path, ())
         if exclude is None:
