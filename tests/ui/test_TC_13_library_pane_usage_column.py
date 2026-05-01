@@ -437,3 +437,42 @@ def test_TC_13_24_set_current_album_propagates_id(qapp) -> None:
     draft = _make_album_obj("Draft", AlbumStatus.DRAFT, [p])
     pane.set_current_album(draft)
     assert pane._model._current_album_id == draft.id
+
+
+# Spec: TC-13-17 - sort cycle desc -> asc -> desc on header click (Qt 2-state).
+def test_TC_13_17_sort_cycle(qapp, store) -> None:
+    pane = LibraryPane()
+    pane._model.set_tracks([_track("/a.mp3"), _track("/b.mp3", title="B")])
+    idx = UsageIndex(store)
+    pane.set_usage_index(idx)
+
+    used_col = next(i for i, c in enumerate(COLUMNS) if c[1] == "_used")
+    header = pane.table.horizontalHeader()
+
+    header.sectionClicked.emit(used_col)  # 1st click
+    assert pane._proxy.sortOrder() == Qt.SortOrder.DescendingOrder
+
+    header.sectionClicked.emit(used_col)  # 2nd click
+    assert pane._proxy.sortOrder() == Qt.SortOrder.AscendingOrder
+
+    header.sectionClicked.emit(used_col)  # 3rd click
+    assert pane._proxy.sortOrder() == Qt.SortOrder.DescendingOrder
+
+
+# Spec: TC-13-25 - heterogeneous sort role (int + tuple) does not raise.
+def test_TC_13_25_sort_heterogeneity_no_raise(qapp, store) -> None:
+    pane = LibraryPane()
+    p1, p2 = Path("/a.mp3"), Path("/b.mp3")
+    pane._model.set_tracks([_track(str(p1)), _track(str(p2), title="B")])
+    idx = UsageIndex(store)
+    pane.set_usage_index(idx)
+
+    a = _make_album_obj("A", AlbumStatus.DRAFT, [p1])
+    pane.set_current_album(a)
+
+    used_col = next(i for i, c in enumerate(COLUMNS) if c[1] == "_used")
+    toggle_col = next(i for i, c in enumerate(COLUMNS) if c[1] == "_toggle")
+
+    # Both should sort without raising.
+    pane._proxy.sort(used_col, Qt.SortOrder.DescendingOrder)
+    pane._proxy.sort(toggle_col, Qt.SortOrder.DescendingOrder)
