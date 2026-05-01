@@ -58,3 +58,15 @@ def test_set_album_state_current_album_id_defaults_to_none(qapp) -> None:
         selected_paths=set(), status=AlbumStatus.DRAFT, target=1,
     )
     assert model._current_album_id is None
+
+
+# Spec: TC-13-09a - column at index len(COLUMNS) - 1, header "Used".
+def test_TC_13_09a_used_column_position_and_header(qapp) -> None:
+    from album_builder.ui.library_pane import COLUMNS
+    last = COLUMNS[-1]
+    assert last == ("Used", "_used")
+
+
+def test_used_column_resolved_by_helper(qapp) -> None:
+    from album_builder.ui.library_pane import COLUMNS, _column_index
+    assert _column_index("_used") == len(COLUMNS) - 1

@@ -32,6 +32,7 @@ COLUMNS: list[tuple[str, str]] = [
     ("Composer", "composer"),
     ("Duration", "duration_seconds"),
     ("✓", "_toggle"),
+    ("Used", "_used"),   # Spec 13 - cross-album popularity badge
 ]
 
 # Spec 01: search filters across title, artist, album_artist, composer, album.
