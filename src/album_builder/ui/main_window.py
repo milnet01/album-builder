@@ -39,7 +39,10 @@ from album_builder.services.album_store import (
     AlbumStore,
     ReportsCleanupFailed,
 )
-from album_builder.services.alignment_service import AlignmentService
+from album_builder.services.alignment_service import (
+    AlignmentService,
+    whisperx_models_cached,
+)
 from album_builder.services.alignment_status import AlignmentStatus, compute_status
 from album_builder.services.export import ExportFailed
 from album_builder.services.library_watcher import LibraryWatcher
@@ -670,24 +673,24 @@ class MainWindow(QMainWindow):
         if track is None:
             self._toast.show_message("No track loaded")
             return
-        # Spec 07 §Alignment job: confirm the ~1 GB model download on the
-        # first opt-in, but only when we actually need to fetch it. We
-        # show the dialog every time alignment is started for a track
-        # whose LRC is missing — the user controls the cost explicitly.
-        if not self._confirm_alignment_download():
-            return
+        # Spec 07 §Alignment job: a one-shot dialog confirms the ~1 GB
+        # model download. Once the WhisperX models are cached locally,
+        # subsequent alignments run silently. (Pre-fix the dialog fired
+        # every click, which was misleading — the download itself is
+        # one-off but the prompt suggested a fresh 1 GB hit each time.)
+        if not whisperx_models_cached(self._alignment.model_size):
+            if not self._confirm_alignment_download():
+                return
         self._alignment.start_alignment(track)
 
     def _confirm_alignment_download(self) -> bool:
-        # Open question: a "don't show again this session" affordance is
-        # tracked as v0.5+ polish; for v0.4.0 the explicit confirm is the
-        # contract.
         button = QMessageBox.question(
             self,
             "Align lyrics — model download",
             "Aligning lyrics uses local ML (Whisper + wav2vec2). On first "
-            "use, ~1 GB of model files will download to "
-            "~/.cache/album-builder/whisper-models/. Continue?",
+            "use, ~1 GB of model files will download to the HuggingFace "
+            "cache at ~/.cache/huggingface/hub/. Subsequent alignments "
+            "use the cached models silently. Continue?",
         )
         return button == QMessageBox.StandardButton.Yes
 

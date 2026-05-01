@@ -278,3 +278,64 @@ def test_lyrics_ready_emitted_on_success(qtbot, tmp_path):
     qtbot.waitUntil(lambda: bool(received), timeout=2000)
     assert received[0][0] == audio
     assert isinstance(received[0][1], Lyrics)
+
+
+def test_whisperx_models_cached_false_when_hub_missing(tmp_path, monkeypatch) -> None:
+    """No HF cache directory at all -> False."""
+    from album_builder.services import alignment_service as alignment_service_module
+    monkeypatch.setattr(alignment_service_module, "HF_HUB_CACHE", tmp_path / "nope")
+    assert alignment_service_module.whisperx_models_cached("medium.en") is False
+
+
+def test_whisperx_models_cached_false_when_only_whisper_present(
+    tmp_path, monkeypatch,
+) -> None:
+    """Whisper model present but wav2vec2 missing -> False."""
+    from album_builder.services import alignment_service as alignment_service_module
+    hub = tmp_path / "hub"
+    (hub / "models--Systran--faster-whisper-medium.en").mkdir(parents=True)
+    monkeypatch.setattr(alignment_service_module, "HF_HUB_CACHE", hub)
+    assert alignment_service_module.whisperx_models_cached("medium.en") is False
+
+
+def test_whisperx_models_cached_false_when_only_wav2vec_present(
+    tmp_path, monkeypatch,
+) -> None:
+    """wav2vec2 model present but whisper missing -> False."""
+    from album_builder.services import alignment_service as alignment_service_module
+    hub = tmp_path / "hub"
+    (hub / "models--facebook--wav2vec2-base-960h").mkdir(parents=True)
+    monkeypatch.setattr(alignment_service_module, "HF_HUB_CACHE", hub)
+    assert alignment_service_module.whisperx_models_cached("medium.en") is False
+
+
+def test_whisperx_models_cached_true_when_both_present(
+    tmp_path, monkeypatch,
+) -> None:
+    """Both required model directories exist -> True."""
+    from album_builder.services import alignment_service as alignment_service_module
+    hub = tmp_path / "hub"
+    (hub / "models--Systran--faster-whisper-medium.en").mkdir(parents=True)
+    (hub / "models--facebook--wav2vec2-base-960h").mkdir(parents=True)
+    monkeypatch.setattr(alignment_service_module, "HF_HUB_CACHE", hub)
+    assert alignment_service_module.whisperx_models_cached("medium.en") is True
+
+
+def test_whisperx_models_cached_uses_model_size_in_path(
+    tmp_path, monkeypatch,
+) -> None:
+    """Cache hit must match the configured model_size; large-v3 stays uncached
+    when only medium.en is present."""
+    from album_builder.services import alignment_service as alignment_service_module
+    hub = tmp_path / "hub"
+    (hub / "models--Systran--faster-whisper-medium.en").mkdir(parents=True)
+    (hub / "models--facebook--wav2vec2-base-960h").mkdir(parents=True)
+    monkeypatch.setattr(alignment_service_module, "HF_HUB_CACHE", hub)
+    assert alignment_service_module.whisperx_models_cached("medium.en") is True
+    assert alignment_service_module.whisperx_models_cached("large-v3") is False
+
+
+def test_alignment_service_exposes_model_size() -> None:
+    """The model_size property is what the UI passes to whisperx_models_cached."""
+    svc = AlignmentService(settings=AlignmentSettings(model_size="medium.en"))
+    assert svc.model_size == "medium.en"

@@ -29,6 +29,37 @@ logger = logging.getLogger(__name__)
 MIN_AUDIO_SECONDS = 2.0
 
 
+# Spec 07 §Alignment job: WhisperX caches both the faster-whisper
+# transcription model and the wav2vec2 alignment model under HuggingFace
+# Hub's standard cache root. The dialog used to fire on every Align Now
+# click; per the spec ("a one-shot dialog explains size and asks for
+# confirmation"), it should fire only when the cache is missing — once
+# the ~1 GB download has happened, alignment runs silently.
+HF_HUB_CACHE = Path.home() / ".cache" / "huggingface" / "hub"
+
+
+def whisperx_models_cached(model_size: str) -> bool:
+    """Best-effort check that WhisperX's required models are already in the
+    HuggingFace Hub cache. Used by the UI to suppress the download-confirm
+    dialog on subsequent alignments.
+
+    Conservative: requires BOTH the faster-whisper transcription model AND
+    the default English wav2vec2 alignment model to be present. If either
+    is missing, returns False.
+
+    For non-English audio, WhisperX selects a different alignment model at
+    runtime based on detected language — we cannot know that ahead of the
+    transcription step, so a partial false-positive is possible (English
+    models cached; a Russian song still triggers a fresh ~300 MB
+    wav2vec2-large download silently). Acceptable: the user already opted
+    in on the first dialog, and the secondary model is much smaller than
+    the headline 1 GB.
+    """
+    whisper_dir = HF_HUB_CACHE / f"models--Systran--faster-whisper-{model_size}"
+    wav2vec_dir = HF_HUB_CACHE / "models--facebook--wav2vec2-base-960h"
+    return whisper_dir.is_dir() and wav2vec_dir.is_dir()
+
+
 WorkerFactory = Callable[[Path, str, str], AlignmentWorker]
 
 
@@ -59,6 +90,13 @@ class AlignmentService(QObject):
 
     def settings(self) -> AlignmentSettings:
         return self._settings
+
+    @property
+    def model_size(self) -> str:
+        """Configured WhisperX model identifier (e.g. 'medium.en'). Exposed
+        so the UI can pass it to `whisperx_models_cached()` without
+        reaching into private settings state."""
+        return self._settings.model_size
 
     def update_settings(self, settings: AlignmentSettings) -> None:
         self._settings = settings
