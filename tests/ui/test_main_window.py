@@ -34,11 +34,12 @@ def test_main_window_top_bar_present(main_window) -> None:
     assert main_window.top_bar.objectName() == "TopBar"
 
 
-def test_main_window_title_is_bare_app_name(main_window) -> None:
-    # Tier 3 (L8-info): version is set via app.setApplicationVersion and
-    # rendered separately by KDE / GNOME shells, so it must NOT appear in
-    # the title bar — duplicate noise. The title is the app name only.
-    assert main_window.windowTitle() == "Album Builder"
+def test_main_window_title_includes_version(main_window) -> None:
+    # Title shows app + version so users can confirm at a glance which
+    # build they're running (matters when the install at
+    # ~/.local/share/album-builder/ drifts behind the dev tree).
+    from album_builder.version import __version__
+    assert main_window.windowTitle() == f"Album Builder v{__version__}"
 
 
 def test_create_then_select_appears_in_order_pane(qtbot, tmp_path: Path, tracks_dir: Path) -> None:
@@ -306,7 +307,18 @@ def test_main_window_align_now_confirms_download(
     """Clicking Align now first opens the ~1 GB download confirmation;
     declining must NOT call start_alignment."""
     from PyQt6.QtWidgets import QMessageBox
+
+    from album_builder.services import alignment_service as alignment_service_module
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    # Force "models not cached" by pointing both cache constants at tmp
+    # paths — otherwise a developer with WhisperX models in their real
+    # cache would silently bypass the dialog and break the test.
+    monkeypatch.setattr(
+        alignment_service_module, "HF_HUB_CACHE", tmp_path / "hub_empty",
+    )
+    monkeypatch.setattr(
+        alignment_service_module, "TORCH_HUB_CHECKPOINTS", tmp_path / "torch_empty",
+    )
     store = AlbumStore(tmp_path / "Albums")
     watcher = LibraryWatcher(tracks_dir)
     track = next(iter(watcher.library().tracks))

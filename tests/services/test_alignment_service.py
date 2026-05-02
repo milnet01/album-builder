@@ -280,45 +280,65 @@ def test_lyrics_ready_emitted_on_success(qtbot, tmp_path):
     assert isinstance(received[0][1], Lyrics)
 
 
-def test_whisperx_models_cached_false_when_hub_missing(tmp_path, monkeypatch) -> None:
-    """No HF cache directory at all -> False."""
-    from album_builder.services import alignment_service as alignment_service_module
-    monkeypatch.setattr(alignment_service_module, "HF_HUB_CACHE", tmp_path / "nope")
-    assert alignment_service_module.whisperx_models_cached("medium.en") is False
+def _patch_caches(monkeypatch, hub: Path, torch_dir: Path) -> None:
+    """Point the module's two cache constants at tmp dirs.
+
+    The check spans HF Hub (faster-whisper) AND torch hub
+    (wav2vec2 alignment bundle), so both must be redirected.
+    """
+    from album_builder.services import alignment_service as m
+    monkeypatch.setattr(m, "HF_HUB_CACHE", hub)
+    monkeypatch.setattr(m, "TORCH_HUB_CHECKPOINTS", torch_dir)
+
+
+def test_whisperx_models_cached_false_when_caches_missing(
+    tmp_path, monkeypatch,
+) -> None:
+    """Neither cache populated -> False."""
+    from album_builder.services import alignment_service as m
+    _patch_caches(monkeypatch, tmp_path / "hub_nope", tmp_path / "torch_nope")
+    assert m.whisperx_models_cached("medium.en") is False
 
 
 def test_whisperx_models_cached_false_when_only_whisper_present(
     tmp_path, monkeypatch,
 ) -> None:
-    """Whisper model present but wav2vec2 missing -> False."""
-    from album_builder.services import alignment_service as alignment_service_module
+    """faster-whisper present but wav2vec2 .pth missing -> False."""
+    from album_builder.services import alignment_service as m
     hub = tmp_path / "hub"
+    torch_dir = tmp_path / "torch"
     (hub / "models--Systran--faster-whisper-medium.en").mkdir(parents=True)
-    monkeypatch.setattr(alignment_service_module, "HF_HUB_CACHE", hub)
-    assert alignment_service_module.whisperx_models_cached("medium.en") is False
+    torch_dir.mkdir(parents=True)
+    _patch_caches(monkeypatch, hub, torch_dir)
+    assert m.whisperx_models_cached("medium.en") is False
 
 
 def test_whisperx_models_cached_false_when_only_wav2vec_present(
     tmp_path, monkeypatch,
 ) -> None:
-    """wav2vec2 model present but whisper missing -> False."""
-    from album_builder.services import alignment_service as alignment_service_module
+    """wav2vec2 .pth present but faster-whisper missing -> False."""
+    from album_builder.services import alignment_service as m
     hub = tmp_path / "hub"
-    (hub / "models--facebook--wav2vec2-base-960h").mkdir(parents=True)
-    monkeypatch.setattr(alignment_service_module, "HF_HUB_CACHE", hub)
-    assert alignment_service_module.whisperx_models_cached("medium.en") is False
+    torch_dir = tmp_path / "torch"
+    hub.mkdir(parents=True)
+    torch_dir.mkdir(parents=True)
+    (torch_dir / m.TORCHAUDIO_WAV2VEC_EN_BASE).touch()
+    _patch_caches(monkeypatch, hub, torch_dir)
+    assert m.whisperx_models_cached("medium.en") is False
 
 
 def test_whisperx_models_cached_true_when_both_present(
     tmp_path, monkeypatch,
 ) -> None:
-    """Both required model directories exist -> True."""
-    from album_builder.services import alignment_service as alignment_service_module
+    """Both faster-whisper dir and torchaudio .pth exist -> True."""
+    from album_builder.services import alignment_service as m
     hub = tmp_path / "hub"
+    torch_dir = tmp_path / "torch"
     (hub / "models--Systran--faster-whisper-medium.en").mkdir(parents=True)
-    (hub / "models--facebook--wav2vec2-base-960h").mkdir(parents=True)
-    monkeypatch.setattr(alignment_service_module, "HF_HUB_CACHE", hub)
-    assert alignment_service_module.whisperx_models_cached("medium.en") is True
+    torch_dir.mkdir(parents=True)
+    (torch_dir / m.TORCHAUDIO_WAV2VEC_EN_BASE).touch()
+    _patch_caches(monkeypatch, hub, torch_dir)
+    assert m.whisperx_models_cached("medium.en") is True
 
 
 def test_whisperx_models_cached_uses_model_size_in_path(
@@ -326,13 +346,15 @@ def test_whisperx_models_cached_uses_model_size_in_path(
 ) -> None:
     """Cache hit must match the configured model_size; large-v3 stays uncached
     when only medium.en is present."""
-    from album_builder.services import alignment_service as alignment_service_module
+    from album_builder.services import alignment_service as m
     hub = tmp_path / "hub"
+    torch_dir = tmp_path / "torch"
     (hub / "models--Systran--faster-whisper-medium.en").mkdir(parents=True)
-    (hub / "models--facebook--wav2vec2-base-960h").mkdir(parents=True)
-    monkeypatch.setattr(alignment_service_module, "HF_HUB_CACHE", hub)
-    assert alignment_service_module.whisperx_models_cached("medium.en") is True
-    assert alignment_service_module.whisperx_models_cached("large-v3") is False
+    torch_dir.mkdir(parents=True)
+    (torch_dir / m.TORCHAUDIO_WAV2VEC_EN_BASE).touch()
+    _patch_caches(monkeypatch, hub, torch_dir)
+    assert m.whisperx_models_cached("medium.en") is True
+    assert m.whisperx_models_cached("large-v3") is False
 
 
 def test_alignment_service_exposes_model_size() -> None:

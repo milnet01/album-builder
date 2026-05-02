@@ -29,35 +29,44 @@ logger = logging.getLogger(__name__)
 MIN_AUDIO_SECONDS = 2.0
 
 
-# Spec 07 §Alignment job: WhisperX caches both the faster-whisper
-# transcription model and the wav2vec2 alignment model under HuggingFace
-# Hub's standard cache root. The dialog used to fire on every Align Now
-# click; per the spec ("a one-shot dialog explains size and asks for
-# confirmation"), it should fire only when the cache is missing — once
-# the ~1 GB download has happened, alignment runs silently.
+# Spec 07 §Alignment job: WhisperX caches the two halves of the pipeline
+# in two different places. faster-whisper goes to HuggingFace Hub
+# (~/.cache/huggingface/hub). The default English alignment model is a
+# torchaudio bundle (WAV2VEC2_ASR_BASE_960H) — that one downloads as a
+# raw .pth into ~/.cache/torch/hub/checkpoints/. Per the spec ("a one-
+# shot dialog explains size and asks for confirmation"), the dialog
+# should fire only when the cache is missing — once the ~1 GB download
+# has happened, alignment runs silently.
 HF_HUB_CACHE = Path.home() / ".cache" / "huggingface" / "hub"
+TORCH_HUB_CHECKPOINTS = Path.home() / ".cache" / "torch" / "hub" / "checkpoints"
+
+# torchaudio names the file after the underlying fairseq checkpoint, not
+# after the bundle constant. WhisperX picks WAV2VEC2_ASR_BASE_960H for
+# English by default (whisperx/alignment.py: DEFAULT_ALIGN_MODELS_TORCH).
+TORCHAUDIO_WAV2VEC_EN_BASE = "wav2vec2_fairseq_base_ls960_asr_ls960.pth"
 
 
 def whisperx_models_cached(model_size: str) -> bool:
-    """Best-effort check that WhisperX's required models are already in the
-    HuggingFace Hub cache. Used by the UI to suppress the download-confirm
-    dialog on subsequent alignments.
+    """Best-effort check that WhisperX's required models are already cached
+    locally. Used by the UI to suppress the download-confirm dialog on
+    subsequent alignments.
 
-    Conservative: requires BOTH the faster-whisper transcription model AND
-    the default English wav2vec2 alignment model to be present. If either
-    is missing, returns False.
+    Conservative: requires BOTH the faster-whisper transcription model
+    (HF Hub) AND the default English wav2vec2 alignment model (torch
+    hub). If either is missing, returns False.
 
-    For non-English audio, WhisperX selects a different alignment model at
-    runtime based on detected language — we cannot know that ahead of the
+    For non-English audio, WhisperX selects a different alignment model
+    at runtime based on detected language — many of those go to HF Hub
+    instead of torch hub. We cannot know which path applies ahead of the
     transcription step, so a partial false-positive is possible (English
     models cached; a Russian song still triggers a fresh ~300 MB
-    wav2vec2-large download silently). Acceptable: the user already opted
-    in on the first dialog, and the secondary model is much smaller than
-    the headline 1 GB.
+    wav2vec2-large download silently). Acceptable: the user already
+    opted in on the first dialog, and the secondary model is much
+    smaller than the headline 1 GB.
     """
     whisper_dir = HF_HUB_CACHE / f"models--Systran--faster-whisper-{model_size}"
-    wav2vec_dir = HF_HUB_CACHE / "models--facebook--wav2vec2-base-960h"
-    return whisper_dir.is_dir() and wav2vec_dir.is_dir()
+    wav2vec_pth = TORCH_HUB_CHECKPOINTS / TORCHAUDIO_WAV2VEC_EN_BASE
+    return whisper_dir.is_dir() and wav2vec_pth.is_file()
 
 
 WorkerFactory = Callable[[Path, str, str], AlignmentWorker]

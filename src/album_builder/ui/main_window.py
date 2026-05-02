@@ -56,6 +56,7 @@ from album_builder.ui.now_playing_pane import NowPlayingPane
 from album_builder.ui.theme import Glyphs, Palette, qt_stylesheet
 from album_builder.ui.toast import Toast
 from album_builder.ui.top_bar import TopBar
+from album_builder.version import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -127,11 +128,10 @@ class MainWindow(QMainWindow):
         self._library_watcher = library_watcher
         self._state = state
         self._project_root = project_root
-        # Window title is the bare app name; KDE / GNOME shells render
-        # `app.setApplicationVersion` separately (in the about-dialog and
-        # task-switcher tooltip), so duplicating it in the title bar is
-        # redundant noise. (L8-info Tier 3 cleanup.)
-        self.setWindowTitle("Album Builder")
+        # Title bar shows app + version so users can confirm at a glance
+        # which build they're running (matters when the install at
+        # ~/.local/share/album-builder/ drifts behind the dev tree).
+        self.setWindowTitle(f"Album Builder v{__version__}")
         # Clamp restored geometry against pathological values (hand-edited
         # state.json with width=10 would open a 10 px wide window). Spec 10
         # documents minimum 100px implicit; explicit here so a corrupt cache
