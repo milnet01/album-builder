@@ -32,24 +32,30 @@ def _make_state():
 
 
 # Spec: TC-13-05 setup - MainWindow constructs UsageIndex with the right wiring.
-def test_main_window_constructs_usage_index(qapp, project_root) -> None:
+def test_main_window_constructs_usage_index(qtbot, project_root) -> None:
     store = AlbumStore(project_root / "Albums")
     library_watcher = LibraryWatcher(project_root / "Tracks")
     state = _make_state()
     window = MainWindow(store, library_watcher, state, project_root)
+    qtbot.addWidget(window)
     assert hasattr(window, "_usage_index")
     assert isinstance(window._usage_index, UsageIndex)
     # The library pane has the index injected.
     assert window.library_pane._model._usage_index is window._usage_index
 
 
-# Spec: TC-13-05 - _on_approve calls usage_index.rebuild() in its body.
-def test_on_approve_inserts_rebuild_call(qapp) -> None:
-    src = inspect.getsource(MainWindow._on_approve)
-    assert "self._usage_index.rebuild()" in src
-
-
-# Spec: TC-13-06 - _on_reopen calls usage_index.rebuild() in its body.
-def test_on_reopen_inserts_rebuild_call(qapp) -> None:
-    src = inspect.getsource(MainWindow._on_reopen)
-    assert "self._usage_index.rebuild()" in src
+# Spec: TC-13-05 / TC-13-06 — _on_approve and _on_reopen must call
+# `self._usage_index.rebuild()` between the success guard and the pane-refresh
+# chain. This is a Spec 13 §Behavior rule (rebuild before pane refresh so
+# the Used column paints once with correct counts), not an implementation
+# detail. Source-text inspection is the right tool here: a full behavioural
+# test would have to mock the modal QMessageBox + report generation + file
+# manager open, all of which are tested separately. A source grep catches a
+# regression where someone deletes the explicit rebuild call.
+@pytest.mark.parametrize("method_name", ["_on_approve", "_on_reopen"])
+def test_approve_and_reopen_handlers_call_usage_index_rebuild(method_name: str) -> None:
+    src = inspect.getsource(getattr(MainWindow, method_name))
+    assert "self._usage_index.rebuild()" in src, (
+        f"MainWindow.{method_name} must call self._usage_index.rebuild() "
+        f"per Spec 13 §Behavior (rebuild before pane refresh)"
+    )

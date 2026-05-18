@@ -24,9 +24,16 @@ def top_bar(qtbot, store: AlbumStore) -> TopBar:
     return bar
 
 
-def test_no_album_hides_approve_and_reopen(top_bar: TopBar) -> None:
+def test_no_album_when_none_disables_approve_and_hides_reopen(top_bar: TopBar) -> None:
+    # Spec 02: with no current album, the Approve button stays visible but
+    # disabled (so the disabled affordance is discoverable), while Reopen is
+    # hidden outright (it has no meaning without an approved album). The
+    # original phrasing combined both invariants in one `or` assertion, which
+    # made the intent ambiguous and let any single-condition implementation
+    # pass; the two split assertions now name the actual contracts.
     top_bar.set_current(None)
-    assert not top_bar.btn_approve.isVisible() or not top_bar.btn_approve.isEnabled()
+    assert top_bar.btn_approve.isVisible()
+    assert not top_bar.btn_approve.isEnabled()
     assert not top_bar.btn_reopen.isVisible()
 
 

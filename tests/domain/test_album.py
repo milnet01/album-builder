@@ -22,8 +22,13 @@ def test_album_create_returns_draft_with_fresh_uuid() -> None:
     assert a.id != a2.id
 
 
-# Spec: TC-02-02
-@pytest.mark.parametrize("bad", ["", "   ", "x" * 81])
+# Spec: TC-02-02 — empty/whitespace/over-length names and date-suffix names
+# (Spec 10 §Atomic pair: " - YYYY-MM-DD" suffix collides with the report
+# filename pattern, so create/rename reject it pre-sanitise).
+@pytest.mark.parametrize(
+    "bad",
+    ["", "   ", "x" * 81, "My Album - 2026-01-01"],
+)
 def test_album_create_rejects_bad_names(bad: str) -> None:
     with pytest.raises(ValueError):
         Album.create(name=bad, target_count=12)
@@ -37,7 +42,10 @@ def test_album_create_rejects_bad_target(bad: int) -> None:
 
 
 # Spec: TC-02-06
-@pytest.mark.parametrize("bad", ["", "   ", "x" * 81])
+@pytest.mark.parametrize(
+    "bad",
+    ["", "   ", "x" * 81, "My Album - 2026-01-01"],
+)
 def test_album_rename_rejects_bad_names(bad: str) -> None:
     a = Album.create(name="ok", target_count=12)
     with pytest.raises(ValueError):
@@ -45,12 +53,20 @@ def test_album_rename_rejects_bad_names(bad: str) -> None:
 
 
 # Spec: TC-02-06
-def test_album_rename_updates_name_and_updated_at() -> None:
+def test_album_rename_updates_name_and_updated_at(monkeypatch) -> None:
+    # Drive _now() so the post-rename timestamp is strictly later than the
+    # pre-rename one; `>=` would pass even when same-microsecond writes leave
+    # `updated_at` untouched, giving the test zero signal that mutation happened.
+    from datetime import timedelta
+
+    from album_builder.domain import album as _album_mod
+
     a = Album.create(name="ok", target_count=12)
     before = a.updated_at
+    monkeypatch.setattr(_album_mod, "_now", lambda: before + timedelta(seconds=1))
     a.rename("New Name")
     assert a.name == "New Name"
-    assert a.updated_at >= before
+    assert a.updated_at > before
 
 
 # Spec: TC-04-01
@@ -77,6 +93,17 @@ def test_album_select_rejects_when_approved() -> None:
     a.status = AlbumStatus.APPROVED  # bypass approve() for unit test
     with pytest.raises(ValueError):
         a.select(Path("/abs/b.mp3"))
+
+
+# Spec: TC-04-02 — deselect() is symmetric with select(): both raise when
+# the album is approved. Without this, a regression that removed the guard
+# from deselect() alone would not be caught.
+def test_album_deselect_rejects_when_approved() -> None:
+    a = Album.create(name="x", target_count=3)
+    a.select(Path("/abs/a.mp3"))
+    a.status = AlbumStatus.APPROVED  # bypass approve() for unit test
+    with pytest.raises(ValueError):
+        a.deselect(Path("/abs/a.mp3"))
 
 
 # Spec: TC-04-04
@@ -174,14 +201,20 @@ def test_album_approve_rejected_when_already_approved() -> None:
 
 
 # Spec: TC-02-12
-def test_album_approve_flips_status_and_stamps() -> None:
+def test_album_approve_flips_status_and_stamps(monkeypatch) -> None:
+    from datetime import timedelta
+
+    from album_builder.domain import album as _album_mod
+
     a = Album.create(name="x", target_count=3)
     a.select(Path("/abs/a.mp3"))
     before = a.updated_at
+    monkeypatch.setattr(_album_mod, "_now", lambda: before + timedelta(seconds=1))
     a.approve()
     assert a.status == AlbumStatus.APPROVED
     assert a.approved_at is not None
-    assert a.updated_at >= before
+    assert a.approved_at.tzinfo is not None  # spec: UTC-aware
+    assert a.updated_at > before
 
 
 # Spec: TC-02-14

@@ -57,11 +57,15 @@ def test_cancel_drops_pending_callback_without_firing(app, qtbot) -> None:
     """cancel() removes the queued callback for a key. The next idle-window
     expiry must NOT fire it. Used by AlbumStore.delete()/rename() to prevent
     a queued save from writing into a folder that's been moved or trashed."""
+    # Use a long idle window + flush_all() rather than a sleep race: a CI
+    # event loop starvation past the 80ms wait would let calls==[] pass
+    # vacuously (timer never fired -> nothing to cancel) and give false
+    # confidence in cancel().
     calls: list[str] = []
-    w = DebouncedWriter(idle_ms=20)
+    w = DebouncedWriter(idle_ms=10_000)
     w.schedule("k", lambda: calls.append("would-have-fired"))
     w.cancel("k")
-    qtbot.wait(80)
+    w.flush_all()  # deterministically attempts every pending callback
     assert calls == []
 
 

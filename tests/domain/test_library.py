@@ -3,6 +3,8 @@ test contract for TC IDs."""
 
 from pathlib import Path
 
+import pytest
+
 from album_builder.domain.library import Library, SortKey
 
 
@@ -43,20 +45,26 @@ def test_library_search_empty_query_returns_all(tracks_dir: Path) -> None:
     assert len(lib.search("")) == 3
 
 
-# Spec: TC-01-08
-def test_library_sort_by_title_ascending(tracks_dir: Path) -> None:
+# Spec: TC-01-08 — sort contract holds across every non-duration SortKey.
+# DURATION omitted: fixture tracks are 1s silent so durations tie and the
+# ordering becomes test-order-dependent without exercising the sort.
+@pytest.mark.parametrize(
+    "key, attr",
+    [
+        (SortKey.TITLE, "title"),
+        (SortKey.ARTIST, "artist"),
+        (SortKey.ALBUM, "album"),
+        (SortKey.COMPOSER, "composer"),
+    ],
+)
+@pytest.mark.parametrize("ascending", [True, False])
+def test_library_sort_ascending_descending(
+    tracks_dir: Path, key: SortKey, attr: str, ascending: bool,
+) -> None:
     lib = Library.scan(tracks_dir)
-    sorted_tracks = lib.sorted(SortKey.TITLE, ascending=True)
-    titles = [t.title for t in sorted_tracks]
-    assert titles == sorted(titles)
-
-
-# Spec: TC-01-08
-def test_library_sort_by_title_descending(tracks_dir: Path) -> None:
-    lib = Library.scan(tracks_dir)
-    sorted_tracks = lib.sorted(SortKey.TITLE, ascending=False)
-    titles = [t.title for t in sorted_tracks]
-    assert titles == sorted(titles, reverse=True)
+    sorted_tracks = lib.sorted(key, ascending=ascending)
+    values = [getattr(t, attr) for t in sorted_tracks]
+    assert values == sorted(values, reverse=not ascending)
 
 
 def test_library_find_by_path(tracks_dir: Path) -> None:
@@ -131,8 +139,6 @@ def test_library_scan_unreadable_file_propagates(tmp_path: Path, tagged_track) -
 def test_library_scan_skips_entries_with_os_error_metadata(
     tmp_path: Path, monkeypatch,
 ) -> None:
-    import _pytest.monkeypatch  # noqa: F401 - import for typing
-
     good = tmp_path / "good.mp3"
     good.write_bytes(b"\xff\xfb\x90\x00" + b"\x00" * 1024)  # minimal MP3-like
     bad = tmp_path / "bad.mp3"

@@ -46,13 +46,14 @@ def test_atomic_write_text_failure_keeps_original(tmp_path: Path, monkeypatch) -
     assert leftover == []
 
 
-def test_atomic_write_text_concurrent_writes_use_unique_tmp(tmp_path: Path) -> None:
+def test_atomic_write_text_concurrent_writes_use_unique_tmp(
+    tmp_path: Path, monkeypatch,
+) -> None:
     """Two parallel writers (Phase 2 will have per-album debounce timers
     firing concurrently) must not collide on the tmp filename. The tmp suffix
     must include enough entropy that `<name>.tmp` is not the same file across
     callers."""
     target = tmp_path / "concurrent.json"
-    # Generate the names by patching os.replace so we can capture them
     captured: list[str] = []
     original_replace = os.replace
 
@@ -61,14 +62,13 @@ def test_atomic_write_text_concurrent_writes_use_unique_tmp(tmp_path: Path) -> N
         original_replace(src, dst)
 
     import album_builder.persistence.atomic_io as aio
-    orig = aio.os.replace
-    aio.os.replace = capture_then_replace
-    try:
-        atomic_write_text(target, "a")
-        atomic_write_text(target, "b")
-        atomic_write_text(target, "c")
-    finally:
-        aio.os.replace = orig
+    # monkeypatch.setattr restores even on KeyboardInterrupt; a manual
+    # try/finally would leak the capture closure into subsequent tests
+    # if the body raised before the finally clause was set up.
+    monkeypatch.setattr(aio.os, "replace", capture_then_replace)
+    atomic_write_text(target, "a")
+    atomic_write_text(target, "b")
+    atomic_write_text(target, "c")
 
     # All three tmp paths must differ — that's the property the suffix buys us.
     assert len(set(captured)) == 3, f"tmp filenames collided: {captured}"
@@ -107,9 +107,10 @@ def test_fsync_dir_propagates_eio(tmp_path: Path, monkeypatch) -> None:
     with pytest.raises(OSError) as excinfo:
         atomic_io._fsync_dir(tmp_path)
     assert excinfo.value.errno == errno.EIO
-    # Don't leave the target around.
-    if target.exists():
-        target.unlink()
+    # Note: `target` is never written by this test (the injected EIO fires
+    # before any write occurs); no cleanup needed and `tmp_path` is removed
+    # by pytest's fixture teardown anyway.
+    del target
 
 
 def test_fsync_dir_skips_einval(tmp_path: Path, monkeypatch) -> None:

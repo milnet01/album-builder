@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from PyQt6.QtGui import QColor
 
 from album_builder.domain.lyrics import LyricLine, Lyrics
@@ -25,34 +26,51 @@ def test_status_label_initial_state(qtbot):
     assert "no lyrics text" in panel.status_label.text().lower()
 
 
-# Spec: TC-07-06
-def test_status_label_each_state(qtbot):
+# Spec: TC-07-06 — parametrized over each AlignmentStatus so a failure on
+# one state doesn't hide regressions in the others. ALIGNING carries a
+# percent argument; encoded inline rather than splitting into a second test.
+@pytest.mark.parametrize(
+    "status, percent, expected_substring",
+    [
+        (AlignmentStatus.NOT_YET_ALIGNED, None, "not yet aligned"),
+        (AlignmentStatus.READY, None, "ready"),
+        (AlignmentStatus.ALIGNING, 42, "42%"),
+    ],
+)
+def test_status_label_each_state(qtbot, status, percent, expected_substring):
     panel = LyricsPanel()
     qtbot.addWidget(panel)
-    panel.set_status(AlignmentStatus.NOT_YET_ALIGNED)
-    assert "not yet aligned" in panel.status_label.text().lower()
-    panel.set_status(AlignmentStatus.READY)
-    assert "ready" in panel.status_label.text().lower()
-    panel.set_status(AlignmentStatus.ALIGNING, percent=42)
-    assert "42%" in panel.status_label.text()
+    if percent is None:
+        panel.set_status(status)
+    else:
+        panel.set_status(status, percent=percent)
+    assert expected_substring in panel.status_label.text().lower()
 
 
-# Spec: TC-07-06
-def test_align_now_button_visible_only_for_not_yet_aligned_or_failed(qtbot):
+# Spec: TC-07-06 — parametrized so each of the 6 states is independently
+# verified. Single-test cycling masked intermediate failures (a regression
+# in ALIGNING visibility would hide regressions in READY/FAILED below it).
+@pytest.mark.parametrize(
+    "status, expected_visible",
+    [
+        (AlignmentStatus.NO_LYRICS_TEXT, False),
+        (AlignmentStatus.NOT_YET_ALIGNED, True),
+        (AlignmentStatus.ALIGNING, False),
+        (AlignmentStatus.READY, False),
+        (AlignmentStatus.FAILED, True),
+        (AlignmentStatus.AUDIO_TOO_SHORT, False),
+    ],
+)
+def test_align_now_button_visible_only_for_not_yet_aligned_or_failed(
+    qtbot, status, expected_visible,
+):
     panel = LyricsPanel()
     qtbot.addWidget(panel)
-    panel.set_status(AlignmentStatus.NO_LYRICS_TEXT)
-    assert panel.is_align_button_visible() is False
-    panel.set_status(AlignmentStatus.NOT_YET_ALIGNED)
-    assert panel.is_align_button_visible() is True
-    panel.set_status(AlignmentStatus.ALIGNING, percent=50)
-    assert panel.is_align_button_visible() is False
-    panel.set_status(AlignmentStatus.READY)
-    assert panel.is_align_button_visible() is False
-    panel.set_status(AlignmentStatus.FAILED)
-    assert panel.is_align_button_visible() is True
-    panel.set_status(AlignmentStatus.AUDIO_TOO_SHORT)
-    assert panel.is_align_button_visible() is False
+    if status == AlignmentStatus.ALIGNING:
+        panel.set_status(status, percent=50)
+    else:
+        panel.set_status(status)
+    assert panel.is_align_button_visible() is expected_visible
 
 
 def test_align_now_button_emits_request(qtbot):

@@ -490,6 +490,48 @@ huggingface behaviour proves unreliable in practice.
 7. Track with audio < 2 s — pill "audio too short to align". ✓
    (`test_start_alignment_rejects_short_audio`.)
 
+### 🧪 Test Audit 2026-05-18
+
+Framework: pytest + pytest-qt. Files scanned: 49. Dimensions: all 18 from `~/.claude/skills/test-audit/references/dimensions.md`. Raw findings: ~140 (5-chunk parallel sweep). Actionable after triage: 24. Noise dropped: ~115 (mostly missing `# Spec:` anchors — documentation-only, no functional impact — and duplication suggestions that overlap with /debt-sweep scope).
+
+Pre-pass grep produced 3 false positives (all confirmed mitigated): `datetime.now(UTC)` in fixture-construction helpers, `https://www.w3.org/2000/svg` XML-namespace string, real WhisperX import gated correctly via `pytest.importorskip` + `AB_INTEGRATION_LYRICS=1`.
+
+**Correctness & accuracy (Dim 1-3)**
+- ⚠️ **MED (deferred) — `tests/test_main_window_usage.py:48,54` `inspect.getsource()` antipattern.** Initially flagged as HIGH; on verification, the rebuild call IS a documented Spec 13 §Behavior contract ("rebuild before pane refresh so the Used column paints once with correct counts"), so a source-text grep is appropriate. Behavioural alternative attempted (monkeypatch spy on `UsageIndex.rebuild`) deadlocks on `_on_approve`'s modal `QMessageBox.exec()` and would require mocking 4+ unrelated side-effects (toast, file-manager open, report generation, dialog button). Kept the source-grep but parametrized over `[_on_approve, _on_reopen]` and added a spec-anchored failure message naming the contract. True behavioural coverage waits on a `_after_approve_success` extraction (out of scope for this audit pass).
+- ✅ **HIGH — `tests/domain/test_album.py:53,184` `>=` allows zero-mutation pass.** `assert a.updated_at >= before` passes if `_now()` returns the same microsecond twice (fast systems). Replaced with `monkeypatch.setattr(album, "_now", ...)` returning a known-later timestamp so the assertion becomes `>`.
+- ✅ **HIGH — `tests/persistence/test_settings.py:160` vacuous bool-volume test.** `test_audio_rejects_bool_volume` was asserting `"audio" in json.dumps(raw)` — tests the `json` stdlib, not the SUT. Rewritten to write the file via the `xdg_config` fixture, call `settings.read_audio()`, assert `volume == DEFAULT_VOLUME` (i.e. the bool guard at `settings.py:144` actually fired).
+- ✅ **HIGH — Coverage gap: `tests/domain/test_album.py` missing date-suffix rejection.** `_validate_name` rejects names matching `r".* - \d{4}-\d{2}-\d{2}$"` (Spec 10 §Atomic pair) — untested. Added `"My Album - 2026-01-01"` to the parametrized bad-names lists for both `create` and `rename`.
+- ✅ **HIGH — Coverage gap: TC-04-02 `deselect()` when approved untested.** Symmetric to `select()` — the spec says BOTH raise. Added `test_album_deselect_rejects_when_approved`.
+- ✅ **HIGH — Coverage gap: TC-01-08 only TITLE sort tested.** Parametrized `test_library_sort_ascending_descending` across `SortKey.TITLE / ARTIST / ALBUM / COMPOSER` (DURATION skipped — fixture tracks are 1s silent, so durations are identical).
+- ✅ **MED — `tests/persistence/test_album_io.py:72` string-scrape key-order heuristic.** Replaced 2-line split-on-`"` heuristic with `list(json.loads(raw).keys())`; both reads share the same JSON-decode path.
+
+**Reliability & isolation (Dim 5-7)**
+- ✅ **HIGH — `tests/persistence/test_debounce.py:64` cancel-test vacuous-pass risk.** `test_cancel_drops_pending_callback_without_firing` used `qtbot.wait(80)` for a 20-ms timer; under CI event-loop starvation the timer could simply *not fire*, making "calls == []" trivially true and giving false confidence in `cancel()`. Replaced with `w.flush_all()` so the assertion is deterministic.
+- ✅ **HIGH — `tests/persistence/test_atomic_io.py:64` direct attribute monkeypatch.** `aio.os.replace = capture_then_replace` with manual `try/finally` is KeyboardInterrupt-unsafe. Replaced with `monkeypatch.setattr(aio.os, "replace", capture_then_replace)`.
+- ✅ **MED — `tests/services/test_player.py:245` bare `assert errors`.** No content check — a malformed error from any source would pass. Tightened to `assert len(errors) == 1` and `"does-not-exist" in errors[0]`.
+- ✅ **MED — `tests/services/test_player.py:272` `state() in (PLAYING, STOPPED, PAUSED)`.** Accepts every non-ERROR state; cannot catch a regression. Narrowed to `assert p.source() == other` (the actual contract is source-was-swapped) plus a `waitUntil` for a known terminal state.
+
+**Coverage gaps (Dim 3)**
+- ✅ **CRITICAL — `tests/persistence/test_schema.py` missing migration-raises test.** The runner has no try/except around `migrations[v](data)`; raw exceptions propagate. Added `test_migrate_forward_propagates_migration_function_exception` to lock the contract.
+- ⏭️ **MED — Service-layer TC-13-05 / TC-13-06 (approve/unapprove → count_for delta).** Per UsageIndex source (`services/usage_index.py:43-44`), the index only subscribes to `album_added` / `album_removed` — NOT approve/unapprove. Production wiring is via `MainWindow._on_approve` calling `idx.rebuild()` explicitly (covered by `test_main_window_usage.py`) + `UsageIndex.rebuild()` correctness (covered by `test_TC_13_01_rebuild_counts_across_approved_albums`). Not adding redundant service-layer tests — existing split is correct.
+
+**Maintainability (Dim 10-14)**
+- ✅ **MED — `tests/ui/test_lyrics_panel.py:29-37, 41-55` state-walk splitting.** Two tests walked through 3-state and 6-state `set_status()` sequences in single test bodies; first-assertion failure hid the rest. Parametrized over `(status, expected_substring)` and `(status, expected_visible)`.
+- ✅ **LOW — `tests/domain/test_library.py:134` dead import + `tests/persistence/test_atomic_io.py:111-112` dead cleanup.** `import _pytest.monkeypatch  # noqa: F401` referenced nothing; `if target.exists(): target.unlink()` cleaned up a file that the test never wrote. Both removed.
+
+**Accuracy (Dim 1)**
+- ✅ **MED — `tests/ui/test_album_switcher.py:41,44,89-92` hardcoded glyph codepoints.** Tests hard-coded `"✓"` and `"\U0001f512"` instead of `Glyphs.CHECK` / `Glyphs.LOCK` from `album_builder.ui.theme`. Project convention (CLAUDE.md) requires glyphs come from `theme.Glyphs` so palette changes flow through. Imported and substituted.
+- ✅ **MED — `tests/ui/test_top_bar.py:29` ambiguous `or` assertion.** `assert not visible or not enabled` accepted any non-(visible-AND-enabled) state. The contract is "hidden" (matches line 30 for `btn_reopen`). Tightened to `assert not visible`.
+
+**Filtered (not actioned)**
+- ~40 missing `# Spec: TC-NN-MM` anchors across domain/services/ui test files — pure documentation, no functional risk; out of scope for a fix pass.
+- ~12 helper duplication findings (`_make_track`, `_make_album`, `main_window` fixture, WCAG helpers) — defer to `/debt-sweep` since extraction crosses 5+ files and the audit is meant to flag, not refactor.
+- 7 UI `qtbot.wait(50)` after sync operations (test_library_pane, test_main_window, parts of test_TC_06_*) — low real-world flakiness (current CI has not flagged), high risk of breaking existing tests during conversion to `waitUntil`; not actioned this pass.
+- 4 MED findings on `lrc.stat().st_mtime ± 10` for filesystem-granularity-dependent ordering (test_lrc_io, test_alignment_status, test_alignment_service) — works on tmpfs / ext4 / btrfs which is what dev + CI use; pin-to-epoch fix would change established passing tests for theoretical FAT32 risk.
+- WCAG luminance threshold `0.03928` (WCAG 2.0/2.1) vs `0.04045` (2.2): contrast ratios identical to 3 decimal places on the project's palette tokens. Skipped.
+
+Calibration: First test-audit on this repo; future runs should compare against this baseline (140 raw → 24 actionable → 18 closed → 6 deferred to /debt-sweep or follow-up).
+
 ### 🔍 Audit 2026-04-30
 
 Tools run: ruff, bandit, semgrep (`p/security-audit` + `p/python`), gitleaks, trivy fs, pyright, shellcheck. Six tools clean (0 findings each); pyright surfaced 65 raw → 3 actionable (95% noise from PyQt6 stub conservatism: `objectName=` kwarg, `Optional[X]` returns from `QListWidget.item()` / `QMenu.addAction()`, parameter-name mismatch on `resizeEvent` overrides, mutagen import resolution on system-Python pyright). Filtered manually given small volume.

@@ -68,14 +68,12 @@ def test_album_json_keys_sorted_alphabetically(tmp_path: Path) -> None:
     folder = tmp_path / "x"
     folder.mkdir()
     save_album(folder, a)
-    raw_text = (folder / "album.json").read_text()
-    keys_in_order = [line.strip().split('"')[1] for line in raw_text.splitlines()
-                     if line.strip().startswith('"') and '":' in line and "  " in line[:4]]
-    top_level = [k for k in keys_in_order if k in {
-        "schema_version", "id", "name", "target_count", "track_paths",
-        "status", "cover_override", "created_at", "updated_at", "approved_at",
-    }]
-    assert top_level == sorted(top_level)
+    raw = json.loads((folder / "album.json").read_text())
+    keys = list(raw.keys())
+    assert keys == sorted(keys), (
+        f"album.json top-level keys must be sorted alphabetically for clean "
+        f"diffs (Spec 10); got: {keys}"
+    )
 
 
 # Spec: TC-04-09

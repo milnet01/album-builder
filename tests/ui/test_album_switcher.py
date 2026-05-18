@@ -9,6 +9,7 @@ import pytest
 from album_builder.domain.album import AlbumStatus
 from album_builder.services.album_store import AlbumStore
 from album_builder.ui.album_switcher import AlbumSwitcher
+from album_builder.ui.theme import Glyphs
 
 
 @pytest.fixture
@@ -38,10 +39,16 @@ def test_dropdown_shows_one_entry_per_album(switcher: AlbumSwitcher) -> None:
     labels = switcher.entry_labels()
     assert len(labels) == 2
     # Approved album: prefix lock + trailing badge check. Draft: trailing N/M.
-    approved = [lbl for lbl in labels if lbl.startswith("\U0001f512") and lbl.endswith("✓")]
+    # Source glyphs from theme.Glyphs so a future Spec 11 codepoint change
+    # propagates here automatically (project convention: UI glyphs come from
+    # theme.Glyphs, never literal codepoints).
+    approved = [
+        lbl for lbl in labels
+        if lbl.startswith(Glyphs.LOCK) and lbl.endswith(Glyphs.CHECK)
+    ]
     drafts = [
         lbl for lbl in labels
-        if not lbl.startswith("\U0001f512") and "/" in lbl.rsplit("  ", 1)[-1]
+        if not lbl.startswith(Glyphs.LOCK) and "/" in lbl.rsplit("  ", 1)[-1]
     ]
     assert len(approved) == 1
     assert len(drafts) == 1
@@ -71,7 +78,7 @@ def test_currently_active_has_checkmark(switcher: AlbumSwitcher, store_with_albu
     target = next(a for a in store_with_albums.list() if a.name == "Beta")
     switcher.set_current(target.id)
     active_label = switcher.entry_label_for(target.id)
-    assert active_label.startswith("✓")
+    assert active_label.startswith(Glyphs.CHECK)
 
 
 # Spec: TC-03-13b
@@ -86,7 +93,7 @@ def test_active_and_approved_renders_both_prefixes_in_order(
     switcher.set_current(alpha.id)
     label = switcher.entry_label_for(alpha.id)
     # Order: check first (active), lock second (approved), then name.
-    assert label.startswith("✓")
-    assert "\U0001f512" in label
-    assert label.index("✓") < label.index("\U0001f512")
-    assert label.index("\U0001f512") < label.index("Alpha")
+    assert label.startswith(Glyphs.CHECK)
+    assert Glyphs.LOCK in label
+    assert label.index(Glyphs.CHECK) < label.index(Glyphs.LOCK)
+    assert label.index(Glyphs.LOCK) < label.index("Alpha")

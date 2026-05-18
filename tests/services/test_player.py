@@ -242,7 +242,11 @@ def test_missing_source_emits_error(qtbot, tmp_path: Path) -> None:
     p.set_source(tmp_path / "does-not-exist.wav")
     p.play()
     qtbot.waitUntil(lambda: errors, timeout=3000)
-    assert errors
+    # Spec contract is "missing source surfaces a specific error", not
+    # "some error fires"; without the content check, an unrelated codec
+    # failure passes the test and masks a regression in the missing-file path.
+    assert len(errors) == 1
+    assert "does-not-exist" in errors[0]
     assert p.state() == PlayerState.ERROR
 
 
@@ -269,7 +273,14 @@ def test_swap_source_mid_play_replaces(silent_wav: Path, qtbot, tmp_path: Path) 
     p.set_source(other)
     p.play()
     qtbot.waitUntil(lambda: p.source() == other, timeout=2000)
-    assert p.state() in (PlayerState.PLAYING, PlayerState.STOPPED, PlayerState.PAUSED)
+    # The contract under test is "the new source replaced the old one"; the
+    # post-replay state may be PLAYING (most common) or PAUSED depending on
+    # how the backend handles the seek-then-play transition, but ERROR or
+    # an unchanged source would be a real failure to catch.
+    assert p.source() == other
+    qtbot.waitUntil(
+        lambda: p.state() in (PlayerState.PLAYING, PlayerState.PAUSED), timeout=2000,
+    )
 
 
 # Spec: TC-06-09

@@ -157,15 +157,18 @@ def test_audio_rejects_non_int_volume(xdg_config: Path) -> None:
     assert a == settings.AudioSettings(volume=80, muted=False)
 
 
-def test_audio_rejects_bool_volume() -> None:
+def test_audio_rejects_bool_volume(xdg_config: Path) -> None:
     """bool is a subclass of int but the spec field is a 0..100 count;
-    accepting True/False would silently set volume to 0/1."""
-    # Direct unit test — bypasses file by patching _read_settings_dict.
-    raw = {"audio": {"volume": True, "muted": False}}
-    # Sanity-only — we trust the read path; a clamped True (==1) would be
-    # read as volume=1 if the bool guard were missing.
-    import json as _json
-    assert "audio" in _json.dumps(raw)
+    accepting True/False would silently set volume to 0/1. The bool guard
+    in settings.read_audio() must fall back to the default rather than
+    clamp True to 1."""
+    xdg_config.mkdir(parents=True)
+    (xdg_config / "settings.json").write_text(
+        json.dumps({"audio": {"volume": True, "muted": False}})
+    )
+    a = settings.read_audio()
+    assert a.volume == settings.DEFAULT_VOLUME  # not 1 (== int(True))
+    assert a.muted is False
 
 
 def test_audio_write_preserves_tracks_folder(xdg_config: Path) -> None:
