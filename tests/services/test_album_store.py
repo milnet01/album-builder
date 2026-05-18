@@ -205,8 +205,15 @@ def test_approve_then_unapprove_round_trip(
     # Approve runs the full Phase 4 pipeline: symlinks + M3U + reports.
     assert (folder / "playlist.m3u8").exists()
     assert any(p.is_symlink() for p in folder.iterdir())
-    assert any((folder / "reports").glob("*.pdf"))
-    assert any((folder / "reports").glob("*.html"))
+    # Spec 09 §File naming — approve writes EXACTLY four report files:
+    # the full pair + the artist-view pair. An exact-count check catches
+    # a regression that drops one variant; a `glob("*.pdf")` truthy check
+    # would silently pass with only the full variant present.
+    report_files = sorted(p.name for p in (folder / "reports").iterdir() if p.is_file())
+    assert len(report_files) == 4, report_files
+    assert sum(1 for n in report_files if n.endswith(".pdf")) == 2
+    assert sum(1 for n in report_files if n.endswith(".html")) == 2
+    assert sum(1 for n in report_files if " - artist." in n) == 2
 
     store.unapprove(a.id)
     assert a.status == AlbumStatus.DRAFT

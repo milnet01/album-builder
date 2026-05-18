@@ -339,3 +339,111 @@ def test_TC_09_24_long_line_wrap_css(tmp_path):
     album = _make_album(paths)
     html = render_html(album, library, today=date(2026, 4, 30))
     assert "overflow-wrap: anywhere" in html
+
+
+# --- TC-09-27/28/29/30 artist-view variant ---
+
+
+def test_TC_09_27_artist_view_filename_suffix(tmp_path):
+    # Spec: TC-09-27 — _filename_for(..., artist_view=True) appends " - artist"
+    # between the date stem and the extension; the bare form is suffix-less.
+    paths = _seed_paths(tmp_path, 1)
+    album = _make_album(paths, name="Memoirs")
+    today = date(2026, 4, 30)
+
+    full_html, full_pdf = report_module._filename_for(album, today)
+    art_html, art_pdf = report_module._filename_for(album, today, artist_view=True)
+
+    assert full_html == "Memoirs - 2026-04-30.html"
+    assert full_pdf == "Memoirs - 2026-04-30.pdf"
+    assert art_html == "Memoirs - 2026-04-30 - artist.html"
+    assert art_pdf == "Memoirs - 2026-04-30 - artist.pdf"
+
+
+def test_TC_09_28_artist_view_strips_cover_status_and_per_track(tmp_path):
+    # Spec: TC-09-28 — render_html(..., artist_view=True) omits cover-art,
+    # status row, and per-track section. Track listing + footer remain.
+    paths = _seed_paths(tmp_path, 2)
+    library = _FakeLibrary({
+        p: _make_track(p, title=f"Track {i}", lyrics_text=f"line {i}")
+        for i, p in enumerate(paths)
+    })
+    album = _make_album(paths, name="Memoirs")
+    today = date(2026, 4, 30)
+
+    full = render_html(album, library, today=today)
+    artist = render_html(album, library, today=today, artist_view=True)
+
+    # Full variant has all three blocks (target element opens, not bare
+    # class names, since the `.cover-art` CSS rule lives in the <style>
+    # block in both variants).
+    assert ('<img class="cover-art"' in full) or ('<div class="cover-art"' in full)
+    assert '<div class="status-row">' in full
+    assert '<section class="per-track">' in full
+
+    # Artist variant strips all three elements (CSS rules can remain).
+    assert '<img class="cover-art"' not in artist
+    assert '<div class="cover-art"' not in artist
+    assert '<div class="status-row">' not in artist
+    assert '<section class="per-track">' not in artist
+
+    # Shared elements remain in both: listing table + footer.
+    assert '<table class="tracks">' in artist
+    assert 'class="report-footer"' in artist
+    assert "Track 0" in artist and "Track 1" in artist
+
+
+def test_TC_09_29_render_report_writes_both_variants(tmp_path):
+    # Spec: TC-09-29 — render_report for full + artist_view produces four
+    # non-zero files in reports/.
+    paths = _seed_paths(tmp_path, 1)
+    library = _FakeLibrary({paths[0]: _make_track(paths[0])})
+    album = _make_album(paths, name="Memoirs")
+    reports = tmp_path / "reports"
+
+    today = date(2026, 4, 30)
+    full_html, full_pdf = render_report(album, library, reports_dir=reports, today=today)
+    art_html, art_pdf = render_report(
+        album, library, reports_dir=reports, today=today, artist_view=True,
+    )
+
+    children = sorted(p.name for p in reports.iterdir() if p.is_file())
+    assert children == [
+        "Memoirs - 2026-04-30 - artist.html",
+        "Memoirs - 2026-04-30 - artist.pdf",
+        "Memoirs - 2026-04-30.html",
+        "Memoirs - 2026-04-30.pdf",
+    ]
+    for p in (full_html, full_pdf, art_html, art_pdf):
+        assert p.stat().st_size > 0
+
+
+def test_TC_09_30_artist_variant_recovery_independent_of_full(tmp_path):
+    # Spec: TC-09-30 — cross-references Spec 10 TC-10-25. Approve-time
+    # render with both variants on disk, then simulate a Phase-2 mid-crash on
+    # the artist pair (full pair complete) and assert the load-time scan
+    # repairs only the artist pair.
+    from album_builder.persistence.atomic_pair import scan_reports_dir
+
+    paths = _seed_paths(tmp_path, 1)
+    library = _FakeLibrary({paths[0]: _make_track(paths[0])})
+    album = _make_album(paths, name="Memoirs")
+    reports = tmp_path / "reports"
+
+    # Full pair: complete on disk.
+    today = date(2026, 4, 30)
+    full_html, full_pdf = render_report(album, library, reports_dir=reports, today=today)
+    # Artist pair: only the html exists (Phase-2 mid-crash; pdf rename never
+    # ran, no .tmp survived either — orphan-final-only is the worst case for
+    # cross-variant cascade detection).
+    (reports / "Memoirs - 2026-04-30 - artist.html").write_text("orphan")
+
+    stats = scan_reports_dir(reports, sanitised_name="Memoirs")
+
+    # Full pair: byte-identical, untouched.
+    assert full_html.exists() and full_pdf.exists()
+    # Artist pair: orphan html removed.
+    assert not (reports / "Memoirs - 2026-04-30 - artist.html").exists()
+    # Stats: 1 complete (full) + 1 repaired (artist orphan).
+    assert stats["pairs_completed"] == 1
+    assert stats["pairs_repaired"] == 1

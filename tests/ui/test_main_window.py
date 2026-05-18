@@ -540,3 +540,65 @@ def test_redact_home_passes_through_when_home_absent() -> None:
 
     assert _redact_home("ENOSPC: write failed") == "ENOSPC: write failed"
     assert _redact_home(ValueError("oops")) == "oops"
+
+
+# Spec 09 §Errors + main_window.py:353-371 — _on_approve has an outer
+# `except Exception` catch-all so PyQt6 doesn't escalate uncaught slot
+# exceptions to qFatal. A regression that drops this branch would crash
+# the app on any non-OSError-family failure during approve.
+def test_on_approve_catches_unexpected_exception(main_window, monkeypatch) -> None:
+    from PyQt6.QtWidgets import QMessageBox
+
+    # Stub the modal dialog: addButton returns real QPushButtons (Qt-owned);
+    # we record them so the exec()->clickedButton() loop synthesises an
+    # "Approve and generate report" click without spinning the event loop.
+    add_calls: list = []
+    orig_add = QMessageBox.addButton
+
+    def _record_add(self, *a, **kw):
+        btn = orig_add(self, *a, **kw)
+        add_calls.append(btn)
+        return btn
+
+    monkeypatch.setattr(QMessageBox, "addButton", _record_add)
+    monkeypatch.setattr(QMessageBox, "exec", lambda self: 0)
+    monkeypatch.setattr(
+        QMessageBox, "clickedButton",
+        lambda self: add_calls[0] if add_calls else None,
+    )
+
+    # Capture QMessageBox.critical (catch-all uses .critical, not .warning).
+    critical_calls: list[tuple] = []
+    monkeypatch.setattr(
+        QMessageBox, "critical",
+        staticmethod(lambda *a, **kw: critical_calls.append(a) or 0),
+    )
+
+    # Make _store.approve raise something the (FileNotFoundError, ValueError,
+    # OSError, ExportFailed) tuple does NOT match.
+    def _raise(*a, **kw) -> None:
+        raise RuntimeError("simulated unexpected approve failure")
+
+    album = main_window._store.create(name="boom-album", target_count=1)
+    monkeypatch.setattr(main_window._store, "approve", _raise)
+
+    main_window._on_approve(album.id)
+
+    # Catch-all branch fired: critical dialog shown with type + message.
+    assert len(critical_calls) == 1
+    _parent, title, body = critical_calls[0][:3]
+    assert title == "Cannot approve"
+    assert "RuntimeError" in body
+    assert "simulated unexpected approve failure" in body
+
+    # Toast surfaced the type name (not the full message — that goes in
+    # the modal). Assert on the label text rather than isVisible(): the
+    # fixture's MainWindow isn't .show()n, so visibility cascades report
+    # False even after _toast.show() runs; show_message sets the text
+    # unconditionally and is the right signal.
+    toast_text = main_window._toast.message_label.text()
+    assert "Approve failed" in toast_text
+    assert "RuntimeError" in toast_text
+
+    # finally: block re-enabled the approve button.
+    assert main_window.top_bar.btn_approve.isEnabled()
