@@ -68,7 +68,9 @@ Some on-disk transactions span **two files** (the canonical instance is Spec 09 
 
 `album.sanitised_name` (referenced in the load-time scan below) is `sanitise_title(album.name)` — the canonical helper defined in Spec 08 §Symlink filenames and re-used by Spec 09 §File naming. Source-of-truth lives in Spec 08; this spec only consumes it.
 
-**Album-name constraint (UI-side validation, owned by Spec 02 §rename):** an album name MUST NOT match the regex `.* - \d{4}-\d{2}-\d{2}$` after `sanitise_title()`. This forbids names like `"Daily - 2026-04-30"` whose sanitised form would collide with the report-filename pattern `<sanitised-name> - YYYY-MM-DD.html`, allowing the load-time scan glob to false-match. The UI rejects such names with a validation error at create + rename time; on-disk hand-edits violating the constraint surface as `AlbumDirCorrupt` on load.
+**Variants — two pairs per date stem.** Spec 09 §File naming defines a **full report** pair (`<sanitised-name> - YYYY-MM-DD.{html,pdf}`) and an **artist-view variant** pair (`<sanitised-name> - YYYY-MM-DD - artist.{html,pdf}`). Each variant is its own independent atomic pair: the Phase-1 / Phase-2 invariant below applies to each pair separately, and the load-time scan repairs each pair independently — a half-pair in the artist variant must not cascade into deleting the full variant, and vice versa. The two variants are rendered back-to-back by `AlbumStore.approve()` but are not transactionally coupled to one another on disk; a crash between the two render calls is recovered by re-running approve (which is gated on the `.approved` marker, see Spec 09).
+
+**Album-name constraint (UI-side validation, owned by Spec 02 §rename):** an album name MUST NOT match the regex `.* - \d{4}-\d{2}-\d{2}$` after `sanitise_title()`. This forbids names like `"Daily - 2026-04-30"` whose sanitised form would collide with the report-filename pattern `<sanitised-name> - YYYY-MM-DD.html`, allowing the load-time scan glob to false-match. The same constraint covers the artist-view variant (whose date stem is also embedded mid-filename, before the trailing ` - artist`). The UI rejects such names with a validation error at create + rename time; on-disk hand-edits violating the constraint surface as `AlbumDirCorrupt` on load.
 
 **Invariant:** for an atomic pair `(A, B)` with final paths `path_a` and `path_b`:
 
@@ -83,28 +85,31 @@ Some on-disk transactions span **two files** (the canonical instance is Spec 09 
 | Between rename-A and rename-B | `path_a` final + `path_b.tmp` (no `path_b` final). | Load-time scan deletes both: the renamed `path_a` AND the leftover `path_b.tmp`. |
 | Post-Phase-2 | Both finals exist; no `.tmp`. | Clean state; no recovery. |
 
-**Load-time scan trigger and scope.** `AlbumStore.load(album)` runs the atomic-pair scan on every album that has a `reports/` subdirectory:
+**Load-time scan trigger and scope.** `AlbumStore.load(album)` runs the atomic-pair scan on every album that has a `reports/` subdirectory. The scan enumerates **both variants** (full and artist-view) for every distinct date stem and processes each pair independently:
 
 ```
 for stem in distinct_date_stems(album.reports_dir):
-    html_final = album.reports_dir / f"{album.sanitised_name} - {stem}.html"
-    pdf_final  = album.reports_dir / f"{album.sanitised_name} - {stem}.pdf"
-    html_tmp   = html_final.with_suffix(html_final.suffix + ".tmp")  # actually a unique-pid tmp; sketch
-    pdf_tmp    = pdf_final.with_suffix(pdf_final.suffix + ".tmp")
+    for suffix in ("", " - artist"):        # full variant first, then artist-view
+        html_final = album.reports_dir / f"{album.sanitised_name} - {stem}{suffix}.html"
+        pdf_final  = album.reports_dir / f"{album.sanitised_name} - {stem}{suffix}.pdf"
+        html_tmp_pattern = f"{album.sanitised_name} - {stem}{suffix}.html.*.tmp"
+        pdf_tmp_pattern  = f"{album.sanitised_name} - {stem}{suffix}.pdf.*.tmp"
 
-    has_html = html_final.exists()
-    has_pdf  = pdf_final.exists()
-    has_html_tmp = any(album.reports_dir.glob(f"{album.sanitised_name} - {stem}.html.*.tmp"))
-    has_pdf_tmp  = any(album.reports_dir.glob(f"{album.sanitised_name} - {stem}.pdf.*.tmp"))
+        has_html = html_final.exists()
+        has_pdf  = pdf_final.exists()
+        has_html_tmp = any(album.reports_dir.glob(html_tmp_pattern))
+        has_pdf_tmp  = any(album.reports_dir.glob(pdf_tmp_pattern))
 
-    if has_html != has_pdf:                 # exactly one final exists
-        unlink_if_exists(html_final, pdf_final)   # delete the one that did rename
-        unlink_all_matching(html_tmp_pattern, pdf_tmp_pattern)
-    elif has_html_tmp or has_pdf_tmp:       # tmps from a phase-1 crash
-        unlink_all_matching(html_tmp_pattern, pdf_tmp_pattern)
+        if has_html != has_pdf:                 # exactly one final exists
+            unlink_if_exists(html_final, pdf_final)   # delete the one that did rename
+            unlink_all_matching(html_tmp_pattern, pdf_tmp_pattern)
+        elif has_html_tmp or has_pdf_tmp:       # tmps from a phase-1 crash
+            unlink_all_matching(html_tmp_pattern, pdf_tmp_pattern)
 ```
 
-The scan is idempotent: a clean `reports/` (both finals, no tmps) is a no-op.
+`distinct_date_stems` must extract date stems for **both** the full pattern (`<name> - YYYY-MM-DD.{html,pdf}[.*.tmp]`) and the artist-view pattern (`<name> - YYYY-MM-DD - artist.{html,pdf}[.*.tmp]`). The two variants share the same date stem when generated by the same approve call; processing each suffix in a separate iteration guarantees the recovery logic for one variant can never observe or touch the other variant's files.
+
+The scan is idempotent: a clean `reports/` (both finals of both variants, no tmps) is a no-op.
 
 For PDF/HTML cleanup specifically, the load-time scan operates at the directory level and does **not** rely on `json.load`-style parse checks; the JSON-shape sanity check in §Errors & edge cases applies to JSON files only.
 
@@ -311,6 +316,8 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-10-22** (Phase 4) — Atomic pair Phase-1-mid-crash (both `.tmp` exist, no finals): load-time scan deletes both `.tmp` siblings; album status remains draft per Spec 02 self-heal.
 - **TC-10-23** (Phase 4) — Atomic pair Phase-2-mid-crash (one final renamed, one `.tmp` remaining): load-time scan deletes both the renamed final AND the leftover `.tmp`; album status remains draft per Spec 02 self-heal (no marker → not approved).
 - **TC-10-24** (Phase 4) — Album-name validation rejects names matching `.* - \d{4}-\d{2}-\d{2}$` after `sanitise_title()`; the rejection surfaces at create + rename time, not at approve time.
+- **TC-10-25** — Atomic pair two-variant enumeration: for a date stem with both the full pair (`{name} - {date}.{html,pdf}`) and the artist-view pair (`{name} - {date} - artist.{html,pdf}`) on disk, the load-time scan processes both pairs independently. A half-pair in the artist variant (one `.html` final, the matching `.pdf.*.tmp` from a Phase-2 crash, full variant complete) results in deletion of **only** the artist-pair members; the full pair survives byte-identically. The reverse case (half-pair in the full variant, artist complete) is also covered: full pair deleted, artist pair survives. Cross-references Spec 09 TC-09-30.
+- **TC-10-26** — Atomic pair date-stem extraction for artist variant: a `reports/` directory containing only artist-variant files (e.g., the full variant was manually deleted by the user) must still surface the date stem so the scan can decide whether the artist pair is complete or a half-pair. The extracted stem MUST be the date alone (`YYYY-MM-DD`), not include the ` - artist` suffix.
 
 ## Out of scope (v1)
 

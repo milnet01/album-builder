@@ -161,12 +161,18 @@ The two file writes are an atomic pair (see §Canonical approve sequence `step:r
 Report filenames embed the album name, which is user-supplied free text and may legitimately contain `/`, `:`, etc. They must be filesystem-safe.
 
 - The album name is sanitised through the **same `sanitise_title` helper Spec 08 uses for symlink filenames** (canonical helper — see Spec 08 §Symlink filenames for the full rule, including the trim-until-stable + UTF-8 byte-length safety net). If the result is empty, fall back to `album`.
-- PDF: `<sanitised-album-name> - YYYY-MM-DD.pdf`
-- HTML: `<sanitised-album-name> - YYYY-MM-DD.html`
+- **Full report** (kept locally, shown to the album owner):
+  - PDF: `<sanitised-album-name> - YYYY-MM-DD.pdf`
+  - HTML: `<sanitised-album-name> - YYYY-MM-DD.html`
+- **Artist-view variant** (rendered alongside the full report on every approve; intended for sharing with the album's artist / collaborators):
+  - PDF: `<sanitised-album-name> - YYYY-MM-DD - artist.pdf`
+  - HTML: `<sanitised-album-name> - YYYY-MM-DD - artist.html`
+  - Renders from the same Jinja2 template + same in-memory context as the full report, with `artist_view=True` driving the template to omit (a) the album cover image, (b) the approve-status row ("Approved … · N of M tracks · runtime total"), and (c) the entire per-track section block (covers, comments, lyrics). The shared track-listing table + footer remain identical between the two outputs.
+  - Persistence and recovery semantics are identical to the full report: each variant is its own atomic pair (Spec 10 §Atomic pair); a mid-render crash on either variant is repaired by the load-time scan independently of the other.
 - The `YYYY-MM-DD` date is the local date at approve time (not UTC, since the user reads it).
 - **No `_vN` suffix.** Re-approving the same album on the same day overwrites the previous PDF + HTML in place via the canonical approve sequence (Spec 02 §unapprove already deletes `reports/` recursively, so re-approve always lands in an empty `reports/` dir; there is no surviving prior report to bump). Earlier drafts of this spec defined a `_vN` rule; it was removed in the v0.5.0 prep sweep because the unapprove-deletes-reports invariant makes the suffix unreachable.
 
-Examples: `Memoirs of a Sinner - 2026-04-27.pdf`. An album named "Hits / Volume I" would produce `Hits _ Volume I - 2026-04-27.pdf`.
+Examples: `Memoirs of a Sinner - 2026-04-27.pdf` + `Memoirs of a Sinner - 2026-04-27 - artist.pdf`. An album named "Hits / Volume I" would produce `Hits _ Volume I - 2026-04-27.pdf` + `Hits _ Volume I - 2026-04-27 - artist.pdf`.
 
 ## Inputs
 
@@ -177,8 +183,10 @@ Examples: `Memoirs of a Sinner - 2026-04-27.pdf`. An album named "Hits / Volume 
 
 ## Outputs
 
-- `<settings.albums_folder>/<slug>/reports/<sanitised-album-name> - YYYY-MM-DD.pdf`
-- `<settings.albums_folder>/<slug>/reports/<sanitised-album-name> - YYYY-MM-DD.html`
+- `<settings.albums_folder>/<slug>/reports/<sanitised-album-name> - YYYY-MM-DD.pdf` (full report)
+- `<settings.albums_folder>/<slug>/reports/<sanitised-album-name> - YYYY-MM-DD.html` (full report)
+- `<settings.albums_folder>/<slug>/reports/<sanitised-album-name> - YYYY-MM-DD - artist.pdf` (artist-view variant)
+- `<settings.albums_folder>/<slug>/reports/<sanitised-album-name> - YYYY-MM-DD - artist.html` (artist-view variant)
 - `<settings.albums_folder>/<slug>/.approved` (empty marker file)
 - Mutation: `album.json.status = "approved"`, `approved_at = now`.
 
@@ -244,6 +252,10 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-09-24** — Lyrics line of 1000 chars renders inside the per-track block; the rendered HTML element width does not exceed parent column width — verified via WeasyPrint's layout report or a `<canvas>`-measure shim. CSS asserted to contain `overflow-wrap: anywhere` (or equivalent).
 - **TC-09-25** — In-flight serialisation: when `Album.approve()` is called while a draft `regenerate_album_exports` worker is still running, the approve waits (joins the worker) then runs its own export in `strict=True` mode. When `Album.approve()` is called while another `Album.approve()` is in flight, the approve button is disabled and the second click is dropped (no queueing).
 - **TC-09-26** — Approve button is wired to `Glyphs.CHECK + " Approve…"` per Spec 11 §Constants exposed in `theme.Glyphs`, not a hardcoded `✓` literal. Lock-prefix on the album-name display in the top bar uses `Glyphs.LOCK`, not a hardcoded `\U0001F512` literal.
+- **TC-09-27** — Artist-view filename suffix. `_filename_for(album, today, artist_view=True)` returns `(<sanitised> - YYYY-MM-DD - artist.html, <sanitised> - YYYY-MM-DD - artist.pdf)`; the bare `_filename_for(album, today)` (or `artist_view=False`) form returns the suffix-less full-variant names.
+- **TC-09-28** — Artist-view template stripping. `render_html(album, library, artist_view=True)` produces an HTML string that (a) does **not** contain the cover-art element (`<img class="cover-art">` / `<div class="cover-art">`), (b) does **not** contain the `<div class="status-row">` block, and (c) does **not** contain the `<section class="per-track">` block. The `<table class="tracks">` listing table and the `<footer class="report-footer">` are still present and byte-identical to the full-variant render given the same inputs.
+- **TC-09-29** — Approve renders both pairs. After a successful `AlbumStore.approve(album_id)`, `reports/` contains exactly four files: `{name} - {date}.html`, `{name} - {date}.pdf`, `{name} - {date} - artist.html`, `{name} - {date} - artist.pdf`. All four are non-zero size. Asserted via an exact-count check (not a glob that could pass with only the full variant present).
+- **TC-09-30** — Artist-view atomic-pair recovery is independent of the full variant. A simulated crash between `step:render-rename-html` and `step:render-rename-pdf` of the **artist** pair (with the **full** pair already complete on disk) leaves: full `.html` + full `.pdf` + artist `.html` + artist `.pdf.<pid>.<uuid>.tmp`. The Spec 10 §Atomic pair load-time scan removes both artist-pair members (the orphan `.html` final + the `.tmp` sibling) but **must not** touch the full-variant pair.
 
 (Visual regression — pixel-diff PDF vs golden — stays manual / opt-in. Not part of the TC contract because pixel-exact comparison is brittle.)
 

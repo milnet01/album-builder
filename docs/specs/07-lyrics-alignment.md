@@ -99,7 +99,12 @@ Sung-vocal accuracy expectation: ~80–90% of lines aligned within ±0.5 s on fi
 
 - `.lrc` files live next to the audio in `Tracks/`. They are part of the project and intended to be hand-editable.
 - Alignment status (none/queued/running/ready/failed) is **not persisted** — recomputed at scan time by checking whether the `.lrc` file exists and is newer than the audio file.
-- Whisper model cache: `~/.cache/album-builder/whisper-models/`. Persists across app restarts. Re-download only if deleted or corrupt.
+- Whisper model cache: managed by the upstream libraries WhisperX depends on, **not by Album Builder**. Defaults:
+  - **faster-whisper transcription model** → HuggingFace Hub cache (`~/.cache/huggingface/hub/` on Linux unless `HF_HUB_CACHE`, `HUGGINGFACE_HUB_CACHE`, or `XDG_CACHE_HOME` is set).
+  - **wav2vec2 alignment model (English default `WAV2VEC2_ASR_BASE_960H`)** → torch hub checkpoints (`~/.cache/torch/hub/checkpoints/` on Linux unless `TORCH_HOME` is set).
+  - **Non-English alignment models** are selected at runtime by WhisperX based on detected language and may live under either cache root.
+
+  Both caches persist across app restarts and survive an Album Builder uninstall. Re-download only if the cache directory is deleted or corrupt. Album Builder does not own, write to, or clean up either cache — the `whisperx_models_cached(model_size)` probe in `services/alignment_service.py` queries them read-only to decide whether to suppress the first-download dialog.
 
 ## Errors & edge cases
 
@@ -107,7 +112,7 @@ Sung-vocal accuracy expectation: ~80–90% of lines aligned within ±0.5 s on fi
 |---|---|
 | `lyrics_text` is None or empty | Status `no lyrics text`. Lyrics panel shows helper: "Add lyrics via the `lyrics-eng` ID3 tag in your tagging tool of choice." (No `.txt` sidecar is read in v1.) |
 | Alignment process killed mid-run | No `.lrc` produced; status reverts to `not yet aligned`. Re-running is safe and idempotent. |
-| Whisper model download interrupted (user kills app, network drop) | Partial blob in `~/.cache/album-builder/whisper-models/.partial` is detected on next launch; resume via `huggingface_hub`'s built-in resume on the same `etag`, or — if etag drifted — discard and restart. Disk usage of `.partial` is bounded at the model size; never leaked. |
+| Whisper model download interrupted (user kills app, network drop) | Resume is owned by the upstream caches: `huggingface_hub` resumes from its `.incomplete` blob on the same `etag` (discarding and restarting if the etag drifted); `torch.hub.download_url_to_file` retries from scratch. Partial-blob disk usage is bounded at the model size by each upstream library; Album Builder does not leak any state of its own. |
 | Whisper model download fails (after retry) | One automatic retry with backoff; on second failure, show error with a "Retry" button. Album Builder is otherwise fully functional. |
 | Existing `.lrc` is malformed | Treat as `not yet aligned`; offer to regenerate. Keep the malformed one as `<stem>.lrc.bak`. |
 | Audio file shorter than expected by lyrics text | Whisper returns whatever it can; trailing lines may have no good timestamp. Mark them at end-of-track. |
