@@ -350,6 +350,25 @@ class MainWindow(QMainWindow):
                 self._show_toast(f"Approve failed: {exc}")
                 QMessageBox.warning(self, "Cannot approve", str(exc))
                 return
+            except Exception as exc:
+                # Catch-all for unexpected exceptions: without this, PyQt6
+                # escalates uncaught slot exceptions to qFatal and aborts
+                # the process. logger.exception writes the full traceback
+                # to stderr/journal; traceback.print_exc mirrors it to
+                # stderr unconditionally so a terminal-launched run shows
+                # it directly for copy-paste reporting.
+                import traceback
+                approve_failed = True
+                logger.exception("approve failed: unexpected exception")
+                traceback.print_exc()
+                self._show_toast(f"Approve failed: {type(exc).__name__}")
+                QMessageBox.critical(
+                    self, "Cannot approve",
+                    f"Unexpected error during approve:\n\n"
+                    f"{type(exc).__name__}: {exc}\n\n"
+                    "Full traceback printed to terminal/journal.",
+                )
+                return
         finally:
             # Re-enable on failure paths; success path hides the button via
             # TopBar.set_current below.
