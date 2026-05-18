@@ -8,6 +8,33 @@ Working roadmap for the Album Builder app. Tracks completed phases, in-flight fi
 
 ---
 
+## ✅ v0.6.1 — WhisperX UX + artist-view report + post-feature debt sweep (2026-05-18)
+
+Maintenance release rolling up the seven commits after the v0.6.0 ship plus a `/debt-sweep` follow-up. No new feature spec; the changes are in-scope to existing specs (07, 09, 10) with amendments folded in.
+
+**Shipped (commit chain v0.6.0..HEAD, oldest → newest):**
+
+- `34091f1` **fix(ui): suppress align-now download dialog when WhisperX models are cached.** First-run download dialog (Spec 07 §Alignment job) was firing on every Align-now click. `whisperx_models_cached(model_size)` introduced in `services/alignment_service.py` probes the two upstream caches (HuggingFace Hub for the faster-whisper transcription model + torch hub for the wav2vec2 alignment model) and suppresses the dialog when both are present. Best-effort: non-English audio may still trigger a smaller language-specific download silently (`whisperx_models_cached` docstring documents the partial-false-positive trade-off).
+- `d00c83b` **fix(ui): correct WhisperX cache path; show version in title bar (v0.6.1).** Earlier code looked under `~/.cache/album-builder/whisper-models/` for the cache, which never existed — WhisperX downloads to upstream library defaults instead. Fixed by anchoring on `~/.cache/huggingface/hub/` + `~/.cache/torch/hub/checkpoints/` (each honours its upstream env-var overrides). Title bar now reads `Album Builder v<version>` (TC-01-equivalent test in `test_main_window_title_includes_version`).
+- `0007bf4` **chore(docs): tidy CLAUDE.md — restructure inherited-rules section.** Pulled inherited-rules into its own section instead of inlining per-rule references, so the file scans more cleanly without altering any rule semantics.
+- `46364ae` **feat(report): generate artist-view PDF variant alongside full report.** New `artist_view: bool` kwarg threaded through `render_html` / `render_report` / `_filename_for`. Approve now writes four files per date stem: `{name} - {date}.{html,pdf}` (full report) + `{name} - {date} - artist.{html,pdf}` (stripped-down variant for sharing — omits cover image, approve-status row, and per-track section block; track listing + footer remain). The two variants share a single template render; only the `artist_view` flag changes between calls.
+- `0e172a9` **fix(ui): catch unexpected exceptions in MainWindow._on_approve.** Outer `except Exception` catch-all so PyQt6 doesn't escalate uncaught slot exceptions to qFatal and abort the process. Surfaces via `logger.exception` + `traceback.print_exc` + a toast (type name) + `QMessageBox.critical` (full type + message + "see terminal/journal").
+- `f933346` **test(ui): TC-06-19 transport-play -> library-row glyph integration.** End-to-end coverage of the transport-bar play/pause toggle flipping the per-row glyph in the library pane (previously each leg was tested in isolation).
+- `d7e871c` **test(audit): /test-audit 2026-05-18 sweep — 18 actionable fixes.** First full /test-audit pass on the repo. 140 raw findings -> 24 actionable -> 18 closed inline; 6 deferred with documented rationale (see "Test Audit 2026-05-18" subsection below).
+
+**Debt-sweep follow-up (post-v0.6.1, this work):**
+
+- **Trivial doc fixes (commit `c5e1760`):** `CLAUDE.md` referenced `/mnt/Storage/CLAUDE.md` (retired 2026-05-08); rewritten to `/mnt/Games/CLAUDE.md`. `.gitignore` adds `.directory` so KDE Dolphin metadata stops appearing as untracked.
+- **Spec amendments:** **Spec 07** §Persistence + §Errors rewritten so Whisper cache locations describe upstream library defaults + standard env-var overrides (`HF_HUB_CACHE`, `HUGGINGFACE_HUB_CACHE`, `XDG_CACHE_HOME`, `TORCH_HOME`) rather than baking in the literal `~/.cache/...` paths — keeps the spec correct if HuggingFace / torch change their default cache scheme or the user overrides via env. **Spec 09** §File naming, §Outputs grow to document the artist-view variant (filename suffix ` - artist`, template stripping rules); new TC-09-27 (filename suffix), TC-09-28 (template stripping), TC-09-29 (approve writes 4 files), TC-09-30 (artist-pair recovery independent of full pair). **Spec 10** §Atomic pair gains a "two pairs per date stem" subsection + amended pseudo-code that iterates `("", " - artist")`; new TC-10-25 (independent recovery) and TC-10-26 (date-stem extraction from artist-only-on-disk state).
+- **Fix — `atomic_pair.py` artist-variant half-pair gap.** Before this fix the load-time scan enumerated only the full-variant filenames; a Phase-2 mid-crash on the artist pair left a stale half-pair that subsequent scans wouldn't repair, and worse, the existing branch logic could be tripped into deleting the wrong pair. `scan_reports_dir` now loops `for variant in ("", " - artist"):` per date stem, processing each pair independently. Five new tests (TC-10-25 forward + reverse + clean, TC-10-26 half-pair + complete) prove the independence; existing 7 atomic-pair tests still pass.
+- **Test coverage:** new `test_TC_09_27..30` cover the artist-view variant. New `test_on_approve_catches_unexpected_exception` exercises the `0e172a9` catch-all branch (mocks `_store.approve` to raise `RuntimeError`; asserts toast + critical dialog + button re-enabled). `test_album_store.py::test_approve_then_unapprove_round_trip` glob tightened from `any(*.pdf)` / `any(*.html)` to an exact-4-file count check (catches a regression that drops one variant).
+
+**Test count:** 549 → 562 passing (+13: 5 atomic-pair + 4 artist-view render + 1 catch-all + 3 from earlier in the cycle). Ruff clean. No new third-party deps. ROADMAP fully `✅`-flipped — every status marker closed.
+
+**Convergence trace:** seven feature/fix commits landed 2026-05-18; post-feature `/debt-sweep` produced 8 findings (2 trivial fixed inline, 6 behavioural closed in this entry); spec amendments cold-eyed against actual implementation before tests written; RED-GREEN cycle on atomic-pair fix (5 tests fail with old code, pass with new); no `/audit` or `/indie-review` re-run since the diff is scoped + spec-anchored (atomic-pair branch is the only correctness change and it is contract-tested at the variant boundary).
+
+---
+
 ## ✅ v0.6.0 — Phase 5: Track Usage Indicator (2026-05-01)
 
 Cross-album popularity badge in the library pane. Implements **Spec 13 in full** (TC-13-01..32; 47 new tests). Spec went through 4 cold-eyes review rounds (~30 → ~20 → 3 → 0 actionable findings) before this implementation; plan went through writing-plans + a 21-task TDD execution loop.
@@ -969,7 +996,9 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 
 ---
 
-*Last reviewed: 2026-05-01 — v0.5.3 (deferred-items sweep) shipped: closed L3-M4 (DebouncedWriter timer GC) and L7-M1 (stale-segment TOCTOU v1-acceptance doc). 502 passing tests; ruff clean. ROADMAP is fully `✅`-flipped — only `🔭 Future / deferred` features remain.*
+*Last reviewed: 2026-05-18 — v0.6.1 (WhisperX UX + artist-view report + post-feature debt sweep) shipped. Seven feature/fix commits since v0.6.0 + a /debt-sweep follow-up amending Specs 07/09/10 and closing a real correctness bug in `atomic_pair.py` (artist-variant half-pair was invisible to the load-time scan). 562 passing tests (+13 from the sweep); ruff clean. ROADMAP fully `✅`-flipped — only `🔭 Future / deferred` features remain.*
+
+*Previously: 2026-05-01 — v0.5.3 (deferred-items sweep) shipped: closed L3-M4 (DebouncedWriter timer GC) and L7-M1 (stale-segment TOCTOU v1-acceptance doc). 502 passing tests; ruff clean.*
 
 *Previously: 2026-04-30 — v0.5.0 (Phase 4: Export & Approval) shipped. 4-round pre-implementation spec sweep (39 → 17 → 3 → 0 findings) + implementation + 3-round post-implementation `/audit` + `/indie-review` (40 → 3 → 0 findings) + full-codebase audit (ruff/bandit/semgrep/gitleaks all clean). 467 passing tests (+52 since v0.4.2). Specs 02 / 08 / 09 / 10 / 11 grew from 996 → ~1,140 lines with 16 new TC contracts. Phases 1–4 are feature-complete and hardened.*
 

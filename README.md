@@ -4,12 +4,14 @@ A small PyQt6 desktop app for curating albums from a folder of audio recordings,
 
 ## Status
 
-**v0.5.0 — Phase 4: Export & Approval (shipped 2026-04-30).** Phases 1–4 are
-feature-complete. The app scans `Tracks/`, curates albums via a per-row toggle
-column + drag-reorder pane, syncs lyrics during preview-play (WhisperX +
-wav2vec2 forced alignment, opt-in), and on approve generates an M3U +
-numbered-symlink folder + PDF/HTML report under `Albums/<slug>/`. State
-persists across launches; library refreshes live when `Tracks/` changes.
+**v0.6.1 — Phase 5: Track Usage Indicator (shipped 2026-05-18).** Phases 1–5
+are feature-complete. The app scans `Tracks/`, curates albums via a per-row
+toggle column + drag-reorder pane, syncs lyrics during preview-play (WhisperX
++ wav2vec2 forced alignment, opt-in), shows a cross-album usage badge so
+tracks already on approved albums are visible at a glance, and on approve
+generates an M3U + numbered-symlink folder + PDF/HTML report (full report
+plus a stripped-down artist-view variant for sharing) under `Albums/<slug>/`.
+State persists across launches; library refreshes live when `Tracks/` changes.
 
 See [`ROADMAP.md`](ROADMAP.md) for the full release log and `docs/plans/` for
 per-phase implementation details.
