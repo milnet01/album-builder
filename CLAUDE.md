@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Project-specific guidance. Layers on top of `~/.claude/CLAUDE.md` and `/mnt/Storage/CLAUDE.md` — see *Inherited rules* below.
+Project-specific guidance. Layers on top of `~/.claude/CLAUDE.md` and `/mnt/Games/CLAUDE.md` — see *Inherited rules* below.
 
 ## What this is
 
@@ -56,6 +56,6 @@ Signals flow up via `pyqtSignal(object)`. Disk writes flow down through `Debounc
 Global rules apply in full unless this file overrides them — don't restate, follow:
 
 - **`~/.claude/CLAUDE.md`** — development discipline (§1-5: no workarounds without root-cause fix, shortest correct implementation, reuse before rewriting, six-month test, current external-library idioms), git push cadence (§6: public repo push freely; private batch + confirm), PR-workflow opt-in (§7), and the **Karpathy clarity rules** (§8-12: surface ambiguity, push back when a simpler path exists, reproduce-before-fix for bugs, stay in your lane on edits, state a verify-step plan for multi-step work).
-- **`/mnt/Storage/CLAUDE.md`** — privileged commands use `SUDO_ASKPASS=/usr/libexec/ssh/ksshaskpass sudo -A -p "Claude Code: <action>"`.
+- **`/mnt/Games/CLAUDE.md`** — privileged commands use `SUDO_ASKPASS=/usr/libexec/ssh/ksshaskpass sudo -A -p "Claude Code: <action>"`.
 
 Public GitHub repo (`milnet01/album-builder`) — push freely on main; free Linux CI minutes.
