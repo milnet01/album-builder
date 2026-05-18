@@ -367,3 +367,58 @@ def test_library_pane_swap_emits_data_changed_only_for_affected_rows(
     assert affected_rows == [0, 1], (
         f"TC-06-19: swap emits dataChanged for rows 0+1 only; got {affected_rows}"
     )
+
+
+# ---------- TC-06-19 (transport-bar -> row glyph integration) ------------
+
+# Spec: TC-06-19 — clicking the transport-bar play button (after a track is
+# loaded as the source) flips the corresponding library row's glyph from
+# PLAY to PAUSE. Direct integration check of:
+#   TransportBar.btn_play.clicked
+#     -> Player.toggle() -> play()
+#     -> state_changed(PLAYING)
+#     -> MainWindow._on_player_state_changed_for_rows
+#     -> LibraryPane.set_active_play_state(source, True)
+#     -> row's _play column DisplayRole flips to Glyphs.PAUSE
+#
+# Each leg has a unit test; the wire from transport-bar click through to
+# the library-row glyph was not covered end-to-end. Reported user bug:
+# "If I start playing a song from the player, it doesn't update the play
+# button in the track list."
+def test_transport_play_flips_library_row_glyph(main_window, qtbot) -> None:
+    win = main_window
+    tracks = list(win._library_watcher.library().tracks)
+    target = tracks[0]
+
+    # Load the source the same way startup-restore does — set_source
+    # only (no play). Initial library glyph: PLAY.
+    win._player.set_source(target.path)
+    qtbot.wait(50)
+    play_col = _play_col()
+    proxy = win.library_pane._proxy
+    target_row = next(
+        i for i in range(proxy.rowCount())
+        if win.library_pane._model.track_at(
+            proxy.mapToSource(proxy.index(i, 0)).row()
+        ).path == target.path
+    )
+    src_idx = win.library_pane._model.index(
+        proxy.mapToSource(proxy.index(target_row, play_col)).row(), play_col,
+    )
+    assert win.library_pane._model.data(
+        src_idx, Qt.ItemDataRole.DisplayRole,
+    ) == Glyphs.PLAY
+
+    # User clicks the transport-bar play button. Wait for the real
+    # QMediaPlayer to transition to PlayingState (no _state bypass —
+    # this is the integration that the user-reported bug exercises).
+    win.now_playing_pane.transport.btn_play.click()
+    qtbot.waitUntil(
+        lambda: win._player.state() == PlayerState.PLAYING, timeout=3000,
+    )
+
+    assert win.library_pane._model.data(
+        src_idx, Qt.ItemDataRole.DisplayRole,
+    ) == Glyphs.PAUSE, (
+        "TC-06-19: transport-bar play -> library row glyph must flip to PAUSE"
+    )
