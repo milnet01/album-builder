@@ -1,6 +1,6 @@
 # 03 — Album Switcher
 
-**Status:** Draft · **Last updated:** 2026-04-28 · **Depends on:** 00, 02, 10, 11
+**Status:** Implemented (Phase 2) · **Last updated:** 2026-05-18 · **Depends on:** 00, 02, 10, 11
 
 ## Purpose
 
@@ -27,14 +27,20 @@ A dropdown at the top of the window that lists all known albums, lets the user s
 
 ## Outputs
 
-- A `signal current_album_changed(Album | None)` that drives every other UI pane.
-- Persists `current_album_id` to `.album-builder/state.json` so the choice is remembered across sessions.
+The `AlbumSwitcher` widget exposes four outbound signals consumed by `MainWindow`:
+
+- `current_album_changed(UUID | None)` — emitted on selection change; drives every other UI pane.
+- `new_album_requested()` — emitted when the user picks **+ New album** from the dropdown.
+- `rename_requested(UUID)` — emitted when the user picks **Rename current…**.
+- `delete_requested(UUID)` — emitted when the user picks **Delete current…**.
+
+Persists `current_album_id` to `.album-builder/state.json` so the choice is remembered across sessions.
 
 ## Persistence
 
 `current_album_id` is project-state, persisted to `.album-builder/state.json` along with `last_played_track_path` (owned by Spec 06) and window geometry. The full schema is canonically defined in **Spec 10 §`state.json` schema (v1)**. This spec owns the *meaning* of `current_album_id` (which album is showing); Spec 10 owns the *bytes*.
 
-Written atomically (Spec 10) on every change, debounced to **250 ms** of idle (the same window all UI mutations use — Spec 10 §Debounce). This prevents one write per pixel during splitter drag.
+Written atomically (Spec 10) on every change, debounced to **250 ms** of idle (the same window all UI mutations use — Spec 10 §Debounce). This collapses a rapid burst of switcher clicks (or any other state-mutating action) into a single write.
 
 ## AlbumStore (data shape — referenced from Spec 02 + Spec 04 + Spec 05)
 
@@ -42,19 +48,24 @@ The dropdown reads from a long-lived `AlbumStore` service. It is the *only* obje
 
 ```python
 class AlbumStore(QObject):
-    # Lifecycle signals — Spec 02 transitions emit one each
-    album_added   = pyqtSignal(Album)        # create()
-    album_removed = pyqtSignal(UUID)         # delete()
-    album_renamed = pyqtSignal(Album)        # rename()
-    current_album_changed = pyqtSignal(object)  # UUID | None — set_current() or implicit-on-delete
+    # Lifecycle signals. The concrete idiom is `pyqtSignal(object)` with the
+    # payload type captured in a trailing comment (PyQt6 meta-type system
+    # mis-handles custom dataclasses through typed signal signatures, so
+    # `object` is the right marshalling shape; see services/album_store.py
+    # for the rationale comment).
+    album_added           = pyqtSignal(object)   # Album      — create()
+    album_removed         = pyqtSignal(object)   # UUID       — delete()
+    album_renamed         = pyqtSignal(object)   # Album      — rename()
+    current_album_changed = pyqtSignal(object)   # UUID | None — set_current() / implicit-on-delete
 
-    def __init__(self, albums_dir: Path) -> None: ...
+    def __init__(self, albums_dir: Path, *, parent: QObject | None = None) -> None: ...
 
     # Read API
     def list(self) -> list[Album]                          # alphabetical by name (case-insensitive locale)
     def get(self, album_id: UUID) -> Album | None
     def folder_for(self, album_id: UUID) -> Path | None
-    def rescan(self) -> None                               # walks Albums/ — used in tests + on file-watcher tick
+    def rescan(self) -> None                               # walks Albums/ — used in tests + at construction
+    def needs_regen(self, album_id: UUID) -> bool          # Spec 08 drift-detection: flagged on load self-heal
     @property
     def current_album_id(self) -> UUID | None
 
@@ -63,9 +74,10 @@ class AlbumStore(QObject):
     def create(self, *, name: str, target_count: int) -> Album
     def rename(self, album_id: UUID, new_name: str) -> None
     def delete(self, album_id: UUID) -> None               # moves folder to Albums/.trash/<slug>-YYYYMMDD-HHMMSS/
-    def approve(self, album_id: UUID) -> None              # service-level, see Spec 02 §approve
+    def approve(self, album_id: UUID, *, library) -> None  # service-level, see Spec 02 §approve. `library` is REQUIRED.
     def unapprove(self, album_id: UUID) -> None
     def schedule_save(self, album_id: UUID) -> None        # debounced 250 ms write per Spec 10
+    def schedule_export(self, album_id: UUID, library) -> None  # Spec 08 drift-detection: draft re-export pass
     def flush(self) -> None                                # synchronous flush of all pending writes (used in closeEvent)
 ```
 
@@ -77,7 +89,7 @@ This data shape is referenced (rather than re-declared) by Spec 02 (state machin
 |---|---|
 | `current_album_id` in state but album folder gone | Fallback to first alphabetical album; clear the stale id. |
 | No albums on disk | Empty state described above; the rest of the UI shows neutral "select an album" placeholders. |
-| Album folder exists but `album.json` is corrupt | Skip that album with a one-line warning toast and a console log. Don't crash startup. |
+| Album folder exists but `album.json` is corrupt | Skip that album with a console log warning (`AlbumDirCorrupt`) and continue the rescan; the rest of the library loads. Don't crash startup. *Note: as of v0.6.1, the user-facing toast pathway for corrupt-album warnings is not wired — only the log surface is. Adding a toast surface is open for a future tooltip-aware logger handler.* |
 | User picks an approved album | The library and middle panes show selections but disable all edit affordances (toggles greyed, drag handles invisible). |
 
 ## Visual rules
@@ -86,30 +98,31 @@ This data shape is referenced (rather than re-declared) by Spec 02 (state machin
   - Under-target draft (`selected_count < target_count`) → `accent-warm` (`#f6c343`).
   - At-target draft (`selected_count == target_count`) → `success` (`#10b981`).
   - Approved → `text-disabled` (`#4a4d5a`) — the "locked-grey" the prose used to refer to.
-- **Prefix glyphs are stackable, not exclusive.** A row that is *both* approved *and* the currently-active selection renders both prefixes in this exact order: `✓ 🔒 <album name>` (active-checkmark first, lock-glyph second, then the name with no leading space). Prefixes never replace each other.
+- **Prefix glyphs are stackable, not exclusive.** A row that is *both* approved *and* the currently-active selection renders both prefixes in this exact order: `Glyphs.CHECK Glyphs.LOCK <album name>` (active-checkmark first, lock-glyph second, then the name with no leading space). Prefixes never replace each other.
 - The pill's gradient uses Spec 11's `success → success-dark` if the current album is approved, the theme's `accent-primary-1 → accent-primary-2` (purple/magenta) otherwise.
 
 ## Test contract
 
 Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-03-NN` marker.
 
-**Phase status — every TC below is Phase 2.** AlbumStore + AlbumSwitcher land in Phase 2 (see `docs/plans/2026-04-28-phase-2-albums.md`); until that plan executes, no `tests/` file will match these IDs on `grep`. The plan's "Test contract crosswalk" section maps every TC here to its target test file.
+**Phase status — shipped in v0.2.0 (Phase 2).** Coverage: `tests/services/test_album_store.py` (TC-03-01..05, TC-03-08..14) and `tests/ui/test_album_switcher.py` + `tests/ui/test_top_bar.py` (TC-03-06, TC-03-13b, TC-03-04 visual).
 
 - **TC-03-01** — `AlbumStore.list()` returns the loaded albums sorted **case-insensitive locale-aware** by `name`; rename moves the entry to the new sort position.
-- **TC-03-02** — `AlbumStore.list()` reflects the on-disk filesystem state at call time (re-walks `Albums/`); not cached.
+- **TC-03-02** — `AlbumStore.list()` returns the in-memory view sorted alphabetically; `AlbumStore.rescan()` re-walks `Albums/` (called once at construction, and on demand from tests). The dropdown stays current via lifecycle signals + explicit `rescan()` calls, not by re-walking on every read.
 - **TC-03-03** — Setting `current_album_id` to a UUID not in `AlbumStore` raises (or no-ops with a warning) — never silently sets a dangling pointer.
 - **TC-03-04** — The switcher dropdown shows one entry per album with the correct badge: `selected/target` for drafts, `✓` for approved.
 - **TC-03-05** — Selecting an album from the dropdown emits `current_album_changed(Album)` exactly once with the chosen album.
 - **TC-03-06** — Empty state (zero albums on disk): pill reads `▾ No albums · + New album`; clicking the pill opens the create dialog directly (skipping the dropdown).
 - **TC-03-07** — `state.json` persists `current_album_id`; restarting the app restores the previously-selected album.
 - **TC-03-08** — Corrupt `state.json` (unparseable JSON, missing keys) → fall back to first alphabetical album; warning logged; `state.json` rewritten.
-- **TC-03-09** — `current_album_id` references a deleted album → fall back to first alphabetical; clear the stale id from `state.json`. Implementation note: MainWindow's restoration block does an ad-hoc `store.get(state.current_album_id)` lookup BEFORE calling `set_current(...)`, rather than calling `set_current` directly and catching the `ValueError`. Both paths satisfy TC-03-09; the lookup-first approach avoids the spurious exception when the persisted id is stale.
+- **TC-03-09** — `current_album_id` references a deleted album → fall back to first alphabetical; clear the stale id from `state.json`. (MainWindow's restoration block does a `store.get(...)` lookup before `set_current(...)` to avoid the spurious `ValueError` on a stale id; equivalent to set-then-catch.)
 - **TC-03-10** — `state.json` writes are atomic (Spec 10) and debounced **250 ms** (the canonical app-wide window — Spec 10 §Debounce) — splitter-drag does not produce one write per pixel.
 - **TC-03-11** — An album folder whose `album.json` is corrupt is skipped on load with a one-line warning toast and a console log; app start does not crash.
 - **TC-03-12** — Approved albums in the dropdown have the `🔒` lock-icon prefix.
 - **TC-03-13** — The currently-active album in the dropdown has the `✓` checkmark prefix.
 - **TC-03-13b** — A row that is both approved and currently active renders both prefixes in order `✓ 🔒` (active-first, lock-second). Prefixes are stackable, not exclusive.
-- **TC-03-14** — `AlbumStore` emits `album_added`, `album_removed`, `album_renamed` signals when corresponding filesystem changes are detected; the dropdown refreshes in response.
+- **TC-03-14** — `AlbumStore` emits `album_added`, `album_removed`, `album_renamed` signals on corresponding in-process mutations (`create`, `delete`, `rename`); the dropdown refreshes in response.
+- **TC-03-15** — `AlbumStore.flush()` synchronously drains all pending debounced writes; `MainWindow.closeEvent` calls it before `super().closeEvent` so an ungraceful exit cannot lose an in-flight album-state mutation.
 
 ## Out of scope (v1)
 

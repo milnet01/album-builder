@@ -1,5 +1,7 @@
 # Album Builder — Phase 3A: Audio Playback Implementation Plan
 
+> **Historical note (2026-05-18):** This plan was executed in v0.3.0 (see `ROADMAP.md §v0.3.0`). Retained for reference; do not re-execute. Any divergence between this plan and the current specs in `docs/specs/` is plan-historical — the specs (and the code) win. References to a future "Phase 4 plan" should be read as the ROADMAP `§v0.5.0` entry; Phase 4 shipped via a 4-round spec sweep + direct implementation, no separate plan doc was written. v0.6.x is the current series at time of historical-mark.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Bring up audio playback. After this phase the user can click a per-row preview-play button on either the library pane or the album-order pane and hear the track through a transport bar in the right pane (now-playing). Volume + mute persist across launches; the last-played track is restored paused at zero. All Spec 00 keyboard shortcuts are wired (closing indie-review Theme E). The lyrics panel area is a placeholder — synchronized scrolling lyrics + alignment land in Phase 3B.

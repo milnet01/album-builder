@@ -1,5 +1,7 @@
 # Phase 3B: Lyrics Alignment & Display Implementation Plan
 
+> **Historical note (2026-05-18):** This plan was executed in v0.4.0 (see `ROADMAP.md §v0.4.0`). Retained for reference; do not re-execute. Any divergence between this plan and the current specs in `docs/specs/` is plan-historical — the specs (and the code) win. **Specific drift:** §Task 7 step 2 below references `~/.cache/album-builder/whisper-models/` for the WhisperX cache probe; this path was never created and is superseded by Spec 07 §Persistence's upstream-cache anchoring (`~/.cache/huggingface/hub/` + `~/.cache/torch/hub/checkpoints/`, plus their env-var overrides). v0.6.x is the current series at time of historical-mark.
+
 > **For agentic workers:** Use TDD per task. Each task = `# Spec: TC-07-NN` markers wired to the test contract crosswalk at the end of this doc.
 
 **Goal:** Show synchronized scrolling lyrics in the now-playing pane, generated via local ML forced-alignment (WhisperX + wav2vec2), cached as `.lrc` sidecars, opt-in.

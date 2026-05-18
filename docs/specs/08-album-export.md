@@ -1,6 +1,6 @@
 # 08 — Album Export (M3U + Symlink Folder)
 
-**Status:** Draft · **Last updated:** 2026-04-30 · **Depends on:** 00, 01, 02, 04, 05, 10, 11
+**Status:** Implemented (Phase 4) · **Last updated:** 2026-05-18 · **Depends on:** 00, 01, 02, 04, 05, 10, 11
 
 ## Purpose
 
@@ -47,10 +47,10 @@ UTF-8, BOM-less, LF line endings. Format:
 #EXTART:18 Down
 
 #EXTINF:281,18 Down - something more (calm)
-/mnt/Storage/Scripts/Linux/Music_Production/Tracks/WhatsApp Audio 2026-04-26 at 18.15.35.mpeg
+/abs/path/to/Tracks/WhatsApp Audio 2026-04-26 at 18.15.35.mpeg
 
 #EXTINF:137,18 Down - memoirs intro
-/mnt/Storage/Scripts/Linux/Music_Production/Tracks/WhatsApp Audio 2026-04-27 at 07.53.24.mpeg
+/abs/path/to/Tracks/WhatsApp Audio 2026-04-27 at 07.53.24.mpeg
 …
 ```
 
@@ -148,7 +148,7 @@ def regenerate_album_exports(album, library, *, strict: bool = False):
 
 `_commit_export(folder, staging)` is the **promotion step**. It is **NOT a single atomic operation** — POSIX provides no whole-folder-content-swap primitive that preserves selected pre-existing files (`album.json`, `.approved`, `reports/`). The contract is therefore:
 
-> **Commit invariant — eventually consistent within bounded time.** During commit, the live folder may briefly hold an inconsistent symlink/m3u set. The next export pass (triggered by any subsequent mutation, OR by `AlbumStore.load()` self-heal) will repair the state.
+> **Commit invariant — eventually consistent within bounded time.** During commit, the live folder may briefly hold an inconsistent symlink/m3u set. The next export pass (triggered by any subsequent mutation, OR by `AlbumStore.rescan()` self-heal) will repair the state.
 
 The promotion sequence:
 1. Snapshot `existing = {p for p in folder.iterdir() if p.is_symlink()}`.
@@ -160,11 +160,11 @@ The promotion sequence:
 
 | Crash window | On-disk state | Recovery (next launch OR next mutation) |
 |---|---|---|
-| Before step 1 (during staging build) | `.export.new/` exists with partial symlinks; live folder unchanged. | `AlbumStore.load()` detects `.export.new/` → schedules a regeneration on the next mutation, or wipes it on clean shutdown if no mutation occurs. The live folder is consistent with the *previous* state. |
+| Before step 1 (during staging build) | `.export.new/` exists with partial symlinks; live folder unchanged. | `AlbumStore.rescan()` detects `.export.new/` → schedules a regeneration on the next mutation, or wipes it on clean shutdown if no mutation occurs. The live folder is consistent with the *previous* state. |
 | During steps 1–4 of `_commit_export` | Live folder may have a mix of new + old symlinks; M3U is whichever the last successful os.replace left. | Next export pass re-runs the full sequence; the "snapshot existing → rename in → unlink stale" loop converges to the canonical state. |
 | After step 4 (clean) | Live folder fully updated; staging may or may not be cleaned up. | step 5 (rmtree) is idempotent and safe to retry. |
 
-**Drift-detection invariant** — `AlbumStore.load()` for each album checks `count(p for p in folder.iterdir() if p.is_symlink()) == count(track_paths in library where not is_missing)`. A mismatch flags the album as `needs_regen` and triggers a regeneration pass.
+**Drift-detection invariant** — `AlbumStore.rescan()` for each album checks `count(p for p in folder.iterdir() if p.is_symlink()) == count(track_paths in library where not is_missing)`. A mismatch flags the album as `needs_regen` and triggers a regeneration pass.
 
 ### Robustness
 
@@ -174,7 +174,7 @@ The promotion sequence:
 - **Idempotent:** re-running the export with the same `track_paths` produces a byte-identical M3U (key: `_render_m3u` is deterministic; UTF-8, LF, no BOM) and a symlink set whose `link_name → target` mapping matches.
 - **Collision:** if two tracks would produce the same sanitised title (`track A.mp3` and `track A!.mp3` both sanitising to `track A`), the second gets `track A (2)`, the third `track A (3)`, etc. The dedup suffix goes **before the extension**: `01 - track A.mp3`, `02 - track A (2).mp3`. Track-number prefix already disambiguates by position; the de-dup is belt-and-braces.
 - **Same source path twice in `track_paths`:** Spec 04 forbids duplicate selection within a single album, so this case is unreachable from the UI; if it occurs via hand-edit of `album.json`, the second occurrence is rejected by `Album.set_track_paths` validation. The export pipeline assumes uniqueness and does not defend against it.
-- **Stale staging on startup:** if `Albums/<slug>/.export.new/` exists at `AlbumStore.load()` (from a prior crash), it is wiped as part of load-time self-heal, then the album is flagged `needs_regen` so the next mutation OR a clean shutdown re-emits the export. (Without this trigger, an `.export.new/` could otherwise persist forever if the user never mutates the album.)
+- **Stale staging on startup:** if `Albums/<slug>/.export.new/` exists at `AlbumStore.rescan()` (from a prior crash), it is wiped as part of load-time self-heal, then the album is flagged `needs_regen` so the next mutation OR a clean shutdown re-emits the export. (Without this trigger, an `.export.new/` could otherwise persist forever if the user never mutates the album.)
 - **Album folder deleted mid-session:** if `folder` is missing when `regenerate_album_exports` enters (user `rm -rf`'d it; or it was moved to `.trash/` by Spec 02 §delete), the function aborts with a toast — it does **not** silently `mkdir` the folder back. The album record is meanwhile being torn down by `AlbumStore.delete()`, so the export pass is racing a delete; abort is the safe answer.
 
 ### Disk-read checks
@@ -204,7 +204,9 @@ Per the user's requirement of "robust disk reading checks and balances":
 
 Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-08-NN` marker.
 
-**Phase status — every TC below is Phase 4** (export pipeline). Phase 2 lands the `Album` state machine + `AlbumStore.schedule_save` debounce; the export pipeline regeneration only runs from Phase 4 onward. Until then, no `tests/` file matches these IDs on `grep`.
+**Phase status — shipped in v0.5.0 (Phase 4).** Coverage in `tests/services/test_export.py` + `tests/services/test_TC_08_export.py` + `tests/services/test_album_store.py`. Open coverage gaps:
+- **TC-08-12** (M3U round-trip parse) — *deferred from v0.5.0 as scope (round-trip is sanity, not safety).*
+- **TC-08-10a/10b** (FAT32/cross-FS fallback) — *deferred from v0.5.0; user has no FAT32 target.*
 
 - **TC-08-01** — `sanitise_title("foo/bar:baz")` → `"foo_bar_baz"`. Strips `/`, `\`, `:`, `*`, `?`, `"`, `<`, `>`, `|`, and ASCII control chars (`\x00`–`\x1f`, `\x7f`). Repeat-trim-until-stable on leading/trailing whitespace and dots (`". foo ."` → `"foo"`). Truncates to 100 Unicode codepoints; further trims trailing codepoints if the UTF-8 byte length exceeds 240. Empty result → `track-{NN}` (where NN width matches the chosen prefix width).
 - **TC-08-02** — `_render_m3u(album, library)` produces UTF-8, no BOM, LF-only line endings, with `#EXTM3U` header, conditional `#PLAYLIST:` and `#EXTART:` headers per the §Outputs predicates, and one `#EXTINF:<duration_int>,<artist> - <title>` + absolute-path pair per track. `<duration_int>` is `0` when mutagen returns `None`. `<artist>` falls back to `Unknown Artist` when both `TPE1` and `TPE2` are absent. Empty-album case: a single-line `#EXTM3U\n` file.
@@ -215,11 +217,11 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-08-05a** — Missing track in `strict=True` mode (Spec 09 §canonical approve sequence `step:export-staging` calls export this way) raises `FileNotFoundError` listing the missing path; no staging promotion runs; live folder unchanged.
 - **TC-08-06** — Sanitised-title collision (two tracks → same sanitised name) appends ` (2)`, ` (3)`, etc. — never overwrites. Suffix lands before the extension.
 - **TC-08-07** — Across a full `_commit_export` cycle, every non-symlink entry in the live folder is preserved: regular files (`album.json`, `notes.txt`, `cover.png`), the `.approved` zero-byte marker, and the `reports/` directory. Only symlinks + `playlist.m3u8` are mutated.
-- **TC-08-08** — Crash injection: kill the process inside `_commit_export` between the symlink-promotion loop and the M3U `os.replace`. On the next mutation OR `AlbumStore.load()`, the drift-detection invariant fires (`needs_regen` set) and a re-export converges to canonical state.
+- **TC-08-08** — Crash injection: kill the process inside `_commit_export` between the symlink-promotion loop and the M3U `os.replace`. On the next mutation OR `AlbumStore.rescan()`, the drift-detection invariant fires (`needs_regen` set) and a re-export converges to canonical state.
 - **TC-08-09** — Crash injection: kill the process during staging build (before `_commit_export` runs). Live folder symlinks + M3U are unchanged.
 - **TC-08-10a** — Filesystem without symlink support → fall back to **hardlinks**, no consent dialog, one warn-toast on first occurrence. Per-filesystem capability is cached in `~/.cache/album-builder/fs-caps.json`; subsequent regenerations on the same filesystem skip the symlink attempt.
 - **TC-08-10b** — Cross-filesystem hardlink restriction → fall back to **copy** with a modal consent dialog whose default-button is **No**. Declining leaves the album folder untouched (no symlinks created, no M3U promoted). Confirming proceeds with file copies.
-- **TC-08-11** — Stale `.export.new/` from a prior crash is wiped at `AlbumStore.load()` time as part of self-heal; the album is then flagged `needs_regen` so a regeneration runs on the next mutation OR on clean shutdown if no mutation occurs.
+- **TC-08-11** — Stale `.export.new/` from a prior crash is wiped at `AlbumStore.rescan()` time as part of self-heal; the album is then flagged `needs_regen` so a regeneration runs on the next mutation OR on clean shutdown if no mutation occurs.
 - **TC-08-12** — `playlist.m3u8` parses back via a standard M3U parser (e.g. `python-m3u8` or hand-rolled regex) after writing — round-trip sanity check; `#EXTM3U` first line, every `#EXTINF:` followed by an absolute path on the next line, no orphan headers.
 - **TC-08-13** — Reorder operation produces correctly renumbered symlink names and a renumbered M3U; no leftover symlinks from the previous order remain (the `existing - staging-set` unlink loop in `_commit_export` step 3 sweeps them).
 - **TC-08-14** — `regenerate_album_exports` calls `library.refresh()` exactly once at entry, before any staging-folder I/O; verified via mock spy.
@@ -227,7 +229,7 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-08-16** — Each export pass appends a warning summary to `Albums/<slug>/.export-log`; after the 11th run, only the last 10 entries remain (rotation). The log file itself is excluded from the symlink wipe (it's a regular file in the album folder).
 - **TC-08-17** — Re-export over a folder containing dangling symlinks (source file moved out of `Tracks/`) does not raise in `strict=False`; the staging pass simply omits the dangling entries; surviving M3U omits the missing tracks.
 - **TC-08-18** — Track absolute path containing `\n` / `\r` / `\t` is rejected at export time with a toast; the entry is skipped; rest of the album exports normally.
-- **TC-08-19** — Drift-detection invariant: when `count(p for p in folder.iterdir() if p.is_symlink()) ≠ count(non-missing track_paths)`, `AlbumStore.load()` flags the album `needs_regen` and a regeneration converges the state on next mutation.
+- **TC-08-19** — Drift-detection invariant: when `count(p for p in folder.iterdir() if p.is_symlink()) ≠ count(non-missing track_paths)`, `AlbumStore.rescan()` flags the album `needs_regen` and a regeneration converges the state on next mutation.
 
 ## Out of scope (v1)
 

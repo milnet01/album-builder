@@ -1,5 +1,7 @@
 # Album Builder — Phase 5: Track Usage Indicator Implementation Plan
 
+> **Historical note (2026-05-18):** This plan was executed in v0.6.0 (see `ROADMAP.md §v0.6.0`). Retained for reference; do not re-execute. Any divergence between this plan and the current specs in `docs/specs/` is plan-historical — the specs (and the code) win. v0.6.1 is the current release at time of historical-mark (maintenance + artist-view variant + atomic-pair two-pair amendment on top of Phase 5).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a passive popularity-heatmap badge to the library pane showing how many *other approved* albums each track appears on. Pure notification — never a gate, never restricts selection. Implements Spec 13 in full (TC-13-01..32) for v0.6.0.
@@ -2477,7 +2479,7 @@ If the smoke launch reveals a UI quirk, file a fix and commit before the close-o
 Add a new section at the top of `ROADMAP.md` (above v0.5.3):
 
 ```markdown
-## ✅ v0.6.0 — Phase 5: Track Usage Indicator (2026-05-01 → DATE)
+## ✅ v0.6.0 — Phase 5: Track Usage Indicator (2026-05-01)
 
 Cross-album popularity badge in the library pane. Implements Spec 13
 in full (TC-13-01..32). Spec went through 4 cold-eyes review rounds

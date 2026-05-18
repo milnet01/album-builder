@@ -4,8 +4,9 @@ A small PyQt6 desktop app for curating albums from a folder of audio recordings,
 
 ## Status
 
-**v0.6.1 — Phase 5: Track Usage Indicator (shipped 2026-05-18).** Phases 1–5
-are feature-complete. The app scans `Tracks/`, curates albums via a per-row
+**v0.6.1 — WhisperX UX + artist-view report + post-feature debt sweep (shipped
+2026-05-18)** on top of **v0.6.0 — Phase 5: Track Usage Indicator (shipped
+2026-05-01)**. Phases 1-5 are feature-complete. The app scans `Tracks/`, curates albums via a per-row
 toggle column + drag-reorder pane, syncs lyrics during preview-play (WhisperX
 + wav2vec2 forced alignment, opt-in), shows a cross-album usage badge so
 tracks already on approved albums are visible at a glance, and on approve
@@ -32,7 +33,7 @@ The installer assumes these are present:
 - GStreamer audio plugins (`zypper install gstreamer-plugins-good gstreamer-plugins-bad gstreamer-plugins-libav`)
 - desktop-file-utils (for validation; optional)
 - Inkscape OR rsvg-convert OR cairosvg (for icon PNG generation; the installer falls back to cairosvg via pip if the others are missing)
-- WeasyPrint runtime libraries — Pango / Cairo / GDK-PixBuf, plus the standard fontconfig/freetype stack — for PDF report rendering (`zypper install pango cairo gdk-pixbuf libffi6 fontconfig`). On Debian / Ubuntu the equivalent set is `libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0`. WeasyPrint's [installation guide](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html) lists per-distro details if the import fails at runtime.
+- WeasyPrint runtime libraries — Pango / Cairo / GDK-PixBuf, plus the standard fontconfig/freetype stack — for PDF report rendering (`zypper install pango cairo gdk-pixbuf fontconfig`; libffi is pulled in transitively by cairo/pango). On Debian / Ubuntu the equivalent set is `libpango-1.0-0 libpangoft2-1.0-0 libgdk-pixbuf-2.0-0 libharfbuzz-subset0`. WeasyPrint's [installation guide](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html) lists per-distro details if the import fails at runtime.
 
 ## Uninstall
 

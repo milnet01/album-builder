@@ -1,6 +1,6 @@
 # 01 — Track Library & Metadata
 
-**Status:** Draft · **Last updated:** 2026-04-28 · **Depends on:** 00, 10, 11 · **Blocks:** 03, 04, 06, 07, 08
+**Status:** Implemented (Phase 1 + 2) · **Last updated:** 2026-05-18 · **Depends on:** 00, 10, 11 · **Blocks:** 03, 04, 06, 07, 08
 
 ## Purpose
 
@@ -111,7 +111,7 @@ how reviewers confirm coverage validates the spec, not the implementation.
 
 ### Phase 2 clauses
 
-The watcher mechanism (TC-01-P2-01, TC-01-P2-02) ships in Phase 2 via the `LibraryWatcher` service (Spec 11). The `is_missing` tracking and search-filtering clauses (TC-01-P2-03, TC-01-P2-04) remain deferred — they require diffing successive scans and a filter parameter on `Library.search()`, neither of which the v1 watcher implements.
+The watcher mechanism (TC-01-P2-01, TC-01-P2-02) ships in Phase 2 via the `LibraryWatcher` service defined in this spec (`src/album_builder/services/library_watcher.py`). The `is_missing` tracking and search-filtering clauses (TC-01-P2-03, TC-01-P2-04) remain deferred — they require diffing successive scans and a filter parameter on `Library.search()`, neither of which the v1 watcher implements.
 
 - **TC-01-P2-01** — `LibraryWatcher` exposes `signal tracks_changed` emitted when the watched folder content changes. *(Phase 2)*
 - **TC-01-P2-02** — A new file added to `Tracks/` appears in `LibraryWatcher.library().tracks` within ~2 s without restart. *(Phase 2)*

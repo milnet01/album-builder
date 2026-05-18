@@ -1,6 +1,6 @@
 # 09 — Approval & Report
 
-**Status:** Draft · **Last updated:** 2026-04-30 · **Depends on:** 00, 01, 02, 04, 05, 08, 10, 11 · **Lifecycle:** triggered by Spec 02's approve transition
+**Status:** Implemented (Phase 4 + v0.6.1 artist-view variant) · **Last updated:** 2026-05-18 · **Depends on:** 00, 01, 02, 04, 05, 08, 10, 11 · **Lifecycle:** triggered by Spec 02's approve transition
 
 ## Purpose
 
@@ -58,8 +58,8 @@ step:ui-relock (UI side, not part of the on-disk transaction)
 | Crash after | On-disk state | Recovery on next launch |
 |---|---|---|
 | `step:verify-paths` | Pre-approve; nothing written. | None needed. |
-| `step:export-staging` | `.export.new/` present + live folder unchanged. | Spec 08 §Robustness — `AlbumStore.load()` wipes `.export.new/` and flags `needs_regen`. |
-| `step:export-commit` | Live folder may hold a partial commit; M3U may or may not have been swapped; reports not yet rendered; status still draft. | Spec 08 drift-detection invariant: `AlbumStore.load()` detects symlink-count mismatch and flags `needs_regen`; next mutation re-runs the export. The user can re-approve cleanly afterward. |
+| `step:export-staging` | `.export.new/` present + live folder unchanged. | Spec 08 §Robustness — `AlbumStore.rescan()` wipes `.export.new/` and flags `needs_regen`. |
+| `step:export-commit` | Live folder may hold a partial commit; M3U may or may not have been swapped; reports not yet rendered; status still draft. | Spec 08 drift-detection invariant: `AlbumStore.rescan()` detects symlink-count mismatch and flags `needs_regen`; next mutation re-runs the export. The user can re-approve cleanly afterward. |
 | `step:render-tmp` | One or both `.tmp` files in `reports/`. Status still draft, no `.approved`. | Spec 10 §Atomic pair (multi-file transactions): the load-time scan deletes any `.tmp` in `reports/`. User can re-approve. |
 | `step:render-rename-html` | HTML renamed; PDF still `.tmp`. Status still draft. | **Atomic-pair rule** (Spec 10 §Atomic pair): if exactly one of `(html, pdf)` for a given date stem exists, both members are removed (the renamed file + the `.tmp`). User must re-approve. |
 | `step:render-rename-pdf` | Both report files renamed (no `.tmp`); status still draft, marker not yet written. | No self-heal needed — the `.approved` marker is the source of truth (Spec 02 §Errors). Reports without a marker do not auto-promote the album to approved; the user re-approves to advance state, which idempotently overwrites the existing reports. |
@@ -167,8 +167,9 @@ Report filenames embed the album name, which is user-supplied free text and may 
 - **Artist-view variant** (rendered alongside the full report on every approve; intended for sharing with the album's artist / collaborators):
   - PDF: `<sanitised-album-name> - YYYY-MM-DD - artist.pdf`
   - HTML: `<sanitised-album-name> - YYYY-MM-DD - artist.html`
-  - Renders from the same Jinja2 template + same in-memory context as the full report, with `artist_view=True` driving the template to omit (a) the album cover image, (b) the approve-status row ("Approved … · N of M tracks · runtime total"), and (c) the entire per-track section block (covers, comments, lyrics). The shared track-listing table + footer remain identical between the two outputs.
+  - Renders from the same Jinja2 template + same in-memory context as the full report, with `artist_view=True` driving the template to omit (a) the cover-art element (`<img class="cover-art">` / `<div class="cover-art">`), (b) the approve-status row (`<div class="status-row">` containing "Approved ... · N of M tracks · runtime total"), and (c) the entire per-track section block (`<section class="per-track">` — covers, comments, lyrics). The shared track-listing table (`<table class="tracks">`) and footer (`<footer class="report-footer">`) remain identical between the two outputs.
   - Persistence and recovery semantics are identical to the full report: each variant is its own atomic pair (Spec 10 §Atomic pair); a mid-render crash on either variant is repaired by the load-time scan independently of the other.
+  - **Render order is full-then-artist.** `AlbumStore.approve()` invokes `render_report(album, library)` first, then `render_report(album, library, artist_view=True)`. The order is load-bearing: if the order is flipped and a crash lands between the two render calls, the user would observe an "artist-only" deliverable on disk and could ship the stripped variant by mistake.
 - The `YYYY-MM-DD` date is the local date at approve time (not UTC, since the user reads it).
 - **No `_vN` suffix.** Re-approving the same album on the same day overwrites the previous PDF + HTML in place via the canonical approve sequence (Spec 02 §unapprove already deletes `reports/` recursively, so re-approve always lands in an empty `reports/` dir; there is no surviving prior report to bump). Earlier drafts of this spec defined a `_vN` rule; it was removed in the v0.5.0 prep sweep because the unapprove-deletes-reports invariant makes the suffix unreachable.
 
@@ -206,7 +207,8 @@ Examples: `Memoirs of a Sinner - 2026-04-27.pdf` + `Memoirs of a Sinner - 2026-0
 | Glyph not in chosen font | CSS font stack falls back to `Noto Sans` / `system-ui`; tofu (`?` boxes) is acceptable as last resort, not an error. |
 | Composer / artist columns: some tracks have one, some don't | Three-state rule (§Track listing): all-share → drop column + above-table line; mixed → keep column with em-dash for missing; none → drop column with no line. |
 | Disk full at PDF write time | Toast error; `.approved` not written; album stays in draft state. Symlink folder is untouched (export is a separate step that already succeeded). Stale `.tmp` siblings in `reports/` are wiped per the §canonical approve sequence recovery table. |
-| Half-PDF / half-HTML written (one of HTML/PDF renamed, the other still `.tmp` or zero-byte) | The §canonical approve sequence atomic-pair invariant (`step:render-tmp` writes BOTH `.tmp` files before either rename is attempted; `step:render-rename-html` then `step:render-rename-pdf` rename them). Mid-step crash leaves either both `.tmp` files OR exactly-one renamed final + one `.tmp`. Spec 10 §Atomic pair (multi-file transactions) handles cleanup on next load. **`reports/` is never left in a half-good state visible to the user.** |
+| Half-PDF / half-HTML written (one of HTML/PDF renamed, the other still `.tmp` or zero-byte) | The §canonical approve sequence atomic-pair invariant (`step:render-tmp` writes BOTH `.tmp` files before either rename is attempted; `step:render-rename-html` then `step:render-rename-pdf` rename them). Mid-step crash leaves either both `.tmp` files OR exactly-one renamed final + one `.tmp`. Spec 10 §Atomic pair (multi-file transactions) handles cleanup on next load **per variant** — the full and artist pairs are recovered independently. **`reports/` is never left in a half-good state visible to the user.** |
+| Crash between the two `render_report` calls (full pair complete, artist pair not yet started) | Full pair sits byte-complete on disk, no artist pair exists, `.approved` marker not yet written → status stays draft (Spec 02 self-heal). Next launch: load-time scan sees a complete full pair + no artist pair, treats both as clean. User re-approves; both pairs are overwritten byte-identically (full) + freshly rendered (artist). |
 | Ordering changed between export and approve (impossible — approve is atomic in the UI) | Approve dialog snapshots the album state on open; the snapshot is what gets rendered. |
 
 ## Performance budget
@@ -220,7 +222,7 @@ The Jinja render is one pass; the two outputs split as: HTML write is the same r
 
 Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-09-NN` marker.
 
-**Phase status — every TC below is Phase 4** (full report pipeline + canonical approve sequence). Phase 2 covers domain-level approve/unapprove transitions only (TC-02-12, TC-02-14); no `tests/` file matches TC-09 IDs until the Phase 4 plan executes.
+**Phase status — shipped across v0.5.0 (Phase 4, full-report pipeline) and v0.6.1 (artist-view variant — TC-09-27..30).** Coverage in `tests/services/test_TC_09_report.py` + `tests/services/test_album_store.py`.
 
 - **TC-09-01** — Jinja2 template renders with a synthetic Album fixture; the resulting HTML contains every field listed in §Cover page + §Track listing + §Per-track sections.
 - **TC-09-02** — `version_string()` returns `src.album_builder.version.__version__` at render time; mocking `__version__ = "9.9.9"` renders `Generated by Album Builder · v9.9.9` in the cover footer. On simulated `ImportError` of `src.album_builder.version`, returns `"unknown"`, logs a warning, and the render completes (no abort).

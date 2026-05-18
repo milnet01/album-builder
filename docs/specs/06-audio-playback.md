@@ -1,6 +1,6 @@
 # 06 — Audio Playback
 
-**Status:** Draft · **Last updated:** 2026-04-30 · **Depends on:** 00, 01, 10, 11 · **Blocks:** 07
+**Status:** Implemented (Phase 3A + 3B + v0.5.2 follow-up) · **Last updated:** 2026-05-18 · **Depends on:** 00, 01, 10, 11 · **Blocks:** 07
 
 ## Purpose
 
@@ -10,7 +10,7 @@ Play tracks for preview and karaoke-style listening. Provide play/pause, seek, p
 
 - The **right pane** ("Now playing") shows the currently-loaded track's cover, metadata (title, album, artist, composer, comment), the lyrics panel (Spec 07), and a transport bar.
 - Transport bar elements:
-  - Large play/pause button (◀▶ / ⏸)
+  - Large play/pause button (`Glyphs.PLAY` `▶` / `Glyphs.PAUSE` `⏸`)
   - Current time `m:ss`
   - Scrubber (a horizontal slider showing playback position; click or drag to seek)
   - Total duration `m:ss`
@@ -31,8 +31,8 @@ Play tracks for preview and karaoke-style listening. Provide play/pause, seek, p
   - The row glyph mirrors player state with a four-state mapping: `PLAYING` on the active source → `Glyphs.PAUSE`; `PAUSED` / `STOPPED` / `ERROR` on the active source, **or** any non-active row → `Glyphs.PLAY`. Glyph updates ride `state_changed` and source-swap only — never per-position-tick. Each glyph flip touches only the previously-active and newly-active rows (the rest of the list re-renders nothing). The row's accessible-name source flips correspondingly so screen readers announce the action the click will perform — for the album-order pane this is `QPushButton.accessibleName` ("Preview-play <title>" ↔ "Pause <title>"); for the library pane it is the model's `Qt.ItemDataRole.AccessibleTextRole` on the play column.
 - Keyboard shortcuts:
   - **Space** — play / pause (when focus isn't in a text field)
-  - **Left / Right** — seek −5 s / +5 s
-  - **Shift+Left / Shift+Right** — seek −30 s / +30 s
+  - **Left / Right** — seek -5 s / +5 s
+  - **Shift+Left / Shift+Right** — seek -30 s / +30 s
   - **M** — mute / unmute
 - End-of-track behavior: stop. Do not auto-advance to the next track. (v1 — auto-advance is roadmap.)
 
@@ -44,10 +44,12 @@ Play tracks for preview and karaoke-style listening. Provide play/pause, seek, p
 
 ## Outputs
 
-- `signal position_changed(seconds: float)` — emitted ~10× per second while playing. This is what drives the lyrics line tracker (Spec 07).
+- `signal position_changed(seconds: float)` — emitted ~10x per second while playing. This is what drives the lyrics line tracker (Spec 07).
 - `signal duration_changed(seconds: float)` — emitted once when the source loads.
 - `signal state_changed(state)` — playing, paused, stopped, error.
 - `signal error(message: str)` — when playback fails.
+- `signal buffering_changed(buffering: bool)` — `True` on `QMediaPlayer.MediaStatus.BufferingMedia`, `False` on `BufferedMedia` (drives the "Buffering..." transport indicator; not an error condition).
+- `signal ended()` — natural end-of-track pulse, emitted on `MediaStatus.EndOfMedia`. Distinct from `state_changed(STOPPED)`, which also fires on user-stop; consumers needing to distinguish the two (e.g. future autoplay) subscribe here.
 - `last_played_track_path` written to `.album-builder/state.json` (canonical schema in Spec 10 §`state.json`). On app restart the now-playing pane re-loads this track **paused at zero** — the play position is **not persisted** in v1 (this is intentional, not a bug; a future schema bump may add `last_position_seconds`).
 
 ## Implementation notes
@@ -71,14 +73,14 @@ Play tracks for preview and karaoke-style listening. Provide play/pause, seek, p
 | User scrubs beyond duration | Clamped to `duration - 1 s`. |
 | File extension is `.mpeg` (WhatsApp output) | Plays fine — Qt + GStreamer detect MP3 by content sniffing, not extension. Verified with the project's actual files. |
 | App quit while playing | `QMediaPlayer.stop()` called in `closeEvent`. Position is *not* persisted (we re-open the track paused at zero — known limitation, low pain). |
-| `QMediaPlayer` reports `MediaStatus.BufferingMedia` (slow filesystem, NFS, USB-stick reading the source) | Show a subtle "Buffering…" indicator next to the play button. Transport stays interactive (the user can pause / seek). Auto-clears on `BufferedMedia`. Not an error condition — no toast. |
+| `QMediaPlayer` reports `MediaStatus.BufferingMedia` (slow filesystem, NFS, USB-stick reading the source) | Show a subtle "Buffering..." indicator next to the play button. Transport stays interactive (the user can pause / seek). Auto-clears on `BufferedMedia`. Not an error condition — no toast. |
 | User triggers shortcut while focus is in a text field | Suppressed — shortcut is global only when focus isn't in a `QLineEdit` / `QTextEdit`. (Disambiguates Left/Right vs the target-counter field in Spec 04 — see Spec 00 keyboard table for the canonical rule.) |
 
 ## Test contract
 
 Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-06-NN` marker.
 
-**Phase status — every TC below is Phase 3.** Audio playback lands in Phase 3 (see project ROADMAP); no `tests/` file matches these IDs until that plan executes. The Phase 3 plan, when written, will map every TC here to its target test file.
+**Phase status — shipped across Phase 3A (v0.3.0) + Phase 3B (v0.4.0) + v0.5.2 follow-up.** Coverage: 22 of 24 TC-06 contracts have anchored tests in `tests/services/test_player.py`, `tests/ui/test_transport_bar.py`, `tests/ui/test_TC_06_17_18_19_row_play_pause.py`, `tests/ui/test_TC_06_20_to_26_row_body_preview.py`, and `tests/ui/test_keyboard_shortcuts.py`. **Open coverage gaps:** TC-06-03 (seek granularity ±0.1 s) and TC-06-06 (corrupt-mp3 toast) lack `# Spec:` markers; tracked on `ROADMAP.md §Methodology gaps` as test-anchoring debt.
 
 - **TC-06-01** — `Player.set_source(path)` followed by `play()` reaches `state == playing` within 500 ms; `position_changed` events arrive thereafter at ≥ 5 Hz.
 - **TC-06-02** — `Player.set_volume(50)` maps to `QAudioOutput.volume() == 0.5` (linear 0–100 → 0.0–1.0).
@@ -98,6 +100,10 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-06-16** — End-of-track behavior is `stop` (not auto-advance) — `state_changed(stopped)` fires, no next track loaded.
 - **TC-06-17** — Per-row preview-play button on the **active+playing** row pauses the source (state transitions PLAYING → PAUSED) without reloading: `Player.source()` is unchanged, `position()` is preserved (within one position-tick of the click), and no second `set_source` call is observed. Applies to library and album-order panes.
 - **TC-06-18** — Per-row preview-play button on the **active+paused** row resumes the source (state transitions PAUSED → PLAYING) without reloading. Applies to library and album-order panes.
+- **TC-06-19** — Per-row glyph reflects state with the four-state mapping in §user-visible-behavior:
+  - For the **library pane**, the play column's `Qt.ItemDataRole.DisplayRole` returns `Glyphs.PAUSE` for the row whose track is the active source AND state is `PLAYING`; `Glyphs.PLAY` for every other row. The corresponding `Qt.ItemDataRole.AccessibleTextRole` returns `"Pause <title>"` vs `"Preview-play <title>"`.
+  - For the **album-order pane**, the row's `QPushButton.text()` returns the same glyphs and `QPushButton.accessibleName()` returns the same accessible strings.
+  - On `state_changed` or source-swap, only the previously-active and newly-active rows emit `dataChanged` / repaint (the rest of the list is untouched — testable by counting `dataChanged` row-range hits or by patching `_OrderRowWidget.set_active`).
 - **TC-06-20** — Row-body click on a library row (a non-play, non-toggle column), with the player in `STOPPED` state, populates the now-playing pane (title, artist, album, composer, comment) with the row's metadata and does **not** call `Player.set_source` or `Player.play` — i.e. `Player.source()` remains the prior value (or `None`) and `Player.state()` remains `STOPPED`. Lyrics panel: with a fresh `.lrc`, the lines load and render statically; the now-line highlight stays on line 0 (no `position_changed` ticks since `play()` was not issued), and the alignment status pill reads `ready`. With no fresh `.lrc`, the panel shows the status pill only (`not yet aligned` / `no lyrics text`). Auto-alignment is **not** kicked off — that is gated on `play()`, per Spec 07.
 - **TC-06-21** — Row-body click on a library row, with the player in `PLAYING`, `PAUSED`, or `ERROR` state, is a **no-op for the now-playing pane**: the active track's metadata stays on screen and `Player.source()` / `Player.state()` are unchanged. Spec 04's selection-toggle column click and Spec 06's preview-play column click both continue to fire normally — only the row-body (other columns) is suppressed in non-idle state.
 - **TC-06-22** — Row-body click on a middle-pane (album-order) row obeys the same idle/non-idle rule as the library pane (TC-06-20/21). The middle-pane row's hit-zone for "row-body click" is the title-label area only; clicks on the per-row play button or the drag-handle glyph (when visible) do **not** trigger preview-without-play (the play button has its own load-or-toggle behaviour; the drag handle initiates a drag).
@@ -105,10 +111,6 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-06-24** — A late `state_changed(STOPPED)` arriving after a preview-without-play populated the now-playing pane does **not** repaint the now-playing block. Verified by: load track A + play, stop, preview track B (now-playing pane shows B), then synthetically re-emit `state_changed(STOPPED)` — assert `now_playing_pane.title_label.text() == B.title`.
 - **TC-06-25** — Keyboard-arrow row navigation in the library or middle pane changes the focused row but does **not** populate the now-playing pane and does **not** mutate the player. Verified by: focus the library table, press `Down` three times, assert `Player.source()` and `now_playing_pane.title_label` are unchanged from before the key presses.
 - **TC-06-26** — When `Player.state() == STOPPED`, the row-body hit-zone uses `Qt.CursorShape.PointingHandCursor`; when the player is in any other state, the row-body hit-zone uses the default cursor. The cursor flips on `state_changed`.
-- **TC-06-19** — Per-row glyph reflects state with the four-state mapping in §user-visible-behavior:
-  - For the **library pane**, the play column's `Qt.ItemDataRole.DisplayRole` returns `Glyphs.PAUSE` for the row whose track is the active source AND state is `PLAYING`; `Glyphs.PLAY` for every other row. The corresponding `Qt.ItemDataRole.AccessibleTextRole` returns `"Pause <title>"` vs `"Preview-play <title>"`.
-  - For the **album-order pane**, the row's `QPushButton.text()` returns the same glyphs and `QPushButton.accessibleName()` returns the same accessible strings.
-  - On `state_changed` or source-swap, only the previously-active and newly-active rows emit `dataChanged` / repaint (the rest of the list is untouched — testable by counting `dataChanged` row-range hits or by patching `_OrderRowWidget.set_active`).
 
 (Visual-regression and "real audio" smoke tests stay out of the test contract — they're manual.)
 

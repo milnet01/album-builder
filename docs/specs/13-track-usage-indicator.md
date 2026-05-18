@@ -1,6 +1,6 @@
 # 13 — Track Usage Indicator (Cross-Album Popularity Badge)
 
-**Status:** Draft · **Last updated:** 2026-05-01 · **Depends on:** 00, 01, 02, 03, 04, 06, 10, 11
+**Status:** Implemented (v0.6.0; ongoing under v0.6.1) · **Last updated:** 2026-05-18 · **Depends on:** 00, 01, 02, 03, 04, 06, 10, 11
 
 ## Purpose
 
@@ -11,14 +11,14 @@ Brainstorm sign-off (2026-05-01): notification-only intent, approved-only scope,
 ## Layer placement
 
 - `UsageIndex` is a Qt-aware service: lives in **`src/album_builder/services/usage_index.py`** as a `QObject` subclass with a single `pyqtSignal()` named `changed`. Per CLAUDE.md §Architecture, services own mutable state behind Qt signals; `domain/` (no Qt no I/O) and `persistence/` (atomic JSON + LRC) are wrong layers for this.
-- `UsageIndex` takes the `AlbumStore` instance in its constructor and subscribes directly to its signals (matches the `AlbumSwitcher.__init__(..., store, ...)` precedent at `src/album_builder/ui/album_switcher.py:63-65`). Constructed by `MainWindow.__init__` as `UsageIndex(store, parent=self)` so its lifetime is bounded by `MainWindow`'s and Qt parent-child destruction is well-defined (UsageIndex deleted before the model that holds the reference).
+- `UsageIndex` takes the `AlbumStore` instance in its constructor and subscribes directly to its signals (matches the `AlbumSwitcher.__init__(store, parent=None)` precedent in `src/album_builder/ui/album_switcher.py`). Constructed by `MainWindow.__init__` as `UsageIndex(store, parent=self)` so its lifetime is bounded by `MainWindow`'s and Qt parent-child destruction is well-defined (UsageIndex deleted before the model that holds the reference).
 - `UsageBadgeDelegate` is a UI widget: lives in **`src/album_builder/ui/library_pane.py`** alongside the existing `TrackTableModel` (or in a sibling module if the file grows past ~500 LOC; either is fine).
 
 ## User-visible behavior
 
 ### The "Used" column
 
-- A new column with the header **"Used"** is appended as the **rightmost** column in the library pane (right of the `✓` toggle, which is currently the rightmost column in `LibraryPane.COLUMNS` at `src/album_builder/ui/library_pane.py:22-31`). The column order becomes:
+- A new column with the header **"Used"** is appended as the **rightmost** column in the library pane (right of the `✓` toggle, which is the previously-rightmost column in `LibraryPane.COLUMNS` in `src/album_builder/ui/library_pane.py`). The column order becomes:
   ```
   ▶ | Title | Artist | Album | Composer | Duration | ✓ | Used
   ```
@@ -48,7 +48,7 @@ Brainstorm sign-off (2026-05-01): notification-only intent, approved-only scope,
   ```
 - For count == 0, `data(role=Qt.ItemDataRole.ToolTipRole)` returns **`None`** (not empty string) — Qt suppresses tooltips for `None` cleanly, while some styles render a 0-pixel box for `""`.
 - Album names are looked up from `AlbumStore.get(album_id).name` at tooltip-show time. **Race tolerance:** if `store.get(album_id)` returns `None` (e.g. the album was removed between the tooltip-trigger and the name resolution; slot ordering during `album_removed` cascade is unspecified), the builder skips that id silently. If the resulting name list is empty, return `None` so Qt suppresses the tooltip entirely.
-- Album names are rendered as **plain text**. Qt's `QToolTip` auto-detects rich text when content begins with `<`; to avoid an album named `"<b>Loud</b>"` rendering bolded, the tooltip builder routes through a plain-text-safe path. PyQt6 idiom: `Qt.convertFromPlainText(name)` if the binding is available in the installed PyQt6 version, OR `html.escape(name, quote=False)` plus a single leading zero-width space (`"​"`) prefix on the whole tooltip string as a documented fallback. The implementer picks the available path; the chosen path is verified by TC-13-30.
+- Album names are rendered as **plain text**. Qt's `QToolTip` auto-detects rich text via `Qt.mightBeRichText` when content contains tag-like patterns; to avoid an album named `"<b>Loud</b>"` rendering bolded, the tooltip builder routes each album name through `html.escape(name, quote=False)` (the implementation choice — see `_plain_text_safe` in `src/album_builder/ui/library_pane.py`). `Qt.convertFromPlainText` was evaluated and rejected because it wraps in `<p>` tags and substitutes non-breaking spaces, which is right for full-body conversion but wrong for per-line list items embedded in a parent multi-line string. The chosen path is verified by TC-13-30.
 - If an album is renamed, the **next** hover-show reflects the new name. Qt does NOT force-refresh a tooltip while it's mounted; the user has to move the cursor off and back. Acceptable for a passive notification.
 
 ### Accessibility
@@ -65,7 +65,7 @@ Brainstorm sign-off (2026-05-01): notification-only intent, approved-only scope,
 
 ### Self-exclusion (current album is itself approved)
 
-In this spec, **"current album"** means the album set by `AlbumStore.set_current(...)` and broadcast via `AlbumStore.current_album_changed`, then forwarded by `AlbumSwitcher.current_album_changed` and consumed by `MainWindow._on_current_changed` (`src/album_builder/ui/main_window.py:203` connects, `:270` slot). Matches Spec 03's "current album" terminology.
+In this spec, **"current album"** means the album set by `AlbumStore.set_current(...)` and broadcast via `AlbumStore.current_album_changed`, then forwarded by `AlbumSwitcher.current_album_changed` and consumed by `MainWindow._on_current_changed` (the connect lives in `MainWindow.__init__`'s Wire-signals block; the slot is `MainWindow._on_current_changed`). Matches Spec 03's "current album" terminology.
 
 The library pane (left) and the album-order pane (middle) always reflect the same current album; switching albums via the top-bar `AlbumSwitcher` (Spec 03) updates both. The right pane (`NowPlayingPane`, Spec 06) is independent.
 
@@ -77,7 +77,7 @@ The library pane (left) and the album-order pane (middle) always reflect the sam
 
 ## Inputs
 
-- `AlbumStore.list()` — full set of in-memory albums (filtered to approved-only inside the index per `album.status == AlbumStatus.APPROVED`). Returns `list[Album]` (`src/album_builder/services/album_store.py:195`).
+- `AlbumStore.list()` — full set of in-memory albums (filtered to approved-only inside the index per `album.status == AlbumStatus.APPROVED`). Returns `list[Album]` from `src/album_builder/services/album_store.py`.
 - `AlbumStore` signals (subscribed by `UsageIndex` directly in its constructor):
   - `album_added` (payload: `Album`)
   - `album_removed` (payload: `UUID`)
@@ -297,7 +297,7 @@ This matches the brainstorm-time decision (signed off 2026-05-01) to keep the da
 
 Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-13-NN` marker. New load-bearing test files use the `test_TC_13_*` prefix per the v0.4.2 forward-only convention (`CLAUDE.md`).
 
-**Phase status — every TC below is Phase 5.** UsageIndex code lands in Phase 5 (see the writing-plans output that follows this spec); until that plan executes, no `tests/` file will match these IDs on `grep`.
+**Phase status — shipped in v0.6.0 (Phase 5; 47 new tests across the suite).** Coverage lives in `tests/services/test_TC_13_usage_index.py`, `tests/ui/test_TC_13_library_pane_usage_column.py`, `tests/ui/test_TC_13_usage_badge_delegate.py`, `tests/ui/test_TC_13_palette_contrast.py`, and `tests/test_main_window_usage.py`.
 
 ### UsageIndex service (TC-13-01..08)
 

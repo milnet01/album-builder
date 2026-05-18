@@ -1,6 +1,6 @@
 # 07 — Lyrics Alignment & Display
 
-**Status:** Draft · **Last updated:** 2026-04-30 · **Depends on:** 00, 01, 06, 10, 11
+**Status:** Implemented (Phase 3B + v0.6.1 cache-path amendment) · **Last updated:** 2026-05-18 · **Depends on:** 00, 01, 06, 10, 11
 
 ## Purpose
 
@@ -18,7 +18,7 @@ Show synchronized scrolling lyrics in the now-playing pane. The line being sung 
 - The panel is also scrollable manually if the user wants to read ahead. Auto-scroll resumes the next time the now-line changes.
 - A small status indicator at the top of the panel shows alignment state:
   - `LRC: ✓ ready` — synced playback
-  - `LRC: aligning… 23%` — progress when alignment is running
+  - `LRC: aligning... 23%` — progress when alignment is running
   - `LRC: not yet aligned` — track has lyrics text but no LRC; clicking "Align now" enqueues alignment
   - `LRC: no lyrics text` — the file has no `lyrics-eng` ID3 tag; the user must add one in their tagging tool of choice (Album Builder is read-only on source audio per Spec 00 non-goals — this spec does **not** read `.txt` sidecars in v1; that was an earlier draft idea, withdrawn)
   - `LRC: alignment failed` — show fallback (unsynced lyrics text) and an error message
@@ -51,7 +51,7 @@ Show synchronized scrolling lyrics in the now-playing pane. The line being sung 
 [00:12.47]feeling the weight of every word
 [00:17.20]searching for something more
 [00:24.00][Verse 1]
-…
+...
 ```
 
 - An in-memory `Lyrics` object after parsing the LRC:
@@ -91,7 +91,7 @@ plain text ─────┘                  │
                           line-level [mm:ss.xx] LRC
 ```
 
-Library: **WhisperX** is the preferred path because it bundles the alignment phase. Fallback: `whisper-timestamped` if WhisperX has install issues on the target machine.
+Library: **WhisperX** is the sole alignment backend in v1 — it bundles the forced-alignment phase. Earlier drafts proposed `whisper-timestamped` as a fallback if WhisperX install issues blocked the install; the v0.4.0 implementation shipped WhisperX-only, surfacing an install hint on `ImportError`. The fallback is deferred to roadmap if it becomes necessary.
 
 Sung-vocal accuracy expectation: ~80–90% of lines aligned within ±0.5 s on first pass for clear vocals. Manual LRC tweaks are the escape hatch.
 
@@ -139,7 +139,7 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 | TC-07-03 | `tests/domain/test_lyrics.py::test_line_at_boundaries` |
 | TC-07-04 | `tests/services/test_lyrics_tracker.py::test_tracker_cached_hint_skips_search_for_forward_within_line` + `..._backward_seek_resets_hint` |
 | TC-07-05 | `tests/services/test_lyrics_tracker.py::test_tracker_emits_on_line_change_only` |
-| TC-07-06 | `tests/services/test_alignment_status.py::test_status_label_each_state` + `tests/ui/test_lyrics_panel.py::test_status_label_each_state` |
+| TC-07-06 | `tests/services/test_alignment_status.py::test_status_label_each_state` + `tests/ui/test_lyrics_panel.py::test_status_label_each_state` (status pill cycles `no lyrics text` → `not yet aligned` → `aligning... N%` → `ready` / `failed`) |
 | TC-07-07 | `tests/services/test_alignment_service.py::test_start_alignment_rejects_short_audio` |
 | TC-07-08 | `tests/services/test_alignment_service.py::test_cancel_no_lrc_written` |
 | TC-07-09 | deferred — `huggingface_hub` handles partial-download resume at the library level; v0.4.0 does not add a project-side resume layer |
@@ -155,7 +155,7 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-07-03** — `tracker.line_at(t)` returns the correct index for boundary cases: before the first line (`-1`), exactly at a line, between lines, exactly at the last line, after the last line.
 - **TC-07-04** — `tracker` advances monotonically: a position tick that goes backward (seek) re-runs the search; forward ticks use the cached "last index" hint and run in O(1).
 - **TC-07-05** — `current_line_changed(index)` emits exactly when the line crosses; not on every position tick.
-- **TC-07-06** — Status pill cycles correctly across alignment phases: `no lyrics text`, `not yet aligned`, `aligning… N%`, `ready`, `failed`.
+- **TC-07-06** — Status pill cycles correctly across alignment phases: `no lyrics text`, `not yet aligned`, `aligning... N%`, `ready`, `failed`.
 - **TC-07-07** — Audio < 2 s rejects alignment with a clear message; no `.lrc` written; status `audio too short to align`.
 - **TC-07-08** — Alignment process killed mid-run produces no `.lrc`; status reverts to `not yet aligned`; re-running is safe.
 - **TC-07-09** — Whisper model download interruption: partial blob is detected on next launch and resume / discard is correctly chosen based on etag stability.

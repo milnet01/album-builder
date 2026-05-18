@@ -1,6 +1,6 @@
 # 02 — Album Lifecycle
 
-**Status:** Draft · **Last updated:** 2026-04-30 · **Depends on:** 00, 01, 10 · **Blocks:** 03, 04, 05, 08, 09
+**Status:** Implemented (Phase 2 + 4) · **Last updated:** 2026-05-18 · **Depends on:** 00, 01, 10 · **Blocks:** 03, 04, 05, 08, 09
 
 ## Purpose
 
@@ -161,27 +161,27 @@ Album-folder companions to `album.json`:
 
 Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-02-NN` marker.
 
-**Phase status — every TC below is Phase 2.** Album lifecycle code lands in Phase 2 (see `docs/plans/2026-04-28-phase-2-albums.md`); until that plan executes, no `tests/` file will match these IDs on `grep`. The plan's "Test contract crosswalk" section maps every TC here to its target test file. TC-02-13 and TC-02-19 are *partially* deferred to Phase 4 — Phase 2 covers domain-level state transitions; the export-pipeline halves (symlink + M3U + PDF regeneration, crash-injection across the full pipeline) land in Phase 4.
+**Phase status — shipped across Phase 2 (domain) and Phase 4 (export + report integration).** Phase 2 (v0.2.0) landed `Album` state-machine TCs; Phase 4 (v0.5.0) closed TC-02-13/19 by extending `AlbumStore.approve` with the export + render pipeline. Per-TC test paths live in `tests/domain/test_album.py`, `tests/persistence/test_album_io.py`, `tests/services/test_album_store.py`, and the `tests/services/test_TC_09_*.py` suite (Phase 4 contracts that double-cover TC-02-13/19's export half).
 
 - **TC-02-01** — `Album.create(name, target_count)` returns a draft `Album` with a fresh `UUID`, `track_paths == []`, `status == DRAFT`, `created_at = now`, `approved_at == None`.
 - **TC-02-02** — `Album.create` rejects empty / whitespace-only / >80-char names with `ValueError`.
-- **TC-02-03** — `Album.create` rejects `target_count < 1` with `ValueError`. (No upper bound is enforced by the domain — Spec 04 enforces ≤ 99 in the UI counter.)
+- **TC-02-03** — `Album.create` rejects `target_count < 1` or `target_count > 99` with `ValueError` (domain-level invariant in `_validate_target`; mirrored by the Spec 04 UI counter `QIntValidator`).
 - **TC-02-04** — Slug derived from name is lowercase-kebab. Collision with an existing folder appends ` (2)`, ` (3)`, etc. — never overwrites.
 - **TC-02-05** — `Album.create` writes `Albums/<slug>/album.json` immediately (synchronous, atomic write per Spec 10).
 - **TC-02-06** — `Album.rename(new_name)` validates `1 ≤ len(trim(new_name)) ≤ 80` and rejects out-of-range with `ValueError`.
-- **TC-02-07** — `Album.rename` renames the on-disk folder to the new slug; M3U + reports remain at their relative paths inside the folder.
-- **TC-02-08** — `Album.rename` collision: append ` (2)` not overwrite.
+- **TC-02-07** — `AlbumStore.rename(album_id, new_name)` renames the on-disk folder to the new slug; M3U + reports remain at their relative paths inside the folder. (Domain `Album.rename(new_name)` only updates `name` + `updated_at`; the folder-rename half lives at the service layer in `services/album_store.py`.)
+- **TC-02-08** — `AlbumStore.rename` collision: append ` (2)` not overwrite.
 - **TC-02-09** — `Album.approve()` raises `ValueError` if `track_paths` is empty.
-- **TC-02-10** — `Album.approve()` raises `FileNotFoundError` (or equivalent) if any `track_path` does not exist on disk; lists all missing.
+- **TC-02-10** — `AlbumStore.approve(album_id, *, library)` raises `FileNotFoundError` (or equivalent) if any `track_path` does not exist on disk; lists all missing. (The existence check is in the service `step:verify-paths`; the domain `Album.approve()` only flips status + timestamps.)
 - **TC-02-11** — `Album.approve()` is a no-op (or rejects) when `status == APPROVED`; only `DRAFT → APPROVED` and `APPROVED → DRAFT` transitions are valid.
 - **TC-02-12** — Successful `Album.approve()` writes `.approved` marker, sets `status = APPROVED`, sets `approved_at = now`, persists `album.json`.
-- **TC-02-13** — `Album.approve()` synchronously regenerates symlinks + M3U (Spec 08) and report (Spec 09); on completion **five artefacts** exist on disk with non-zero size: `playlist.m3u8`, the symlink set (≥ 1 entry per non-missing track), `reports/<sanitised-name> - YYYY-MM-DD.pdf`, `reports/<sanitised-name> - YYYY-MM-DD.html`, and the `.approved` zero-byte marker. (Marker is zero-byte by design; the size assertion targets the other four.)
-- **TC-02-14** — `Album.unapprove()` deletes `.approved` marker and `reports/`; leaves the symlink folder + M3U intact; sets `status = DRAFT`, `approved_at = None`.
-- **TC-02-15** — `Album.delete()` moves `Albums/<slug>/` to `Albums/.trash/<slug>-YYYYMMDD-HHMMSS/` (no `rm -rf`).
+- **TC-02-13** — `AlbumStore.approve()` synchronously regenerates symlinks + M3U (Spec 08) and report pairs (Spec 09); on completion **seven artefacts** exist on disk with non-zero size: `playlist.m3u8`, the symlink set (≥ 1 entry per non-missing track), the full-report pair `reports/<sanitised-name> - YYYY-MM-DD.{pdf,html}`, the artist-view pair `reports/<sanitised-name> - YYYY-MM-DD - artist.{pdf,html}`, and the `.approved` zero-byte marker. (Marker is zero-byte by design; the size assertion targets the other six.) Domain `Album.approve()` is the in-memory state-flip half; the export + render pipeline lives in `services/album_store.py:approve`.
+- **TC-02-14** — `AlbumStore.unapprove(album_id)` deletes `.approved` marker and `reports/`; leaves the symlink folder + M3U intact; sets `status = DRAFT`, `approved_at = None`.
+- **TC-02-15** — `AlbumStore.delete(album_id)` moves `Albums/<slug>/` to `Albums/.trash/<slug>-YYYYMMDD-HHMMSS/` (no `rm -rf`). (`Album` carries no `.delete()` — delete is a store-level operation.)
 - **TC-02-16** — Deleting the *current* album switches the current selection to the alphabetically-first remaining album, or to `None` if none remain.
 - **TC-02-17** — Self-heal on load: `.approved` marker present + `album.json.status == "draft"` → fix `album.json.status` to `"approved"` and write back.
 - **TC-02-18** — Self-heal on load: `album.json.status == "approved"` + `.approved` missing → write `.approved` marker.
-- **TC-02-19** — `Album.approve()` is idempotent across the three named crash points in Spec 09 §canonical approve sequence: (a) crash after `step:export-commit` — re-approve regenerates report from scratch, no stale `.tmp` files remain; (b) crash after `step:render-rename-pdf` (both reports renamed, marker not yet written, status still draft per Spec 02 self-heal) — re-approve overwrites the reports + writes marker + flips status; (c) crash after `step:write-marker` (marker present, status still draft) — Spec 10 self-heal flips status on next load; subsequent re-approve is a no-op. No duplicates / leftover `.tmp` files survive any path.
+- **TC-02-19** — `AlbumStore.approve()` is idempotent across the three named crash points in Spec 09 §canonical approve sequence: (a) crash after `step:export-commit` — re-approve regenerates report from scratch, no stale `.tmp` files remain; (b) crash after `step:render-rename-pdf` (both reports renamed, marker not yet written, status still draft per Spec 02 self-heal) — re-approve overwrites the reports + writes marker + flips status; (c) crash after `step:write-marker` (marker present, status still draft) — Spec 10 self-heal flips status on next load; subsequent re-approve is a no-op. No duplicates / leftover `.tmp` files survive any path.
 - **TC-02-20** — `album.json` schema has `schema_version == 1` and the field set listed in §Persistence; round-trip (load → save → load) preserves every field byte-for-byte except `updated_at`.
 
 ## Out of scope (v1)

@@ -1,5 +1,7 @@
 # Album Builder — Phase 2: Albums Implementation Plan
 
+> **Historical note (2026-05-18):** This plan was executed in v0.2.0 (see `ROADMAP.md §v0.2.0`). Retained for reference; do not re-execute. Any divergence between this plan and the current specs in `docs/specs/` is plan-historical — the specs (and the code) win. References to a future "Phase 4 plan" should be read as the ROADMAP `§v0.5.0` entry; Phase 4 shipped via a 4-round spec sweep + direct implementation, no separate plan doc was written. v0.6.x is the current series at time of historical-mark; release tooling has consolidated onto the `/bump` and `/release` skills (per current `CLAUDE.md`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add the album lifecycle, switcher, target counter, track selection, and drag-reorder middle pane on top of the Phase 1 library. After this phase the user can create / rename / delete albums, pick tracks for one, set a target count, drag tracks into order, and approve (write marker + lock UI). The full export pipeline (symlinks + M3U + PDF) lands in Phase 4 — `Album.approve()` writes the `.approved` marker and flips status only. Live-rescan of `Tracks/` via `QFileSystemWatcher` (TC-01-P2-01..04 from Spec 01) is folded in here.

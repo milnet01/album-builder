@@ -1,6 +1,6 @@
 # 12 — Packaging & Launcher
 
-**Status:** Draft · **Last updated:** 2026-04-28 · **Depends on:** 00, 11
+**Status:** Implemented (Phase 1; TC-12-07..09 deferred) · **Last updated:** 2026-05-18 · **Depends on:** 00, 11
 
 ## Purpose
 
@@ -114,20 +114,26 @@ Album Builder is single-instance: clicking the launcher when the app is already 
 
 ## Dependencies (`requirements.txt`)
 
-Pinned, with major versions chosen for stability:
+Pinned, with major versions chosen for stability. The installer's core set (`requirements.txt`) is intentionally minimal — heavy alignment dependencies are installed on first use of Align Now per Spec 07.
+
+**Core (shipped in `requirements.txt`):**
 
 ```
 PyQt6>=6.6,<7
 mutagen>=1.47,<2
-WeasyPrint>=61,<62
 Jinja2>=3.1,<4
-Pillow>=10,<11
-faster-whisper>=1.0,<2
-whisperx>=3.1,<4               # forced alignment phase
-ctranslate2>=4.0,<5            # whisper backend
-torch>=2.1,<3                  # required by whisperx alignment model
-torchaudio>=2.1,<3
-pyqt6-tools                    # optional, dev-only — gated in install.sh
+weasyprint>=68,<70
+Pillow>=11,<13
+```
+
+**Optional alignment dependencies** — not in `requirements.txt`; the `services/alignment_worker.py` import path raises `ImportError` and surfaces a `pip install whisperx` hint on first Align-now use:
+
+```
+whisperx
+faster-whisper          # bundled by WhisperX
+ctranslate2             # WhisperX backend
+torch
+torchaudio              # wav2vec2 forced-alignment model
 ```
 
 System packages required (documented in `README.md`):
@@ -135,7 +141,7 @@ System packages required (documented in `README.md`):
 - `python3-devel` (for building any wheel that needs it)
 - `gstreamer-plugins-good`, `gstreamer-plugins-bad`, `gstreamer-plugins-libav` (audio decoding)
 - `pango`, `cairo`, `gdk-pixbuf2` (WeasyPrint runtime libs — typically already present on Plasma)
-- `inkscape` (optional, for icon PNG generation; cairosvg fallback handles missing inkscape)
+- `inkscape` (optional, for icon PNG generation; `install.sh` falls back to `rsvg-convert`, then `cairosvg` via pip)
 
 The installer emits a one-line **check** for these and prints any missing ones; it does not auto-install (would require `sudo`).
 
@@ -167,29 +173,28 @@ For now, "update" = "git pull && ./install.sh" — the installer's `rsync --dele
 
 | Condition | Behavior |
 |---|---|
-| Python <3.11 on the system | Installer aborts with a clear message: "Python 3.11 or newer required. openSUSE Tumbleweed: zypper install python311." |
-| `pip install` of a heavy dep fails (compile error) | Installer captures stderr and points to a wiki page with troubleshooting (e.g., torch wheels for the platform). The half-built `.venv/` is **wiped** before the installer exits non-zero, so re-running starts clean (otherwise the next `pip install` would skip already-installed-but-broken dependencies and report success on a partial venv). |
-| Disk full mid `pip install` | Same handling as compile failure: wipe `.venv/`, exit non-zero with a clear "out of disk during install" message. The user re-runs after clearing space. |
-| KDE doesn't see the new launcher | Installer runs `kbuildsycoca6` if available; if KDE Plasma needs a session restart in rare cases, the README documents this. |
-| `~/.local/bin` not on PATH | Installer detects, prints a one-liner to add to `~/.bashrc` / `~/.zshrc`. |
+| Python <3.11 on the system | Installer aborts with the message in `install.sh:25`: `"Python 3.11+ not found. On openSUSE: zypper install python311"`. |
+| `pip install` of a heavy dep fails (compile error or disk full) | `set -euo pipefail` aborts the installer with the underlying `pip` stderr surfaced. The half-built `.venv/` is **not** auto-wiped on failure in v1 — re-running with the same broken state may skip already-installed-but-broken deps; the user re-runs after clearing the underlying problem (and can manually `rm -rf ~/.local/share/album-builder/.venv` if recovery from a broken half-state is needed). *Auto-wipe-on-failure + wiki-link surfacing is queued on `ROADMAP.md §🔭 Future / deferred` as installer-UX hardening.* |
+| KDE doesn't see the new launcher | Installer runs `update-desktop-database`, `gtk-update-icon-cache`, and `kbuildsycoca6` (if available, each with `|| true`); if KDE Plasma needs a session restart in rare cases, the README documents this. |
+| `~/.local/bin` not on PATH | Installer detects, prints a one-liner to add to `~/.bashrc`. (See `install.sh:105-109`.) |
 | User installs as root | Installer refuses: "Run as your user, not root. Album Builder is per-user." |
-| Reinstall when running | Installer detects via the single-instance lock and refuses with "Quit the running Album Builder first." |
+| Reinstall when running | Installer detects via `pgrep -f "python[0-9.]* -m album_builder"` and refuses with "Quit Album Builder first; it is currently running." |
 
 ## Test contract
 
 Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-12-NN` marker.
 
-**Phase status — Phase 1 ships TC-12-01 + TC-12-02 (shellcheck on install.sh + desktop-file-validate).** TC-12-03..06 are Phase 1 manual-smoke (described below; not automated). TC-12-07..09 are Phase 2 (re-tested at the end of Phase 2 to confirm packaging stays green).
+**Phase status — TC-12-01 + TC-12-02 + TC-12-06 shipped in Phase 1 (manual / CI-only; no automated `tests/` markers).** TC-12-03..05 are manual smoke contracts. TC-12-07..09 are **deferred** — they describe behaviours the installer does not currently honour (auto-wipe `.venv/` on failure, wiki troubleshooting link); queued on `ROADMAP.md §🔭 Future / deferred` as installer-UX hardening.
 
-- **TC-12-01** — `shellcheck install.sh uninstall.sh` exits 0 (no warnings, no errors). Phase 1 ✓.
-- **TC-12-02** — `desktop-file-validate packaging/album-builder.desktop.in` exits 0 (after a `sed s|@@LAUNCHER@@|/tmp/album-builder|` substitution). Phase 1 ✓.
+- **TC-12-01** — `shellcheck install.sh uninstall.sh` exits 0 (no warnings, no errors). Manual / CI-only.
+- **TC-12-02** — `desktop-file-validate packaging/album-builder.desktop.in` exits 0 (after a `sed s|@@LAUNCHER@@|/tmp/album-builder|` substitution). Manual / CI-only.
 - **TC-12-03** — Manual smoke: clean account → `./install.sh` → launcher appears in K Menu under Multimedia within 5 s → click → window opens → quit → click again → window opens fresh.
 - **TC-12-04** — Manual smoke: `./uninstall.sh` removes the five paths listed in §Uninstall and preserves the three "preserved" paths.
 - **TC-12-05** — Manual smoke: `./uninstall.sh --purge` additionally removes `~/.config/album-builder/` and `~/.cache/album-builder/`.
-- **TC-12-06** — Single-instance: launching while running raises the existing window (no second copy spawned). Phase 1 ✓.
-- **TC-12-07** — Failed `pip install` (simulate via `--no-binary :all: --target /dev/full` or a deliberately bad requirements line) → installer wipes `.venv/` before exiting non-zero. After failure, the venv directory does not exist on disk.
-- **TC-12-08** — Partial install resumed: a successful `./install.sh` after a wiped-venv failure produces the same final state as a fresh install.
-- **TC-12-09** — Reinstall-while-running: the installer refuses with the "Quit the running Album Builder first" message and exits non-zero; no files modified.
+- **TC-12-06** — Single-instance: launching while running raises the existing window (no second copy spawned). Verified by `acquire_single_instance_lock` in `src/album_builder/app.py` + manual smoke.
+- **TC-12-07** *(deferred)* — Failed `pip install` → installer wipes `.venv/` before exiting non-zero. Currently not implemented; `set -euo pipefail` aborts but the venv is not auto-wiped.
+- **TC-12-08** *(deferred)* — Partial install resumed: a successful `./install.sh` after a wiped-venv failure produces the same final state as a fresh install. Depends on TC-12-07.
+- **TC-12-09** — Reinstall-while-running: the installer refuses with the "Quit Album Builder first; it is currently running." message and exits non-zero; no files modified. Verified by manual smoke.
 
 ## Out of scope (v1)
 
