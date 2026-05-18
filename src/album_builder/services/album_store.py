@@ -407,8 +407,11 @@ class AlbumStore(QObject):
                     album_id, "; ".join(export_warnings),
                 )
             # step:render-tmp + render-rename-html + render-rename-pdf.
+            # Two pairs: full report (kept locally) + artist report (shared
+            # with the artist; album name + track listing only).
             reports_dir = folder / "reports"
             render_report(album, library, reports_dir=reports_dir)
+            render_report(album, library, reports_dir=reports_dir, artist_view=True)
 
             # step:write-marker + step:flip-status.
             album.approve()

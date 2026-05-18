@@ -223,8 +223,19 @@ def _jinja_env() -> Environment:
     )
 
 
-def render_html(album: Any, library: Any, *, today: date | None = None) -> str:
-    """Render the template once → one HTML string (Spec 09 §Technology)."""
+def render_html(
+    album: Any,
+    library: Any,
+    *,
+    today: date | None = None,
+    artist_view: bool = False,
+) -> str:
+    """Render the template once -> one HTML string (Spec 09 §Technology).
+
+    `artist_view=True` produces a stripped variant intended to be sent to
+    the artist: drops the cover image, the per-track cards (covers + lyrics),
+    and the status row. Album name + track listing only.
+    """
     env = _jinja_env()
     template = env.get_template(TEMPLATE_NAME)
     today = today or date.today()
@@ -233,6 +244,7 @@ def render_html(album: Any, library: Any, *, today: date | None = None) -> str:
         "version": version_string(),
         "approved_date": today.isoformat(),
         "approved_date_human": today.strftime("%d %B %Y"),
+        "artist_view": artist_view,
     })
     return template.render(**ctx)
 
@@ -244,9 +256,10 @@ def render_pdf_from_html(html: str) -> bytes:
     return HTML(string=html).write_pdf()
 
 
-def _filename_for(album: Any, today: date) -> tuple[str, str]:
+def _filename_for(album: Any, today: date, *, artist_view: bool = False) -> tuple[str, str]:
     name = sanitise_title(getattr(album, "name", "") or "") or "album"
-    stem = f"{name} - {today.isoformat()}"
+    suffix = " - artist" if artist_view else ""
+    stem = f"{name} - {today.isoformat()}{suffix}"
     return f"{stem}.html", f"{stem}.pdf"
 
 
@@ -256,6 +269,7 @@ def render_report(
     *,
     reports_dir: Path,
     today: date | None = None,
+    artist_view: bool = False,
 ) -> tuple[Path, Path]:
     """Spec 09 §canonical approve sequence step:render-* full pipeline.
 
@@ -270,13 +284,13 @@ def render_report(
     """
     today = today or date.today()
     reports_dir.mkdir(parents=True, exist_ok=True)
-    html_name, pdf_name = _filename_for(album, today)
+    html_name, pdf_name = _filename_for(album, today, artist_view=artist_view)
     html_final = reports_dir / html_name
     pdf_final = reports_dir / pdf_name
     html_tmp = _unique_tmp_path(html_final)
     pdf_tmp = _unique_tmp_path(pdf_final)
 
-    html_str = render_html(album, library, today=today)
+    html_str = render_html(album, library, today=today, artist_view=artist_view)
     pdf_bytes = render_pdf_from_html(html_str)
 
     # step:render-tmp - write BOTH tmps before any rename runs (Spec 10
