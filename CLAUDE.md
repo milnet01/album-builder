@@ -1,19 +1,19 @@
 # CLAUDE.md
 
-Guidance for Claude Code working in this repo.
+Project-specific guidance. Layers on top of `~/.claude/CLAUDE.md` and `/mnt/Storage/CLAUDE.md` — see *Inherited rules* below.
 
 ## What this is
 
-**Album Builder** — PyQt6 desktop tool that curates an album from a folder of audio recordings. The user picks N tracks out of `Tracks/`, sets an order, plays them with synchronised lyrics, and approves the result. Approval exports a numbered symlink folder + M3U + PDF/HTML report.
+**Album Builder** — PyQt6 desktop tool that curates an album from a folder of audio recordings. Pick N tracks from `Tracks/`, set order, play with synchronised lyrics, approve. Approval exports a numbered symlink folder + M3U + PDF/HTML report.
 
 - `src/album_builder/` — Python source (domain / persistence / services / ui).
-- `tests/` — pytest + pytest-qt (467+ as of v0.5.0).
-- `docs/specs/` — 13 numbered specs authored before code; each ends with TC-NN-MM contracts.
+- `tests/` — pytest + pytest-qt.
+- `docs/specs/` — numbered specs authored before code; each ends with TC-NN-MM contracts.
 - `docs/plans/` — per-phase implementation plans.
 - `Tracks/` — gitignored source audio. **Never transcode, rename, move, or delete without explicit user confirmation.**
 - `Albums/` — created at runtime; `.album-builder/state.json` lives at project root.
 
-Current state: **v0.5.0 shipped** (Phase 4: export + approval + report). Phases 1–4 complete. See `ROADMAP.md` for the release log + open queues.
+See `ROADMAP.md` for current phase, release log, and open queues.
 
 ## Build / test / lint
 
@@ -27,7 +27,7 @@ The repo ships a `.venv/` with all deps. Always use it:
 .venv/bin/python -m album_builder         # run the app
 ```
 
-bandit / pyright / shellcheck / semgrep / gitleaks / trivy are also installed (see `/audit`).
+bandit / pyright / shellcheck / semgrep / gitleaks / trivy are installed (see `/audit`).
 
 ## Architecture (4 layers, signals up + writes down)
 
@@ -38,21 +38,24 @@ bandit / pyright / shellcheck / semgrep / gitleaks / trivy are also installed (s
 
 Signals flow up via `pyqtSignal(object)`. Disk writes flow down through `DebouncedWriter` keyed by album UUID.
 
-## Conventions
+## Project conventions
 
 - **Python 3.11+ idioms** — `datetime.UTC`, `match/case`, `X | None`, `from collections.abc import …` (not `typing`). Ruff: `select = ["E", "F", "W", "I", "B", "UP", "RUF"]`.
 - **ASCII-only source** — `-` not `–`/`—`, `->` not `→`, `...` not `…`. RUF001/002/003 flag confusables. UI glyphs come from `theme.Glyphs` (`\Uxxxxxxxx` for emoji, literal codepoints for arrows/dots).
-- **UTC-aware datetimes** — `datetime.now(UTC)`. On-disk format: ISO-8601 ms-precision Z-suffix via `_to_iso` (Spec 10 §Encoding rules).
-- **Atomic writes** — every persistence write goes through `atomic_write_text` / `atomic_write_bytes` (tmp + fsync + `os.replace`). Multi-file transactions use `atomic_pair.scan_reports_dir` for load-time recovery.
-- **Tests cite spec contracts** — every test has `# Spec: TC-NN-MM` (or `WCAG_*` / `RFC_*`). NEW load-bearing test files prefix the filename with the contract anchor (`test_TC_NN_*`); existing files keep their names (forward-only, no retroactive rename).
-- **Commits** — conventional (`feat: / fix: / docs: / test: / refactor: / chore:`); one logical change per commit; **no `Co-Authored-By` footer** (project convention; verify with `git log -10 --format=%B`).
+- **UTC-aware datetimes** — `datetime.now(UTC)`. On-disk: ISO-8601 ms-precision Z-suffix via `_to_iso` (Spec 10 §Encoding).
+- **Atomic writes** — every persistence write through `atomic_write_text` / `atomic_write_bytes` (tmp + fsync + `os.replace`). Multi-file transactions use `atomic_pair.scan_reports_dir` for load-time recovery.
+- **Tests cite spec contracts** — every test has `# Spec: TC-NN-MM` (or `WCAG_*` / `RFC_*`). New load-bearing test files prefix the filename with the contract anchor (`test_TC_NN_*`); existing files keep their names (forward-only, no retroactive rename).
+- **Commits** — conventional (`feat: / fix: / docs: / test: / refactor: / chore:`); one logical change per commit; **no `Co-Authored-By` footer** (verify with `git log -10 --format=%B`).
 
 ## Slash commands
 
-`/audit`, `/indie-review`, `/debt-sweep`, `/release`, `/bump`, `/feature-test`, `/triage`, `/security-review`, `/review` — all apply. Findings land in `ROADMAP.md`.
+`/audit`, `/indie-review`, `/debt-sweep`, `/release`, `/bump`, `/feature-test`, `/triage`, `/security-review`, `/review` apply. Findings land in `ROADMAP.md`.
 
 ## Inherited rules
 
-`/mnt/Storage/CLAUDE.md` (notably `SUDO_ASKPASS=/usr/libexec/ssh/ksshaskpass sudo -A -p "..."` for privileged commands) and `~/.claude/CLAUDE.md` (commit-locally / public-repo-push-freely, shortest correct implementation, no workarounds without root-cause fixes, current external-library idioms) apply.
+Global rules apply in full unless this file overrides them — don't restate, follow:
+
+- **`~/.claude/CLAUDE.md`** — development discipline (§1-5: no workarounds without root-cause fix, shortest correct implementation, reuse before rewriting, six-month test, current external-library idioms), git push cadence (§6: public repo push freely; private batch + confirm), PR-workflow opt-in (§7), and the **Karpathy clarity rules** (§8-12: surface ambiguity, push back when a simpler path exists, reproduce-before-fix for bugs, stay in your lane on edits, state a verify-step plan for multi-step work).
+- **`/mnt/Storage/CLAUDE.md`** — privileged commands use `SUDO_ASKPASS=/usr/libexec/ssh/ksshaskpass sudo -A -p "Claude Code: <action>"`.
 
 Public GitHub repo (`milnet01/album-builder`) — push freely on main; free Linux CI minutes.
