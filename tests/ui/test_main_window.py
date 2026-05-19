@@ -1,3 +1,7 @@
+"""MainWindow integration tests — Spec 06 wiring, Spec 07 lyrics, indie-review fixes."""
+
+from __future__ import annotations
+
 from pathlib import Path
 
 import pytest
@@ -42,8 +46,11 @@ def test_main_window_title_includes_version(main_window) -> None:
     assert main_window.windowTitle() == f"Album Builder v{__version__}"
 
 
-def test_create_then_select_appears_in_order_pane(qtbot, tmp_path: Path, tracks_dir: Path) -> None:
+def test_create_then_select_appears_in_order_pane(
+    qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
+) -> None:
     """End-to-end: create album, toggle a library row, see it in the middle pane."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     store = AlbumStore(tmp_path / "Albums")
     watcher = LibraryWatcher(tracks_dir)
     state = AppState()
@@ -63,6 +70,7 @@ def test_create_then_select_appears_in_order_pane(qtbot, tmp_path: Path, tracks_
 def test_close_event_saves_state_when_flush_raises(
     qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
 ) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     store = AlbumStore(tmp_path / "Albums")
     watcher = LibraryWatcher(tracks_dir)
     state = AppState()
@@ -172,8 +180,9 @@ def test_close_event_writes_audio_settings(
 
 # Spec: TC-06-11 — last-played round-trip; pane shows track paused at zero.
 def test_state_last_played_restored_on_construct(
-    qtbot, tmp_path: Path, tracks_dir: Path,
+    qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
 ) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     store = AlbumStore(tmp_path / "Albums")
     watcher = LibraryWatcher(tracks_dir)
     track = next(iter(watcher.library().tracks))
@@ -188,10 +197,11 @@ def test_state_last_played_restored_on_construct(
 
 
 def test_state_last_played_missing_track_does_nothing(
-    qtbot, tmp_path: Path, tracks_dir: Path,
+    qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
 ) -> None:
     """If state.json names a track that no longer exists, the player isn't
     loaded — silent recovery, no toast."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     store = AlbumStore(tmp_path / "Albums")
     watcher = LibraryWatcher(tracks_dir)
     state = AppState(last_played_track_path=tmp_path / "vanished.mp3")
@@ -417,7 +427,7 @@ def test_close_event_stops_state_save_timer(
 # subclasses (QDoubleSpinBox), QDateTimeEdit, and editable QComboBox in
 # addition to QLineEdit / QSpinBox / QTextEdit. A user typing into one
 # of these widgets that pressed Space would otherwise toggle playback.
-def test_key_in_text_field_covers_abstract_spinbox(main_window) -> None:
+def test_key_in_text_field_covers_abstract_spinbox(main_window, monkeypatch) -> None:
     from PyQt6.QtWidgets import (
         QApplication,
         QComboBox,
@@ -425,29 +435,26 @@ def test_key_in_text_field_covers_abstract_spinbox(main_window) -> None:
         QDoubleSpinBox,
     )
 
+    # Under the offscreen QPA, focusWidget() often returns None even after
+    # setFocus(); guarding the asserts with `if focus == widget` silently
+    # skipped the check on CI. Patch focusWidget() to return each widget
+    # in turn so the dispatch always exercises the branch under test.
     # QDoubleSpinBox derives from QAbstractSpinBox but not QSpinBox.
     dsb = QDoubleSpinBox(main_window)
-    dsb.show()
-    dsb.setFocus()
-    QApplication.processEvents()
-    if QApplication.focusWidget() is dsb:
-        assert main_window._key_in_text_field() is True
+    monkeypatch.setattr(QApplication, "focusWidget", staticmethod(lambda: dsb))
+    assert main_window._key_in_text_field() is True
 
     dte = QDateTimeEdit(main_window)
-    dte.show()
-    dte.setFocus()
-    QApplication.processEvents()
-    if QApplication.focusWidget() is dte:
-        assert main_window._key_in_text_field() is True
+    monkeypatch.setattr(QApplication, "focusWidget", staticmethod(lambda: dte))
+    assert main_window._key_in_text_field() is True
 
     # Editable QComboBox is a text field; non-editable is not.
     combo = QComboBox(main_window)
     combo.setEditable(True)
-    combo.show()
-    combo.lineEdit().setFocus()
-    QApplication.processEvents()
-    if QApplication.focusWidget() is combo.lineEdit():
-        assert main_window._key_in_text_field() is True
+    monkeypatch.setattr(
+        QApplication, "focusWidget", staticmethod(lambda: combo.lineEdit()),
+    )
+    assert main_window._key_in_text_field() is True
 
 
 # Indie-review L8-M1: _save_state_now's pixel-ratio rounding must
@@ -509,10 +516,9 @@ def test_splitter_setSizes_deferred_until_visible(
 
     monkeypatch.setattr(win.splitter, "setSizes", tracking)
 
-    # Show triggers the deferred setSizes via showEvent or singleShot.
+    # Show triggers the deferred setSizes via showEvent (synchronous).
     win.show()
     qtbot.waitExposed(win)
-    qtbot.wait(50)
 
     assert any(sizes == [4, 5, 4] for sizes in set_sizes_calls), (
         f"deferred setSizes must apply restored ratios after show; got "

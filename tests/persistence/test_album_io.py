@@ -209,9 +209,9 @@ def test_load_resolves_relative_cover_override(tmp_path: Path) -> None:
     )
 
 
-# Tier 3: _to_iso must reject naive datetimes — `astimezone` would silently
-# treat them as host-local time and produce a wrong-hour `Z` stamp on a
-# non-UTC host. A clear ValueError is the safer failure mode.
+# Spec: TC-10-08 — _to_iso must reject naive datetimes — `astimezone` would
+# silently treat them as host-local time and produce a wrong-hour `Z` stamp
+# on a non-UTC host. A clear ValueError is the safer failure mode.
 def test_to_iso_rejects_naive_datetime() -> None:
     from datetime import datetime as _dt
 
@@ -310,3 +310,73 @@ def test_album_migration_preserves_bak_with_original_bytes(
     bak = folder / "album.json.v0.bak"
     assert bak.exists(), f"expected {bak} to be written"
     assert bak.read_bytes() == original_bytes
+
+
+# Spec: TC-02-13 — approve writes the marker BEFORE the json status flip
+# so a crash mid-flip leaves marker-present + status-draft (Spec 10 self-
+# heals that to approved). The reverse ordering would leave the album
+# claiming-but-not-marked-approved, which Spec 02 calls unrecoverable.
+def test_save_album_for_approve_writes_marker_before_json(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from album_builder.persistence import album_io
+
+    a = Album.create(name="x", target_count=1)
+    a.select(Path("/abs/a.mp3"))
+    a.approve()
+    folder = tmp_path / "x"
+    folder.mkdir()
+
+    order: list[str] = []
+    real_touch = Path.touch
+    real_write = album_io._write_album_json
+
+    def spy_touch(self, *a, **kw):
+        if self.name == ".approved":
+            order.append("marker")
+        return real_touch(self, *a, **kw)
+
+    def spy_write(folder, album):
+        order.append("json")
+        return real_write(folder, album)
+
+    monkeypatch.setattr(Path, "touch", spy_touch)
+    monkeypatch.setattr(album_io, "_write_album_json", spy_write)
+    album_io.save_album_for_approve(folder, a)
+    assert order == ["marker", "json"], order
+    assert (folder / ".approved").exists()
+
+
+# Spec: TC-02-14 — unapprove deletes the marker BEFORE the json status flip.
+def test_save_album_for_unapprove_deletes_marker_before_json(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from album_builder.persistence import album_io
+
+    a = Album.create(name="x", target_count=1)
+    a.select(Path("/abs/a.mp3"))
+    a.approve()
+    folder = tmp_path / "x"
+    folder.mkdir()
+    album_io.save_album_for_approve(folder, a)
+    # Now flip back in memory for the unapprove call.
+    a.unapprove()
+
+    order: list[str] = []
+    real_unlink = Path.unlink
+    real_write = album_io._write_album_json
+
+    def spy_unlink(self, *a, **kw):
+        if self.name == ".approved":
+            order.append("marker_deleted")
+        return real_unlink(self, *a, **kw)
+
+    def spy_write(folder, album):
+        order.append("json")
+        return real_write(folder, album)
+
+    monkeypatch.setattr(Path, "unlink", spy_unlink)
+    monkeypatch.setattr(album_io, "_write_album_json", spy_write)
+    album_io.save_album_for_unapprove(folder, a)
+    assert order == ["marker_deleted", "json"], order
+    assert not (folder / ".approved").exists()

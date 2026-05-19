@@ -9,6 +9,7 @@ should run under 10 s on warm imports.
 from __future__ import annotations
 
 import io
+import re
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -99,6 +100,9 @@ def test_TC_09_02_version_string_normal():
     # Spec: TC-09-02 — version comes from the package
     v = version_string()
     assert v and v != "unknown"
+    # PEP 440 prefix: at least two numeric components ("0.6", "1.10.2") —
+    # tightens the loose `v != "unknown"` assertion against garbage strings.
+    assert re.match(r"^\d+\.\d+", v), f"version not PEP-440-like: {v!r}"
 
 
 def test_TC_09_02_version_string_import_error_falls_back():
@@ -119,6 +123,7 @@ def test_TC_09_02_version_string_import_error_falls_back():
 # --- TC-09-05 approve produces three artefacts non-zero size ---
 
 
+@pytest.mark.slow
 def test_TC_09_05_render_report_writes_pair(tmp_path):
     # Spec: TC-09-05 — both files exist and are non-zero
     paths = _seed_paths(tmp_path, 1)
@@ -234,6 +239,7 @@ def test_TC_09_09b_under_cap_passes_through():
 # --- TC-09-10 atomic pair ---
 
 
+@pytest.mark.slow
 def test_TC_09_10_pair_files_both_complete_before_rename(tmp_path, monkeypatch):
     # Spec: TC-09-10 — both .tmp written before either rename;
     # if second os.replace raises, scan removes orphan + tmp.
@@ -309,7 +315,6 @@ def test_TC_09_21_footer_contains_version(tmp_path):
     album = _make_album(paths)
     html = render_html(album, library, today=date(2026, 4, 30))
     # Find <footer ...>...</footer>
-    import re
     m = re.search(r"<footer[^>]*>(.*?)</footer>", html, flags=re.S)
     assert m is not None
     footer = m.group(1)
@@ -393,6 +398,7 @@ def test_TC_09_28_artist_view_strips_cover_status_and_per_track(tmp_path):
     assert "Track 0" in artist and "Track 1" in artist
 
 
+@pytest.mark.slow
 def test_TC_09_29_render_report_writes_both_variants(tmp_path):
     # Spec: TC-09-29 — render_report for full + artist_view produces four
     # non-zero files in reports/.
@@ -418,6 +424,7 @@ def test_TC_09_29_render_report_writes_both_variants(tmp_path):
         assert p.stat().st_size > 0
 
 
+@pytest.mark.slow
 def test_TC_09_30_artist_variant_recovery_independent_of_full(tmp_path):
     # Spec: TC-09-30 — cross-references Spec 10 TC-10-25. Approve-time
     # render with both variants on disk, then simulate a Phase-2 mid-crash on

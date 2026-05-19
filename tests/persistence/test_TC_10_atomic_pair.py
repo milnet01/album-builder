@@ -213,3 +213,31 @@ def test_TC_10_26_artist_only_complete_counts_as_completed(tmp_path):
     assert art_html.exists() and art_pdf.exists()
     assert stats["pairs_completed"] == 1
     assert stats["pairs_repaired"] == 0
+
+
+# Spec: TC-10-21 — Complete pair with stale .tmp siblings: pair stays intact,
+# the orphan .tmp files are swept. This is the only path that increments
+# tmps_swept alongside a non-zero pairs_completed.
+def test_TC_10_21_complete_pair_with_stale_tmps_sweeps_tmps(tmp_path):
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    html, pdf, html_tmp, pdf_tmp = _make_pair(
+        reports, "Album", "2026-04-30",
+        html_final=True, pdf_final=True,
+        html_tmp=True, pdf_tmp=True,
+    )
+    html_bytes = html.read_bytes()
+    pdf_bytes = pdf.read_bytes()
+
+    stats = scan_reports_dir(reports, sanitised_name="Album")
+
+    # Finals untouched.
+    assert html.exists() and pdf.exists()
+    assert html.read_bytes() == html_bytes
+    assert pdf.read_bytes() == pdf_bytes
+    # Orphans gone.
+    assert not html_tmp.exists()
+    assert not pdf_tmp.exists()
+    assert stats["pairs_completed"] == 1
+    assert stats["pairs_repaired"] == 0
+    assert stats["tmps_swept"] == 1

@@ -188,20 +188,26 @@ def test_line_at_empty_lyrics():
 
 # Spec: TC-07-12
 def test_lyrics_frozen_and_hashable():
-    lyrics = parse_lrc("[00:00.00]a\n[00:05.00]b")
-    # Hashable
-    assert hash(lyrics) == hash(lyrics)
+    # Two equal-but-distinct instances must hash the same so Lyrics works
+    # as a dict key / set member; comparing hash(x) to itself proved only
+    # Python's identity guarantee, not the dataclass-frozen invariant.
+    a = parse_lrc("[00:00.00]a\n[00:05.00]b")
+    b = parse_lrc("[00:00.00]a\n[00:05.00]b")
+    assert a == b
+    assert hash(a) == hash(b)
     # Frozen
     with pytest.raises(FrozenInstanceError):
-        lyrics.lines = ()  # type: ignore[misc]
+        a.lines = ()  # type: ignore[misc]
 
 
 # Spec: TC-07-12
 def test_lyric_line_frozen_and_hashable():
-    line = LyricLine(time_seconds=1.0, text="x", is_section_marker=False)
-    assert hash(line) == hash(line)
+    a = LyricLine(time_seconds=1.0, text="x", is_section_marker=False)
+    b = LyricLine(time_seconds=1.0, text="x", is_section_marker=False)
+    assert a == b
+    assert hash(a) == hash(b)
     with pytest.raises(FrozenInstanceError):
-        line.time_seconds = 2.0  # type: ignore[misc]
+        a.time_seconds = 2.0  # type: ignore[misc]
 
 
 def test_lyrics_coerces_iterable_to_tuple():

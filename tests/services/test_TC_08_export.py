@@ -182,6 +182,28 @@ def test_TC_08_03_symlink_names_2_digit(tmp_path):
     ]
 
 
+def test_TC_08_06_symlink_dedup_after_title_sanitisation(tmp_path):
+    # Spec: TC-08-06 — two distinct raw titles can sanitise to the same
+    # string (e.g. "Foo/Bar" and "Foo_Bar" both -> "Foo_Bar"); dedup must
+    # append "(2)", "(3)" — never silently overwrite a prior symlink.
+    src1 = tmp_path / "a.mp3"
+    src1.write_bytes(b"X" * 128)
+    src2 = tmp_path / "b.mp3"
+    src2.write_bytes(b"X" * 128)
+    folder = tmp_path / "album"
+    folder.mkdir()
+    library = _FakeLibrary({
+        src1: _make_track(src1, title="Foo/Bar"),
+        src2: _make_track(src2, title="Foo_Bar"),
+    })
+    album = _make_album([src1, src2])
+    regenerate_album_exports(album, library, folder)
+    names = sorted(p.name for p in folder.iterdir() if p.is_symlink())
+    # Both titles sanitise to "Foo_Bar"; the second one must collision-dedup,
+    # not overwrite the first symlink (which would lose track 02 from the album).
+    assert names == ["01 - Foo_Bar.mp3", "02 - Foo_Bar (2).mp3"], names
+
+
 def test_TC_08_03_symlink_extension_rule(tmp_path):
     # Spec: TC-08-03 — .mpeg → .mp3; .flac passes through.
     src1 = tmp_path / "a.mpeg"
@@ -360,7 +382,11 @@ def test_TC_08_15_zero_byte_target_logs_but_completes(tmp_path):
     regenerate_album_exports(album, library, folder)
     assert any(p.name.startswith("01 -") for p in folder.iterdir() if p.is_symlink())
     log = (folder / ".export-log").read_text(encoding="utf-8")
-    assert log  # at least one entry written
+    # The log must record the zero-byte target specifically — a bare `assert
+    # log` would pass against any non-empty content, including residual
+    # entries. The export pipeline writes a "sanity-check" line naming the
+    # target file when it reads 0 bytes.
+    assert "sanity-check" in log and "0 bytes" in log, log
 
 
 # --- TC-08-16 .export-log rotation ---
@@ -445,7 +471,7 @@ def test_TC_08_19_drift_detection(tmp_path):
     assert is_export_fresh(album, folder, library) is False
 
 
-# --- TC-08-07 album folder missing aborts ---
+# --- §Errors: album folder deleted mid-session ---
 
 
 def test_album_folder_missing_aborts(tmp_path):

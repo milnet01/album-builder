@@ -69,6 +69,7 @@ def test_TC_13_09a_used_column_position_and_header(qapp) -> None:
     assert last == ("Used", "_used")
 
 
+# Spec: TC-13-09a
 def test_used_column_resolved_by_helper(qapp) -> None:
     from album_builder.ui.library_pane import _column_index
     assert _column_index("_used") == len(COLUMNS) - 1

@@ -1,3 +1,7 @@
+"""LibraryPane widget tests — Spec 01 + Spec 04 visual rules + indie-review fixes."""
+
+from __future__ import annotations
+
 from pathlib import Path
 
 import pytest
@@ -16,28 +20,30 @@ def populated_pane(qtbot, tracks_dir: Path):
     return pane, lib
 
 
+# Spec: TC-01-09
 def test_library_pane_shows_all_tracks(populated_pane) -> None:
     pane, lib = populated_pane
     assert pane.row_count() == len(lib.tracks)
 
 
-def test_library_pane_search_filters(populated_pane, qtbot) -> None:
+# Spec: TC-01-13
+def test_library_pane_search_filters(populated_pane) -> None:
     pane, _lib = populated_pane
     pane.search_box.setText("intro")
-    qtbot.wait(50)
+    # _on_search_changed is synchronous — no qtbot.wait needed.
     assert pane.row_count() == 1
 
 
-def test_library_pane_search_clear_restores_all(populated_pane, qtbot) -> None:
+# Spec: TC-01-13
+def test_library_pane_search_clear_restores_all(populated_pane) -> None:
     pane, lib = populated_pane
     pane.search_box.setText("nope-nothing-matches")
-    qtbot.wait(50)
     assert pane.row_count() == 0
     pane.search_box.setText("")
-    qtbot.wait(50)
     assert pane.row_count() == len(lib.tracks)
 
 
+# Spec: TC-01-09
 def test_library_pane_sort_by_title(populated_pane) -> None:
     pane, _lib = populated_pane
     pane.table.sortByColumn(0, Qt.SortOrder.AscendingOrder)
@@ -49,8 +55,6 @@ def test_track_table_model_data_handles_out_of_range_row() -> None:
     """A stale proxy index after set_tracks() reset can ask the model for a
     row that no longer exists. Bare IndexError bubbles into Qt's C++ slot
     dispatch with no useful traceback. The model must return None instead."""
-    from PyQt6.QtCore import Qt
-
     from album_builder.ui.library_pane import TrackTableModel
 
     model = TrackTableModel([])
@@ -70,7 +74,7 @@ def test_library_pane_default_sort_is_title_ascending(populated_pane) -> None:
 
 
 # Spec: TC-01-15
-def test_library_pane_search_matches_album_artist(populated_pane, qtbot) -> None:
+def test_library_pane_search_matches_album_artist(populated_pane) -> None:
     """Per Spec 01: search covers title, artist, album_artist, composer, album.
 
     All 3 fixture tracks share album_artist='18 Down'; track 03 (drift) has
@@ -79,7 +83,6 @@ def test_library_pane_search_matches_album_artist(populated_pane, qtbot) -> None
     column also says '18 Down'."""
     pane, _lib = populated_pane
     pane.search_box.setText("18 down")
-    qtbot.wait(50)
     assert pane.row_count() == 3
 
 
@@ -162,8 +165,6 @@ def test_missing_selected_row_has_warning_accent(populated_pane, tracks_dir: Pat
 # Indie-review L5-H1: Spec 00 §Sort order requires case-insensitive locale-aware
 # comparison, not raw codepoint. casefold() handles German ß, Turkish I, etc.
 def test_sort_role_returns_casefolded_strings(populated_pane) -> None:
-    from PyQt6.QtCore import Qt
-
     from album_builder.ui.library_pane import COLUMNS, TrackTableModel
 
     pane, lib = populated_pane
@@ -183,8 +184,6 @@ def test_sort_role_returns_casefolded_strings(populated_pane) -> None:
 # Indie-review L5-H4: AccessibleTextRole must say "selected" / "not selected",
 # not the raw glyph (Spec 11 / WCAG 2.2 §4.1.2).
 def test_toggle_column_accessible_text_describes_state(populated_pane) -> None:
-    from PyQt6.QtCore import Qt
-
     from album_builder.domain.album import Album
     from album_builder.ui.library_pane import COLUMNS
 
@@ -203,8 +202,6 @@ def test_toggle_column_accessible_text_describes_state(populated_pane) -> None:
 
 # Indie-review L5-M7: approved-album tooltip on the toggle cell.
 def test_approved_album_toggle_has_tooltip(populated_pane) -> None:
-    from PyQt6.QtCore import Qt
-
     from album_builder.domain.album import Album, AlbumStatus
     from album_builder.ui.library_pane import COLUMNS
 
@@ -270,9 +267,7 @@ def test_format_duration_uses_classic_half_up_rounding() -> None:
 # inconsistency surfaces as "search for 'ß' fails to match a track named
 # 'Süß' on a German user's system" — the casefolded form of ß is "ss".
 def test_search_uses_casefold_not_lower(qtbot, tmp_path: Path) -> None:
-    from album_builder.domain.library import Library
     from album_builder.domain.track import Track
-    from album_builder.ui.library_pane import LibraryPane
 
     track = Track(
         path=tmp_path / "song.mp3",
@@ -289,7 +284,6 @@ def test_search_uses_casefold_not_lower(qtbot, tmp_path: Path) -> None:
     # With .lower() both sides, "ss" is not a substring of "süß"; only
     # casefold('ß') -> 'ss' surfaces the match.
     pane.search_box.setText("ss")
-    qtbot.wait(50)
     assert pane.row_count() == 1, (
         "search must use casefold() so ß is matchable by 'ss' (Theme G)"
     )

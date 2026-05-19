@@ -33,24 +33,27 @@ def _used_col() -> int:
 
 
 # Spec: TC-13-09b - Used column resize mode is Interactive.
-def test_TC_13_09b_used_column_resize_mode(qapp) -> None:
+def test_TC_13_09b_used_column_resize_mode(qtbot) -> None:
     pane = LibraryPane()
+    qtbot.addWidget(pane)
     used = _used_col()
     header = pane.table.horizontalHeader()
     assert header.sectionResizeMode(used) == QHeaderView.ResizeMode.Interactive
 
 
 # Spec: TC-13-09b - Used column width 40 +/- 8 px at __init__.
-def test_TC_13_09b_used_column_width(qapp) -> None:
+def test_TC_13_09b_used_column_width(qtbot) -> None:
     pane = LibraryPane()
+    qtbot.addWidget(pane)
     used = _used_col()
     width = pane.table.columnWidth(used)
     assert 32 <= width <= 48, f"width={width}"
 
 
 # Spec: TC-13-09b - Delegate is set per-column on Used (not setItemDelegate).
-def test_TC_13_09b_delegate_attached_to_column_only(qapp) -> None:
+def test_TC_13_09b_delegate_attached_to_column_only(qtbot) -> None:
     pane = LibraryPane()
+    qtbot.addWidget(pane)
     used = _used_col()
     title = next(i for i, c in enumerate(COLUMNS) if c[1] == "title")
     used_delegate = pane.table.itemDelegateForColumn(used)
@@ -89,6 +92,10 @@ def test_TC_13_15_paint_count_zero_is_noop(qapp) -> None:
 
 # Spec: TC-13-15 - count >= 1: delegate.paint draws a filled accent pill.
 def test_TC_13_15_paint_count_nonzero_draws_pill(qapp) -> None:
+    from PyQt6.QtGui import QColor
+
+    from album_builder.ui.theme import Palette
+
     delegate = UsageBadgeDelegate()
     img = QImage(40, 16, QImage.Format.Format_ARGB32)
     img.fill(Qt.GlobalColor.transparent)
@@ -111,11 +118,20 @@ def test_TC_13_15_paint_count_nonzero_draws_pill(qapp) -> None:
     # the text glyph, which is white). The pill is ~22 wide centred in
     # a 40-wide cell -> pill spans x in 9..31. Sample x=13, y=8 -> well
     # inside the fill, clear of the count text rendered at centre.
-    # Tolerance: ±15 RGB to allow anti-aliasing.
+    # Tolerance: ±15 RGB to allow anti-aliasing. Bounds derive from the
+    # palette so a Spec 11 token revision flips this test cleanly.
+    accent = QColor(Palette.dark_colourful().accent_primary_1)
     pixel = img.pixelColor(13, 8)
-    assert 95 <= pixel.red() <= 125, f"R={pixel.red()}"
-    assert 45 <= pixel.green() <= 75, f"G={pixel.green()}"
-    assert 230 <= pixel.blue() <= 255, f"B={pixel.blue()}"
+    tol = 15
+    assert abs(pixel.red() - accent.red()) <= tol, (
+        f"R={pixel.red()} vs accent.red()={accent.red()}"
+    )
+    assert abs(pixel.green() - accent.green()) <= tol, (
+        f"G={pixel.green()} vs accent.green()={accent.green()}"
+    )
+    assert abs(pixel.blue() - accent.blue()) <= tol, (
+        f"B={pixel.blue()} vs accent.blue()={accent.blue()}"
+    )
 
 
 # Spec: TC-13-19 - no animation: delegate constructs no QPropertyAnimation.

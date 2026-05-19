@@ -8,6 +8,7 @@ Only the pure-Python helpers are unit-tested here; the WhisperX-driven
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
@@ -84,11 +85,9 @@ def test_segments_to_lyrics_tolerates_missing_end_on_last_segment(tmp_path):
 # silent mis-pairing is a debugging trap. Log an INFO message so the
 # user sees a record of why their LRC has fewer/more lines than expected.
 def test_segments_to_lyrics_logs_count_mismatch(tmp_path, caplog):
-    import logging as _logging
-
     text = "a\nb\nc"
     aligned = {"segments": [{"start": 1.0, "end": 4.0}]}
-    with caplog.at_level(_logging.INFO, logger="album_builder.services.alignment_worker"):
+    with caplog.at_level(logging.INFO, logger="album_builder.services.alignment_worker"):
         _segments_to_lyrics(text, aligned, tmp_path / "song.mpeg")
     assert any(
         "segment" in rec.message.lower() and "line" in rec.message.lower()
@@ -97,11 +96,9 @@ def test_segments_to_lyrics_logs_count_mismatch(tmp_path, caplog):
 
 
 def test_segments_to_lyrics_no_log_when_counts_match(tmp_path, caplog):
-    import logging as _logging
-
     text = "a\nb"
     aligned = {"segments": [{"start": 1.0, "end": 4.0}, {"start": 4.5, "end": 7.0}]}
-    with caplog.at_level(_logging.INFO, logger="album_builder.services.alignment_worker"):
+    with caplog.at_level(logging.INFO, logger="album_builder.services.alignment_worker"):
         _segments_to_lyrics(text, aligned, tmp_path / "song.mpeg")
     # No mismatch -> no log.
     assert not any(
@@ -145,6 +142,28 @@ def test_worker_emits_install_hint_when_whisperx_missing(qtbot, tmp_path, monkey
     assert f"{_sys.executable} -m pip install whisperx" in failures[0]
     # The bare ImportError text must NOT have leaked through.
     assert "No module named" not in failures[0]
+
+
+# Spec: TC-07-09 — generic runtime exception path
+def test_worker_emits_failure_on_unexpected_runtime_error(qtbot, tmp_path, monkeypatch):
+    """If a non-ImportError exception escapes the alignment pipeline (e.g.
+    GPU OOM, torch device error), the worker must convert it into a
+    `failed` signal rather than crashing the QThread."""
+    audio = tmp_path / "song.mpeg"
+    audio.write_bytes(b"a")
+    worker = AlignmentWorker(audio, "lyrics text")
+
+    def _boom():
+        raise RuntimeError("CUDA out of memory")
+
+    monkeypatch.setattr(
+        "album_builder.services.alignment_worker._load_whisperx", _boom,
+    )
+    failures: list[str] = []
+    worker.failed.connect(failures.append)
+    worker.run()
+    assert len(failures) == 1
+    assert "CUDA out of memory" in failures[0]
 
 
 # Note: the live cancel-mid-flight path (TC-07-08) is covered by

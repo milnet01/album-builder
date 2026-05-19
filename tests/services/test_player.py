@@ -220,7 +220,9 @@ def test_seek_clamps_beyond_duration(silent_wav: Path, qtbot) -> None:
     qtbot.waitUntil(lambda: p.duration() > 0, timeout=3000)
     p.seek(999.0)
     qtbot.wait(100)
-    assert p.position() <= p.duration() - 1.0 + 0.05
+    # Player.seek clamps to (duration - 1 s); 50 ms tolerance covers the
+    # QMediaPlayer position-emit latency on the slowest CI runner.
+    assert p.position() == pytest.approx(p.duration() - 1.0, abs=0.05)
 
 
 @INTEGRATION
@@ -229,8 +231,9 @@ def test_seek_clamps_negative_to_zero(silent_wav: Path, qtbot) -> None:
     p.set_source(silent_wav)
     qtbot.waitUntil(lambda: p.duration() > 0, timeout=3000)
     p.seek(-50.0)
-    qtbot.wait(100)
-    assert p.position() == 0.0
+    # Wait for position to actually report zero; the immediate-assert
+    # form raced the QMediaPlayer positionChanged tick under load.
+    qtbot.waitUntil(lambda: p.position() == pytest.approx(0.0, abs=0.05), timeout=2000)
 
 
 # Spec: TC-06-05
@@ -343,5 +346,6 @@ def test_set_source_clears_error_state(qtbot, tmp_path: Path) -> None:
     assert p.state() == PlayerState.ERROR
     # Acknowledge by setting a (different but still bogus) source.
     p.set_source(tmp_path / "bad2.wav")
-    # Immediately after set_source, we should be back to STOPPED.
-    assert p.state() in (PlayerState.STOPPED, PlayerState.ERROR)
+    # Immediately after set_source, the contract is "back to STOPPED" —
+    # leaving ERROR in the accept set made the assertion a near no-op.
+    assert p.state() == PlayerState.STOPPED

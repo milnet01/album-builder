@@ -227,45 +227,62 @@ def test_album_unapprove_clears_approval() -> None:
     assert a.approved_at is None
 
 
-# Indie-review L1-H3: __post_init__ invariant catches corrupt direct-construction
-# (load-from-corrupt-JSON, hand-built test fixtures) that bypasses the mutating
-# methods' guards.
+def _post_init_kwargs(**overrides):
+    """Direct-construction kwargs for `Album(...)` — bypasses Album.create's
+    guards so __post_init__ invariants get exercised. Centralised so adding
+    a new Album field touches one site, not five."""
+    from datetime import UTC, datetime
+    from uuid import uuid4
+    base = dict(
+        id=uuid4(),
+        name="x",
+        target_count=3,
+        track_paths=[],
+        status=AlbumStatus.DRAFT,
+        cover_override=None,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    base.update(overrides)
+    return base
+
+
+# Spec: L1-H3 — Indie-review: __post_init__ invariant catches corrupt
+# direct-construction (load-from-corrupt-JSON, hand-built test fixtures)
+# that bypasses the mutating methods' guards.
 def test_album_post_init_rejects_target_below_track_count() -> None:
-    from datetime import UTC, datetime
-    from uuid import uuid4
     with pytest.raises(ValueError, match="target_count"):
-        Album(
-            id=uuid4(), name="x", target_count=2,
+        Album(**_post_init_kwargs(
+            target_count=2,
             track_paths=[Path("/abs/a.mp3"), Path("/abs/b.mp3"), Path("/abs/c.mp3")],
-            status=AlbumStatus.DRAFT, cover_override=None,
-            created_at=datetime.now(UTC), updated_at=datetime.now(UTC),
-        )
+        ))
 
 
+# Spec: L1-H3
 def test_album_post_init_rejects_target_out_of_range() -> None:
-    from datetime import UTC, datetime
-    from uuid import uuid4
     with pytest.raises(ValueError, match="target_count must be 1-99"):
-        Album(
-            id=uuid4(), name="x", target_count=0, track_paths=[],
-            status=AlbumStatus.DRAFT, cover_override=None,
-            created_at=datetime.now(UTC), updated_at=datetime.now(UTC),
-        )
+        Album(**_post_init_kwargs(target_count=0))
 
 
+# Spec: L1-H3
 def test_album_post_init_rejects_approved_without_tracks() -> None:
     from datetime import UTC, datetime
-    from uuid import uuid4
     with pytest.raises(ValueError, match="approved album"):
-        Album(
-            id=uuid4(), name="x", target_count=3, track_paths=[],
-            status=AlbumStatus.APPROVED, cover_override=None,
-            created_at=datetime.now(UTC), updated_at=datetime.now(UTC),
-            approved_at=datetime.now(UTC),
-        )
+        Album(**_post_init_kwargs(
+            status=AlbumStatus.APPROVED, approved_at=datetime.now(UTC),
+        ))
 
 
-# Tier 3: Album.unapprove asserts the target invariant defensively. Direct
+# Spec: TC-02-08 — select() must refuse once the album is at target capacity.
+def test_album_select_rejects_when_target_reached() -> None:
+    a = Album.create(name="x", target_count=2)
+    a.select(Path("/abs/a.mp3"))
+    a.select(Path("/abs/b.mp3"))
+    with pytest.raises(ValueError, match="at target"):
+        a.select(Path("/abs/c.mp3"))
+
+
+# Spec: L1-M2 — unapprove asserts the target invariant defensively. Direct
 # callers that mutate `track_paths` through the dataclass attribute (rather
 # than `select()`) and then unapprove would otherwise sneak past the
 # __post_init__ check. The assert closes that gap.
@@ -280,7 +297,7 @@ def test_album_unapprove_asserts_target_invariant() -> None:
         a.unapprove()
 
 
-# Tier 3 (L1-M2): Album equality is UUID-identity, not field-by-field.
+# Spec: L1-M2 — Album equality is UUID-identity, not field-by-field.
 # Two reads of the same album from disk often differ only by `updated_at`
 # millisecond drift — default-dataclass __eq__ marks them unequal and
 # breaks `album in some_list` / `dict[album]` callers.

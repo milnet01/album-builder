@@ -1,6 +1,7 @@
 """Tests for album_builder.domain.library — see docs/specs/01-track-library.md
 test contract for TC IDs."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -84,6 +85,7 @@ def test_library_skips_unsupported_files(tmp_path: Path, tagged_track) -> None:
 
 
 # Spec: TC-01-02
+@pytest.mark.skipif(os.getuid() == 0, reason="root bypasses mode bits")
 def test_library_scan_unreadable_dir_returns_empty(tmp_path: Path) -> None:
     target = tmp_path / "locked"
     target.mkdir(mode=0o000)
@@ -118,14 +120,14 @@ def test_library_is_hashable(tracks_dir: Path) -> None:
 
 
 # Spec: TC-01-10
+@pytest.mark.skipif(os.getuid() == 0, reason="root bypasses mode bits")
 def test_library_scan_unreadable_file_propagates(tmp_path: Path, tagged_track) -> None:
     """Per Spec 01: 'no readable tags' uses placeholders, but file-level
     PermissionError is a real I/O failure that must surface, not silently skip."""
-    import pytest as _pytest
     locked = tagged_track("locked.mp3")
     locked.chmod(0o000)
     try:
-        with _pytest.raises(PermissionError):
+        with pytest.raises(PermissionError):
             Library.scan(tmp_path)
     finally:
         locked.chmod(0o644)
@@ -144,6 +146,10 @@ def test_library_scan_skips_entries_with_os_error_metadata(
     bad = tmp_path / "bad.mp3"
     bad.write_bytes(b"\xff\xfb\x90\x00" + b"\x00" * 1024)
 
+    # `pathlib.Path` is the class object the library module imported via
+    # `from pathlib import Path`; both names point at the same class, so a
+    # narrower-looking patch would have identical blast radius. Filtering
+    # by `self.name == "bad.mp3"` is the actual scope guard.
     real_is_file = Path.is_file
     def boom_on_bad(self):
         if self.name == "bad.mp3":

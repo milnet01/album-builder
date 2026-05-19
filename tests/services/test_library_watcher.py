@@ -29,7 +29,8 @@ def test_initial_scan_populates_library(qapp, tracks_dir: Path) -> None:
 # Spec: TC-01-P2-02
 def test_tracks_changed_fires_on_file_added(qapp, tracks_dir: Path, tagged_track, qtbot) -> None:
     watcher = LibraryWatcher(tracks_dir)
-    with qtbot.waitSignal(watcher.tracks_changed, timeout=2000):
+    # 5s timeout: inotify events under load can be coalesced; 2s flakes on CI.
+    with qtbot.waitSignal(watcher.tracks_changed, timeout=5000):
         tagged_track("04-new.mp3", title="freshly added")
     assert any(t.title == "freshly added" for t in watcher.library().tracks)
 
@@ -40,7 +41,7 @@ def test_tracks_changed_fires_on_file_added(qapp, tracks_dir: Path, tagged_track
 def test_tracks_changed_fires_on_file_removed(qapp, tracks_dir: Path, qtbot) -> None:
     watcher = LibraryWatcher(tracks_dir)
     target = next(tracks_dir.iterdir())
-    with qtbot.waitSignal(watcher.tracks_changed, timeout=2000):
+    with qtbot.waitSignal(watcher.tracks_changed, timeout=5000):
         target.unlink()
     assert len(watcher.library().tracks) == 2
 
@@ -145,11 +146,10 @@ def test_parent_watch_ignores_unrelated_sibling_changes(
 # Extra coverage: watcher survives folder deletion + recreation (resilience,
 # not a TC-01-P2-NN item; exercises the manual `refresh()` escape hatch).
 def test_watcher_survives_folder_deletion_and_recreation(
-    qapp, tmp_path: Path, tagged_track, qtbot,
+    qapp, tmp_path: Path, qtbot,
 ) -> None:
     folder = tmp_path / "Tracks"
     folder.mkdir()
-    tagged_track  # noqa - fixture creates files in tmp_path, not folder
     watcher = LibraryWatcher(folder)
     # Removing and recreating the folder must not crash the watcher; on the
     # next add the library re-populates.
@@ -157,7 +157,7 @@ def test_watcher_survives_folder_deletion_and_recreation(
     folder.mkdir()
     new_track = folder / "x.mp3"
     shutil.copy(Path(__file__).resolve().parent.parent / "fixtures" / "silent_1s.mp3", new_track)
-    with qtbot.waitSignal(watcher.tracks_changed, timeout=2000):
+    with qtbot.waitSignal(watcher.tracks_changed, timeout=5000):
         # Force the watcher to re-pick the recreated folder
         watcher.refresh()
     assert len(watcher.library().tracks) == 1

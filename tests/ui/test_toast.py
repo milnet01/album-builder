@@ -5,12 +5,14 @@ from __future__ import annotations
 from album_builder.ui.toast import Toast
 
 
+# Spec: TC-06-06
 def test_toast_initially_hidden(qtbot) -> None:
     t = Toast()
     qtbot.addWidget(t)
     assert not t.isVisible()
 
 
+# Spec: TC-06-06
 def test_toast_shows_message(qtbot) -> None:
     t = Toast()
     qtbot.addWidget(t)
@@ -19,6 +21,7 @@ def test_toast_shows_message(qtbot) -> None:
     assert t.message_label.text() == "Track file not found: /a/b.mp3"
 
 
+# Spec: TC-06-06
 def test_toast_auto_dismisses(qtbot) -> None:
     t = Toast(auto_dismiss_ms=200)
     qtbot.addWidget(t)
@@ -28,6 +31,7 @@ def test_toast_auto_dismisses(qtbot) -> None:
     assert not t.isVisible()
 
 
+# Spec: TC-06-06
 def test_toast_overwrites_previous(qtbot) -> None:
     t = Toast()
     qtbot.addWidget(t)
@@ -36,6 +40,7 @@ def test_toast_overwrites_previous(qtbot) -> None:
     assert t.message_label.text() == "second"
 
 
+# Spec: TC-06-06
 def test_toast_close_button_dismisses(qtbot) -> None:
     t = Toast()
     qtbot.addWidget(t)
@@ -44,16 +49,20 @@ def test_toast_close_button_dismisses(qtbot) -> None:
     assert not t.isVisible()
 
 
+# Spec: TC-06-06
 def test_toast_show_message_resets_timer(qtbot) -> None:
     """A new show_message call should reset the auto-dismiss timer so the
     user gets the full window for the new message, not a residual sliver
     from the prior one."""
-    t = Toast(auto_dismiss_ms=200)
+    # 500 ms dismiss window with two 200 ms gaps: a working timer-reset
+    # leaves 300 ms slack at the assertion. The prior 200/150/150 setup
+    # produced only ~50 ms slack and flaked on loaded CI runners.
+    t = Toast(auto_dismiss_ms=500)
     qtbot.addWidget(t)
     t.show_message("first")
-    qtbot.wait(150)
+    qtbot.wait(200)
     t.show_message("second")
-    qtbot.wait(150)  # 150 + 150 = 300 > 200; if timer wasn't reset, hidden by now
+    qtbot.wait(200)  # 400 ms since "first"; without reset, hidden by 500.
     assert t.isVisible()
 
 

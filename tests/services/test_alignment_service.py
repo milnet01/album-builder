@@ -179,8 +179,16 @@ def test_auto_align_on_play_on_starts_worker(qtbot, tmp_path):
 
 
 # Spec: TC-07-08
-def test_cancel_no_lrc_written(qtbot, tmp_path):
-    """Worker requested-to-interrupt before run() completes leaves no LRC."""
+def test_interrupted_worker_writes_no_lrc(qtbot, tmp_path):
+    """A worker that exits via the interruption path (synchronous bail in
+    FakeWorker.run() when behavior == "interrupt") must leave no `.lrc` on
+    disk — this is the side of the cancel contract that lives in the worker.
+
+    The companion test
+    `test_cancel_emits_status_revert_to_not_yet_aligned` covers the other
+    half: that AlignmentService.cancel() emits the status revert. Splitting
+    the contract into two tests was clearer than a single test that tries
+    to race a cancel against a synchronous run()."""
     audio = tmp_path / "song.mpeg"
     audio.write_bytes(b"a")
     lrc = tmp_path / "song.lrc"
@@ -195,7 +203,6 @@ def test_cancel_no_lrc_written(qtbot, tmp_path):
     )
     track = _make_track(audio, lyrics="hi")
     service.start_alignment(track)
-    service.cancel(audio)
     qtbot.wait(50)  # let the QThread finish
     assert not lrc.exists()
 
