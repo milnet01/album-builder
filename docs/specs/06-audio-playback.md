@@ -80,7 +80,7 @@ Play tracks for preview and karaoke-style listening. Provide play/pause, seek, p
 
 Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-06-NN` marker.
 
-**Phase status — shipped across Phase 3A (v0.3.0) + Phase 3B (v0.4.0) + v0.5.2 follow-up.** Coverage: 22 of 24 TC-06 contracts have anchored tests in `tests/services/test_player.py`, `tests/ui/test_transport_bar.py`, `tests/ui/test_TC_06_17_18_19_row_play_pause.py`, `tests/ui/test_TC_06_20_to_26_row_body_preview.py`, and `tests/ui/test_keyboard_shortcuts.py`. **Open coverage gaps:** TC-06-03 (seek granularity ±0.1 s) and TC-06-06 (corrupt-mp3 toast) lack `# Spec:` markers; tracked on `ROADMAP.md §Methodology gaps` as test-anchoring debt.
+**Phase status — shipped across Phase 3A (v0.3.0) + Phase 3B (v0.4.0) + v0.5.2 follow-up.** Coverage: all 24 TC-06 contracts have anchored tests in `tests/services/test_player.py`, `tests/ui/test_transport_bar.py`, `tests/ui/test_TC_06_17_18_19_row_play_pause.py`, `tests/ui/test_TC_06_20_to_26_row_body_preview.py`, and `tests/ui/test_keyboard_shortcuts.py`. The last two gaps were closed 2026-06-10: TC-06-03 (seek granularity ±0.1 s) gained an integration-tier test, and TC-06-06 (corrupt-source error path) is anchored on the `InvalidMedia` unit test as the unit-tier proxy for the "same error path as missing" contract (the on-disk toast is the UI layer, downstream of `error.emit`).
 
 - **TC-06-01** — `Player.set_source(path)` followed by `play()` reaches `state == playing` within 500 ms; `position_changed` events arrive thereafter at ≥ 5 Hz.
 - **TC-06-02** — `Player.set_volume(50)` maps to `QAudioOutput.volume() == 0.5` (linear 0–100 → 0.0–1.0).

@@ -340,13 +340,16 @@ def render_report(
     return html_final, pdf_final
 
 
-def report_filenames_for(album: Any, today: date | None = None) -> tuple[str, str]:
+def report_filenames_for(
+    album: Any, today: date | None = None, *, artist_view: bool = False
+) -> tuple[str, str]:
     """Convenience accessor for callers that want the filenames without rendering.
 
     Returns `(html_filename, pdf_filename)` matching what `render_report`
-    would produce.
+    would produce. Pass `artist_view=True` for the stripped artist-variant
+    names (the `- artist` suffix; Spec 09 §File naming / TC-09-27).
     """
-    return _filename_for(album, today or date.today())
+    return _filename_for(album, today or date.today(), artist_view=artist_view)
 
 
 def report_paths_for(album: Any, reports_dir: Path, today: date | None = None) -> tuple[Path, Path]:

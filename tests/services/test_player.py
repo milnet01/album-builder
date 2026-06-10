@@ -118,6 +118,10 @@ def test_set_source_none_clears_source() -> None:
 
 
 # Spec: L3-H1 (Tier 1 indie-review 2026-04-30)
+# Spec: TC-06-06 (corrupt source -> same error path as missing; no crash). A
+# corrupt mp3 surfaces to the Player as MediaStatus.InvalidMedia, so this is
+# the unit-tier proxy for TC-06-06's "raises the same error path" contract;
+# the on-disk toast is the UI layer's job (downstream of error.emit).
 def test_invalid_media_status_emits_error_and_error_state(qtbot, tmp_path) -> None:
     """Qt 6.11's FFmpeg backend delivers decode failures via
     MediaStatus.InvalidMedia without firing errorOccurred. The Player
@@ -234,6 +238,24 @@ def test_seek_clamps_negative_to_zero(silent_wav: Path, qtbot) -> None:
     # Wait for position to actually report zero; the immediate-assert
     # form raced the QMediaPlayer positionChanged tick under load.
     qtbot.waitUntil(lambda: p.position() == pytest.approx(0.0, abs=0.05), timeout=2000)
+
+
+# Spec: TC-06-03
+@INTEGRATION
+def test_seek_lands_within_granularity(qtbot, tmp_path: Path) -> None:
+    """Spec 06 TC-06-03: seek(30.0) lands position within 30 +/- 0.1 s after
+    the next position tick. Needs a source longer than the seek target, so
+    use a 35 s silent wav rather than the 2 s `silent_wav` fixture."""
+    long_wav = _write_silent_wav(tmp_path / "long.wav", seconds=35.0)
+    p = Player()
+    p.set_source(long_wav)
+    qtbot.waitUntil(lambda: p.duration() > 31.0, timeout=3000)
+    p.seek(30.0)
+    # The contract tolerance is +/- 0.1 s; waitUntil absorbs the
+    # QMediaPlayer positionChanged latency on a slow CI runner.
+    qtbot.waitUntil(
+        lambda: p.position() == pytest.approx(30.0, abs=0.1), timeout=2000,
+    )
 
 
 # Spec: TC-06-05

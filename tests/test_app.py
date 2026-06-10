@@ -153,6 +153,7 @@ def isolated_key(monkeypatch: pytest.MonkeyPatch) -> str:
     QLocalServer.removeServer(key)
 
 
+# Spec: TC-12-06
 def test_acquire_single_instance_lock_succeeds_when_unheld(
     qtbot, isolated_key: str
 ) -> None:
@@ -165,6 +166,7 @@ def test_acquire_single_instance_lock_succeeds_when_unheld(
             lock.detach()
 
 
+# Spec: TC-12-06
 def test_acquire_single_instance_lock_fails_when_held(
     qtbot, isolated_key: str
 ) -> None:
@@ -181,6 +183,7 @@ def test_acquire_single_instance_lock_fails_when_held(
             first.detach()
 
 
+# Spec: TC-12-06
 def test_acquire_single_instance_lock_recovers_from_orphaned_segment(
     qtbot, isolated_key: str
 ) -> None:
@@ -203,6 +206,7 @@ def test_acquire_single_instance_lock_recovers_from_orphaned_segment(
             lock.detach()
 
 
+# Spec: TC-12-06
 def test_raise_server_brings_window_to_front(qtbot, isolated_key: str) -> None:
     window = QMainWindow()
     qtbot.addWidget(window)

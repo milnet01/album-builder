@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
 from album_builder.domain.album import Album, AlbumStatus
+from album_builder.domain.slug import slugify
 from album_builder.persistence.atomic_io import atomic_write_text
 from album_builder.persistence.schema import (
     SchemaTooNewError,
@@ -30,6 +32,21 @@ class AlbumDirCorrupt(Exception):
 
 # Migration registry - empty in v1; future migrations register here.
 MIGRATIONS: dict[int, Callable[[dict], dict]] = {}
+
+# `unique_slug` (domain/slug.py) appends " (2)", " (3)" ... to disambiguate
+# two albums that slugify to the same base. Strip that suffix before comparing
+# a folder slug against slugify(name), so two same-named albums (folders
+# "live" + "live (2)", both name "Live") are NOT misread as a rename mismatch.
+_UNIQUE_SLUG_SUFFIX = re.compile(r" \(\d+\)$")
+
+
+def _name_from_slug(slug: str) -> str:
+    """Reverse-derive a display name from a folder slug (Spec 02 §Errors crash
+    mid-rename self-heal): hyphens to spaces, title-cased. Deliberately
+    imperfect (apostrophes, acronyms, CJK round-trips are lossy) - the user
+    can rename again to refine. Derive from the suffix-stripped base so the
+    healed name re-slugifies back to the same folder base (no re-heal loop)."""
+    return slug.replace("-", " ").title()
 
 
 def _to_iso(dt: datetime) -> str:
@@ -273,5 +290,35 @@ def load_album(folder: Path) -> Album:
         # marker as a side-effect (touching it because status==APPROVED).
         logger.warning("%s: status=approved but .approved missing; writing marker", path)
         save_album(folder, album)
+
+    # Self-heal: crash mid-rename -- the on-disk folder slug and the in-JSON
+    # `name` disagree (Spec 02 §Errors). AlbumStore.rename renames the folder
+    # first, then writes album.json; a crash in between leaves a new-slug
+    # folder around an old-name JSON. The folder slug wins (it is what the
+    # user sees in their file manager): reverse-derive `name` from it, bump
+    # updated_at, write back. The unique-slug " (N)" suffix is stripped before
+    # both the comparison AND the derivation so a legitimately-suffixed folder
+    # ("live (2)" for a second album named "Live") neither false-triggers nor
+    # loops (the healed name re-slugifies back to the same base).
+    folder_base = _UNIQUE_SLUG_SUFFIX.sub("", folder.name)
+    if folder_base != slugify(album.name):
+        derived = _name_from_slug(folder_base)
+        try:
+            album.rename(derived)
+        except ValueError as exc:
+            # Pathological reverse-derivation (e.g. an over-length name after a
+            # collision suffix, or a date-suffix collision). Keep the in-JSON
+            # name rather than lose the album to a hard error in rescan.
+            logger.warning(
+                "%s: folder slug %r disagrees with in-JSON name but derived "
+                "name %r is invalid (%s); keeping in-JSON name",
+                path, folder.name, derived, exc,
+            )
+        else:
+            logger.warning(
+                "%s: folder slug %r disagrees with in-JSON name; self-healing "
+                "name to %r (Spec 02 crash mid-rename)", path, folder.name, derived,
+            )
+            save_album(folder, album)
 
     return album

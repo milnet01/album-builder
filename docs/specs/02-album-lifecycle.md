@@ -183,6 +183,7 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-02-18** — Self-heal on load: `album.json.status == "approved"` + `.approved` missing → write `.approved` marker.
 - **TC-02-19** — `AlbumStore.approve()` is idempotent across the three named crash points in Spec 09 §canonical approve sequence: (a) crash after `step:export-commit` — re-approve regenerates report from scratch, no stale `.tmp` files remain; (b) crash after `step:render-rename-pdf` (both reports renamed, marker not yet written, status still draft per Spec 02 self-heal) — re-approve overwrites the reports + writes marker + flips status; (c) crash after `step:write-marker` (marker present, status still draft) — Spec 10 self-heal flips status on next load; subsequent re-approve is a no-op. No duplicates / leftover `.tmp` files survive any path.
 - **TC-02-20** — `album.json` schema has `schema_version == 1` and the field set listed in §Persistence; round-trip (load → save → load) preserves every field byte-for-byte except `updated_at`.
+- **TC-02-21** — Self-heal on load (crash mid-rename, see §Errors): when the on-disk folder slug and `album.json.name` disagree, the folder slug wins — `load_album` reverse-derives `name` from the slug (hyphens → spaces, title-case) and writes back. The unique-slug ` (N)` collision suffix is stripped before both the slug↔name comparison and the reverse-derivation, so a legitimately-suffixed folder (`live (2)` for a second album named "Live") neither false-heals nor loops on repeated loads.
 
 ## Out of scope (v1)
 

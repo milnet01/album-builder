@@ -41,14 +41,21 @@ fi
 
 mkdir -p "$APP_DIR" "$DESKTOP_DIR" "$ICON_DIR_PNG" "$ICON_DIR_SVG" "$BIN_DIR"
 
-# 3. venv
+# 3. venv (Spec 12 TC-12-07/08).
+# A failed `pip install` must NOT leave a half-built .venv/ on disk: the
+# requirements cache is only written on success, so a stale partial venv would
+# linger until the next run wiped it. Trap any failure in this block, wipe the
+# partial venv, and exit non-zero so the next `./install.sh` starts from the
+# same clean state as a fresh install (TC-12-08 resumability).
 if [[ ! -d "$VENV_DIR" ]] || ! diff -q "$REPO_DIR/requirements.txt" "$APP_DIR/.requirements.txt.cached" >/dev/null 2>&1; then
     echo "Setting up venv…"
+    trap 'echo "venv setup failed; removing partial .venv/ so the next run starts clean." >&2; rm -rf "$VENV_DIR"; exit 1' ERR
     rm -rf "$VENV_DIR"
     "$PY" -m venv "$VENV_DIR"
     "$VENV_DIR/bin/pip" install --upgrade pip >/dev/null
     "$VENV_DIR/bin/pip" install -r "$REPO_DIR/requirements.txt"
     cp "$REPO_DIR/requirements.txt" "$APP_DIR/.requirements.txt.cached"
+    trap - ERR
 fi
 
 # 4. Source files

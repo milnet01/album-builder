@@ -1,6 +1,6 @@
 # 12 — Packaging & Launcher
 
-**Status:** Implemented (Phase 1; TC-12-07..09 deferred) · **Last updated:** 2026-05-18 · **Depends on:** 00, 11
+**Status:** Implemented · **Last updated:** 2026-06-10 · **Depends on:** 00, 11
 
 ## Purpose
 
@@ -184,7 +184,7 @@ For now, "update" = "git pull && ./install.sh" — the installer's `rsync --dele
 
 Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-12-NN` marker.
 
-**Phase status — TC-12-01 + TC-12-02 + TC-12-06 shipped in Phase 1 (manual / CI-only; no automated `tests/` markers).** TC-12-03..05 are manual smoke contracts. TC-12-07..09 are **deferred** — they describe behaviours the installer does not currently honour (auto-wipe `.venv/` on failure, wiki troubleshooting link); queued on `ROADMAP.md §🔭 Future / deferred` as installer-UX hardening.
+**Phase status — TC-12-01 + TC-12-02 + TC-12-06 + TC-12-09 shipped in Phase 1 (manual / CI-only; no automated `tests/` markers).** TC-12-03..05 are manual smoke contracts. TC-12-07 + TC-12-08 (failed-`pip install` auto-wipe of `.venv/` + clean resumability) shipped 2026-06-10 in `install.sh` via an `ERR`-trap that wipes the partial venv and exits non-zero (manual-smoke, no automated marker — consistent with the rest of the installer contracts).
 
 - **TC-12-01** — `shellcheck install.sh uninstall.sh` exits 0 (no warnings, no errors). Manual / CI-only.
 - **TC-12-02** — `desktop-file-validate packaging/album-builder.desktop.in` exits 0 (after a `sed s|@@LAUNCHER@@|/tmp/album-builder|` substitution). Manual / CI-only.
@@ -192,8 +192,8 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-12-04** — Manual smoke: `./uninstall.sh` removes the five paths listed in §Uninstall and preserves the three "preserved" paths.
 - **TC-12-05** — Manual smoke: `./uninstall.sh --purge` additionally removes `~/.config/album-builder/` and `~/.cache/album-builder/`.
 - **TC-12-06** — Single-instance: launching while running raises the existing window (no second copy spawned). Verified by `acquire_single_instance_lock` in `src/album_builder/app.py` + manual smoke.
-- **TC-12-07** *(deferred)* — Failed `pip install` → installer wipes `.venv/` before exiting non-zero. Currently not implemented; `set -euo pipefail` aborts but the venv is not auto-wiped.
-- **TC-12-08** *(deferred)* — Partial install resumed: a successful `./install.sh` after a wiped-venv failure produces the same final state as a fresh install. Depends on TC-12-07.
+- **TC-12-07** — Failed `pip install` → installer wipes `.venv/` before exiting non-zero. Implemented via an `ERR` trap scoped to the venv-build block (`install.sh` §3): on any failure it removes the partial `$VENV_DIR` and exits 1, so no half-built venv lingers. Verified by manual smoke (a bogus pinned requirement).
+- **TC-12-08** — Partial install resumed: a successful `./install.sh` after a wiped-venv failure produces the same final state as a fresh install. Holds because the requirements cache (`.requirements.txt.cached`) is written only after a successful install, and TC-12-07 wipes the partial venv — so the next run takes the fresh-venv path. Depends on TC-12-07.
 - **TC-12-09** — Reinstall-while-running: the installer refuses with the "Quit Album Builder first; it is currently running." message and exits non-zero; no files modified. Verified by manual smoke.
 
 ## Out of scope (v1)

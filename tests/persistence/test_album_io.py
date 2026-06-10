@@ -140,6 +140,63 @@ def test_load_self_heals_status_approved_marker_missing(tmp_path: Path) -> None:
     assert (folder / ".approved").exists()
 
 
+def _crash_mid_rename_json(name: str) -> str:
+    return json.dumps({
+        "schema_version": 1,
+        "id": "00000000-0000-0000-0000-0000000000aa",
+        "name": name,
+        "target_count": 1,
+        "track_paths": ["/abs/a.mp3"],
+        "status": "draft",
+        "cover_override": None,
+        "created_at": "2026-04-28T00:00:00.000Z",
+        "updated_at": "2026-04-28T00:00:00.000Z",
+        "approved_at": None,
+    })
+
+
+# Spec: TC-02-21
+def test_load_self_heals_crash_mid_rename(tmp_path: Path) -> None:
+    """Folder renamed on disk but album.json.name not yet rewritten: the folder
+    slug wins and name is reverse-derived from it, then written back."""
+    folder = tmp_path / "new-album-name"
+    folder.mkdir()
+    folder.joinpath("album.json").write_text(_crash_mid_rename_json("Old Name"))
+    a = load_album(folder)
+    assert a.name == "New Album Name"
+    raw = json.loads((folder / "album.json").read_text())
+    assert raw["name"] == "New Album Name"
+
+
+# Spec: TC-02-21
+def test_load_no_false_heal_for_unique_suffixed_folder(tmp_path: Path) -> None:
+    """A second album named "Live" lives in folder "live (2)" (unique-slug
+    suffix). The suffix must be stripped before comparison so the name is NOT
+    misread as a rename mismatch and rewritten."""
+    folder = tmp_path / "live (2)"
+    folder.mkdir()
+    folder.joinpath("album.json").write_text(_crash_mid_rename_json("Live"))
+    a = load_album(folder)
+    assert a.name == "Live"  # unchanged
+
+
+# Spec: TC-02-21
+def test_load_crash_mid_rename_heal_is_stable_across_reloads(tmp_path: Path) -> None:
+    """The healed name must re-slugify to the same folder base, so a second
+    load does not heal again (no rewrite loop). Asserts updated_at is stable
+    on the second load."""
+    folder = tmp_path / "acoustic-set"
+    folder.mkdir()
+    folder.joinpath("album.json").write_text(_crash_mid_rename_json("Wrong"))
+    load_album(folder)  # first load heals + writes
+    healed = json.loads((folder / "album.json").read_text())
+    assert healed["name"] == "Acoustic Set"
+    a2 = load_album(folder)  # second load must NOT re-heal
+    again = json.loads((folder / "album.json").read_text())
+    assert a2.name == "Acoustic Set"
+    assert again["updated_at"] == healed["updated_at"], "second load re-healed (loop)"
+
+
 # Spec: TC-10-09
 def test_load_resolves_relative_track_paths(tmp_path: Path) -> None:
     """Spec 10 Paths: track_paths entries are absolute POSIX strings on disk.

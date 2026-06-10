@@ -15,6 +15,7 @@ def _contrast_ratio(fg: str, bg: str) -> float:
     return (light + 0.05) / (dark + 0.05)
 
 
+# Spec: TC-11-01
 def test_palette_has_required_tokens() -> None:
     p = Palette.dark_colourful()
     # Spot-check tokens defined in spec 11
@@ -33,6 +34,7 @@ def test_palette_tokens_are_valid_hex() -> None:
         assert value.startswith("#") and len(value) == 7, f"{name}={value}"
 
 
+# Spec: TC-11-02
 def test_qt_stylesheet_returns_non_empty_string() -> None:
     qss = qt_stylesheet(Palette.dark_colourful())
     assert isinstance(qss, str)
@@ -41,6 +43,7 @@ def test_qt_stylesheet_returns_non_empty_string() -> None:
     assert "#15161c" in qss
 
 
+# Spec: TC-11-04
 def test_placeholder_text_meets_wcag_aa_contrast() -> None:
     """Spec 11 + WCAG 2.2 §1.4.3: regular-size text needs 4.5:1 against its
     background. Placeholder copy in the empty Phase-2 panes lives on bg_pane,
