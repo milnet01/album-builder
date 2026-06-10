@@ -4,25 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from album_builder.persistence.state_io import AppState
 from album_builder.services.album_store import AlbumStore
 from album_builder.services.library_watcher import LibraryWatcher
 from album_builder.ui.main_window import MainWindow
 
-
-@pytest.fixture
-def main_window(qtbot, tracks_dir: Path, tmp_path: Path, monkeypatch):
-    # Isolate per-test settings.json so any closeEvent-driven write_audio
-    # call doesn't leak into the user's real ~/.config or the next test.
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
-    store = AlbumStore(tmp_path / "Albums")
-    watcher = LibraryWatcher(tracks_dir)
-    state = AppState()
-    win = MainWindow(store, watcher, state, tmp_path)
-    qtbot.addWidget(win)
-    return win
+# `main_window` fixture now lives in tests/ui/conftest.py (test-audit follow-up).
 
 
 def test_main_window_has_three_panes(main_window) -> None:

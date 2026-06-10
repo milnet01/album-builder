@@ -17,18 +17,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 from PyQt6.QtCore import Qt
 
 from album_builder.domain.album import Album
 from album_builder.domain.track import Track
-from album_builder.persistence.state_io import AppState
-from album_builder.services.album_store import AlbumStore
-from album_builder.services.library_watcher import LibraryWatcher
 from album_builder.services.player import PlayerState
 from album_builder.ui.album_order_pane import AlbumOrderPane
 from album_builder.ui.library_pane import COLUMNS, LibraryPane
-from album_builder.ui.main_window import MainWindow
 from album_builder.ui.theme import Glyphs
 
 
@@ -57,15 +52,7 @@ def _ord_track(stem: str) -> Track:
     )
 
 
-@pytest.fixture
-def main_window(qtbot, tracks_dir: Path, tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
-    store = AlbumStore(tmp_path / "Albums")
-    watcher = LibraryWatcher(tracks_dir)
-    state = AppState()
-    win = MainWindow(store, watcher, state, tmp_path)
-    qtbot.addWidget(win)
-    return win
+# `main_window` fixture lives in tests/ui/conftest.py (test-audit follow-up).
 
 
 # ---------- TC-06-17 -----------------------------------------------------
@@ -93,7 +80,7 @@ def test_active_playing_row_click_pauses_without_reload(main_window, qtbot, monk
     # Force the state to PLAYING for the test (real QMediaPlayer may take
     # longer than the test window to actually start; the dispatch logic
     # only cares about the reported state).
-    main_window._player._state = PlayerState.PLAYING
+    main_window._player._set_state_for_test(PlayerState.PLAYING)
 
     # Second click on the same row — must NOT call set_source again.
     main_window._on_preview_play(track_paths[0])
@@ -161,7 +148,7 @@ def test_cross_row_click_swaps_source(main_window, qtbot) -> None:
 
     main_window._on_preview_play(track_paths[0])
     qtbot.wait(50)
-    main_window._player._state = PlayerState.PLAYING
+    main_window._player._set_state_for_test(PlayerState.PLAYING)
     assert main_window._player.source() == track_paths[0]
 
     # Cross-row click: different path than the active source.

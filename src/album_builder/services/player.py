@@ -138,6 +138,18 @@ class Player(QObject):
     def state(self) -> PlayerState:
         return self._state
 
+    def _set_state_for_test(self, state: PlayerState) -> None:
+        """Test-only seam: pin the reported state without driving real Qt
+        playback. A real QMediaPlayer transitions asynchronously and may not
+        reach PLAYING within a test's event-loop window; tests that exercise
+        dispatch logic keyed on `state()` use this to set the reported state
+        deterministically. It mirrors the old direct `_state` writes those
+        tests used, but as a single named chokepoint so a rename of the
+        private field can't silently invalidate them. Production never calls
+        this; no signal is emitted (the direct writes it replaces emitted none
+        either)."""
+        self._state = state
+
     def set_volume(self, vol: int) -> None:
         v = max(0, min(100, int(vol)))
         self._output.setVolume(v / 100.0)

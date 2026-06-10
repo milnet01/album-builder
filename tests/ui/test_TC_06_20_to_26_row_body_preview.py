@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 from PyQt6.QtCore import Qt
 
 from album_builder.domain.track import Track
@@ -48,16 +47,9 @@ def _ord_track(stem: str) -> Track:
     )
 
 
-@pytest.fixture
-def main_window(qtbot, tracks_dir: Path, tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
-    store = AlbumStore(tmp_path / "Albums")
-    watcher = LibraryWatcher(tracks_dir)
-    state = AppState()
-    win = MainWindow(store, watcher, state, tmp_path)
-    qtbot.addWidget(win)
-    # Default: no track was ever played, so player is STOPPED with no source.
-    return win
+# `main_window` fixture lives in tests/ui/conftest.py (test-audit follow-up).
+# Several tests below build their own MainWindow inline to vary AppState
+# (e.g. a non-empty last_played) before construction.
 
 
 # ---------- TC-06-20 -----------------------------------------------------
@@ -153,7 +145,7 @@ def test_row_body_click_when_playing_is_noop(main_window, qtbot, monkeypatch) ->
     # Load + force PLAYING via _on_preview_play (the play-button path).
     win._on_preview_play(tracks[0].path)
     qtbot.wait(50)
-    win._player._state = PlayerState.PLAYING
+    win._player._set_state_for_test(PlayerState.PLAYING)
     assert win.now_playing_pane.title_label.text() == tracks[0].title
 
     # Click row-body of a DIFFERENT row.
@@ -378,7 +370,7 @@ def test_row_body_cursor_reflects_player_state(main_window, qtbot) -> None:
     # Force PLAYING via the public play path.
     win._on_preview_play(tracks[0].path)
     qtbot.wait(50)
-    win._player._state = PlayerState.PLAYING
+    win._player._set_state_for_test(PlayerState.PLAYING)
     win._player.state_changed.emit(PlayerState.PLAYING)
     qtbot.wait(10)
     assert win.library_pane.table.viewport().cursor().shape() == Qt.CursorShape.ArrowCursor
@@ -391,7 +383,7 @@ def test_row_body_click_when_error_is_noop(main_window, qtbot) -> None:
 
     win._on_preview_play(tracks[0].path)
     qtbot.wait(50)
-    win._player._state = PlayerState.ERROR
+    win._player._set_state_for_test(PlayerState.ERROR)
     initial_title = win.now_playing_pane.title_label.text()
 
     title_col = _col("title")
@@ -468,7 +460,7 @@ def test_toggle_column_click_still_works_when_playing(main_window, qtbot) -> Non
     # Force PLAYING.
     win._on_preview_play(tracks[0].path)
     qtbot.wait(50)
-    win._player._state = PlayerState.PLAYING
+    win._player._set_state_for_test(PlayerState.PLAYING)
 
     # Click the toggle column on tracks[1] — this should still toggle selection.
     toggle_col = _col("_toggle")
