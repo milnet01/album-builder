@@ -62,6 +62,32 @@ def _write_tags(path: Path, **tags) -> None:
     audio.save(path, v2_version=3)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _qt_native_message_handler(qapp):
+    """Route Qt log messages through Qt's native C++ handler, not PyQt's.
+
+    Fixes the intermittent full-suite teardown hang (gdb + coredump confirmed
+    2026-06-10): PyQt's default handler funnels every Qt log line through
+    Python, calling PyGILState_Ensure. When Python GC destroys a Player whose
+    QMediaPlayer still has an in-flight FFmpeg decode future, ~QMediaPlayer
+    blocks in QFutureInterfaceBase::waitForFinished() *holding the GIL*, while
+    the FFmpeg worker thread blocks forever in PyGILState_Ensure trying to emit
+    a Qt log line through that Python handler -- a GIL deadlock. The decode
+    future never finishes, so waitForFinished() never returns.
+
+    Passing None installs Qt's built-in C++ handler (messages go to stderr with
+    no GIL acquisition), so the worker thread no longer needs the GIL to log;
+    the future finishes and destruction completes regardless of GC timing.
+    Depends on `qapp` so QApplication exists first, and is paired with
+    --no-qt-log (pyproject) so pytest-qt does not reinstall its Python handler
+    per test. Production is unaffected -- this is test-harness wiring only.
+    """
+    from PyQt6.QtCore import qInstallMessageHandler
+
+    qInstallMessageHandler(None)
+    yield
+
+
 @pytest.fixture
 def tagged_track(tmp_path: Path):
     """Return a callable that writes a tagged copy of silent_1s.mp3 into tmp_path."""

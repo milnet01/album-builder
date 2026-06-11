@@ -15,7 +15,12 @@ select = ["E", "F", "W", "I", "B", "UP", "RUF"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra -q"
+# --no-qt-log: stop pytest-qt installing its own Python Qt-message handler per
+# test. We install Qt's native C++ default handler session-wide instead (see
+# tests/conftest.py::_qt_native_message_handler) to avoid an FFmpeg-backend
+# teardown deadlock; pytest-qt's per-test handler would otherwise re-introduce
+# the Python (GIL-taking) handler and the deadlock with it.
+addopts = "-ra -q --no-qt-log"
 qt_api = "pyqt6"
 pythonpath = ["src"]
 markers = [
