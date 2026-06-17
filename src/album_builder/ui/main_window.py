@@ -375,20 +375,7 @@ class MainWindow(QMainWindow):
             self.top_bar.btn_approve.setEnabled(True)
         if approve_failed:
             return
-        # Spec 13 §Behavior rules: rebuild before the pane refresh chain
-        # so the Used column paints once with correct counts (not stale
-        # then fresh across two frames). Wrapped in try/except so a
-        # rebuild failure does not roll back the successful approve;
-        # next album lifecycle signal recovers (TC-13-08(b)).
-        try:
-            self._usage_index.rebuild()
-        except Exception:
-            logger.exception("usage_index.rebuild after approve failed")
-        self.top_bar.set_current(album_id)
-        self.library_pane.set_current_album(self._store.get(album_id))
-        self.album_order_pane.set_album(
-            self._store.get(album_id), list(self._library_watcher.library().tracks)
-        )
+        self._refresh_panes_after_lifecycle_change(album_id)
         # Success toast (Spec 09 §The approve flow step 5).
         try:
             folder = self._store.folder_for(album_id)
@@ -426,11 +413,23 @@ class MainWindow(QMainWindow):
             self._show_toast(f"Reopen partial: {exc}")
             QMessageBox.warning(self, "Reopen failed", str(exc))
             return
-        # Spec 13 §Behavior rules - rebuild before pane refresh chain.
+        self._refresh_panes_after_lifecycle_change(album_id)
+
+    def _refresh_panes_after_lifecycle_change(self, album_id: UUID) -> None:
+        """Rebuild the usage index, then refresh the three panes.
+
+        Spec 13 `Behavior` rule: the rebuild MUST run before the pane-refresh
+        chain so the Used column paints once with correct counts (not stale
+        then fresh across two frames). Shared by `_on_approve` and `_on_reopen`
+        - the only two album-lifecycle transitions that change usage counts.
+        The rebuild is wrapped in try/except so a rebuild failure does not roll
+        back the successful approve/reopen; the next album-lifecycle signal
+        recovers (TC-13-08(b)).
+        """
         try:
             self._usage_index.rebuild()
         except Exception:
-            logger.exception("usage_index.rebuild after reopen failed")
+            logger.exception("usage_index.rebuild after lifecycle change failed")
         self.top_bar.set_current(album_id)
         self.library_pane.set_current_album(self._store.get(album_id))
         self.album_order_pane.set_album(
