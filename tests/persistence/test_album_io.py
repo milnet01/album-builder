@@ -333,6 +333,7 @@ def test_load_missing_required_field_raises_albumdircorrupt(tmp_path: Path) -> N
         load_album(folder)
 
 
+# Spec: TC-10-03 - migrate_forward walks the chain and produces <file>.v<old>.bak.
 # Indie-review L2-H3 (Theme C recurrence): album.json migration also
 # preserves a v<old>.bak before rewriting (Spec 10 §79). Latent until
 # v2 schema lands; exercised here with a synthetic migration.

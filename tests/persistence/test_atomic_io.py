@@ -8,12 +8,14 @@ import pytest
 from album_builder.persistence.atomic_io import atomic_write_text
 
 
+# Spec: TC-10-01
 def test_atomic_write_text_creates_file(tmp_path: Path) -> None:
     target = tmp_path / "config.json"
     atomic_write_text(target, '{"hello": "world"}')
     assert target.read_text(encoding="utf-8") == '{"hello": "world"}'
 
 
+# Spec: TC-10-01
 def test_atomic_write_text_overwrites_existing(tmp_path: Path) -> None:
     target = tmp_path / "config.json"
     target.write_text("old content", encoding="utf-8")
@@ -21,6 +23,7 @@ def test_atomic_write_text_overwrites_existing(tmp_path: Path) -> None:
     assert target.read_text(encoding="utf-8") == "new content"
 
 
+# Spec: TC-10-01
 def test_atomic_write_text_no_tmp_left_behind(tmp_path: Path) -> None:
     target = tmp_path / "config.json"
     atomic_write_text(target, "content")
@@ -28,6 +31,7 @@ def test_atomic_write_text_no_tmp_left_behind(tmp_path: Path) -> None:
     assert siblings == [target]
 
 
+# Spec: TC-10-01
 def test_atomic_write_text_failure_keeps_original(tmp_path: Path, monkeypatch) -> None:
     target = tmp_path / "config.json"
     target.write_text("original", encoding="utf-8")
@@ -46,6 +50,7 @@ def test_atomic_write_text_failure_keeps_original(tmp_path: Path, monkeypatch) -
     assert leftover == []
 
 
+# Spec: TC-10-02
 def test_atomic_write_text_concurrent_writes_use_unique_tmp(
     tmp_path: Path, monkeypatch,
 ) -> None:

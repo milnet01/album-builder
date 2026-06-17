@@ -60,6 +60,7 @@ def test_qt_stylesheet_includes_placeholder_text_rule() -> None:
     assert "QLabel#PlaceholderText" in qss
 
 
+# Spec: TC-11-05
 def test_qt_stylesheet_carries_focus_ring_rules() -> None:
     """Spec 11 §state-styling: 2px focus outline at accent_primary_1 on
     interactive controls. The focus ring is a keyboard-nav affordance —

@@ -82,6 +82,7 @@ def test_set_muted_round_trip() -> None:
     assert p.muted() is False
 
 
+# Spec: TC-06-07
 def test_codec_dialog_shown_flag_is_one_shot() -> None:
     p = Player()
     assert p.codec_dialog_shown() is False

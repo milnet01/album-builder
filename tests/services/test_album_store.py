@@ -129,6 +129,7 @@ def test_album_added_signal_fires_on_create(store: AlbumStore, qtbot) -> None:
     assert emitted.name == "Beta"
 
 
+# Spec: TC-03-14
 def test_album_removed_signal_fires_on_delete(store: AlbumStore, qtbot) -> None:
     a = store.create(name="x", target_count=3)
     with qtbot.waitSignal(store.album_removed, timeout=500) as blocker:

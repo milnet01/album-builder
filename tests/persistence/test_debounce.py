@@ -12,6 +12,7 @@ def app(qapp):
     return qapp
 
 
+# Spec: TC-10-14
 def test_debounce_collapses_rapid_calls(app, qtbot) -> None:
     calls: list[str] = []
     w = DebouncedWriter(idle_ms=20)
@@ -21,6 +22,7 @@ def test_debounce_collapses_rapid_calls(app, qtbot) -> None:
     assert calls == ["write"]
 
 
+# Spec: TC-10-16
 def test_debounce_independent_keys(app, qtbot) -> None:
     calls: list[str] = []
     w = DebouncedWriter(idle_ms=20)
@@ -30,6 +32,7 @@ def test_debounce_independent_keys(app, qtbot) -> None:
     assert sorted(calls) == ["a", "b"]
 
 
+# Spec: TC-10-15
 def test_flush_all_runs_pending_synchronously(app, qtbot) -> None:
     calls: list[str] = []
     w = DebouncedWriter(idle_ms=10_000)  # large window - would not fire in test

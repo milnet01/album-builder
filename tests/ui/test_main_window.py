@@ -92,6 +92,7 @@ def test_now_playing_pane_replaces_placeholder(main_window) -> None:
     assert isinstance(main_window.now_playing_pane, NowPlayingPane)
 
 
+# Spec: TC-06-15 — preview-play loads the track as the active source (player-observable).
 def test_preview_play_loads_track_into_player(main_window, qtbot) -> None:
     track_paths = [t.path for t in main_window._library_watcher.library().tracks]
     assert track_paths
@@ -131,6 +132,7 @@ def test_codec_error_shows_one_shot_dialog(main_window, monkeypatch) -> None:
     assert len(calls) == 1
 
 
+# Spec: TC-06-07 — negative branch: a non-codec error must NOT show the one-shot dialog.
 def test_non_codec_error_does_not_trigger_dialog(main_window, monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(
@@ -144,6 +146,7 @@ def test_non_codec_error_does_not_trigger_dialog(main_window, monkeypatch) -> No
     assert "not found" in main_window._toast.message_label.text()
 
 
+# Spec: TC-06-10 — closeEvent persists audio volume + mute to settings.json.
 def test_close_event_writes_audio_settings(
     qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
 ) -> None:
@@ -342,6 +345,7 @@ def test_main_window_align_now_confirms_download(
     assert len(started) == 1
 
 
+# Spec: TC-07-06 — status pill shows the `aligning... N%` phase during alignment.
 def test_main_window_alignment_progress_updates_panel(
     qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
 ) -> None:

@@ -87,6 +87,7 @@ def test_status_label_aligning_includes_percent():
     assert "aligning" in label.lower()
 
 
+# Spec: TC-07-06
 def test_status_label_aligning_without_percent():
     label = status_label(AlignmentStatus.ALIGNING)
     assert "aligning" in label.lower()

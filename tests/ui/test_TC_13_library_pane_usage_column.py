@@ -297,6 +297,7 @@ def test_TC_13_29_tooltip_skips_missing_album(qapp, store) -> None:
     assert "Alpha" not in tip
 
 
+# Spec: TC-13-29 - "If only one id and it's missing, the tooltip returns None."
 def test_tooltip_returns_none_when_all_ids_missing(qapp, store) -> None:
     p = Path("/tracks/all-gone.mp3")
     a = _make_album(store, "Solo", status=AlbumStatus.APPROVED, paths=[p])
@@ -391,6 +392,7 @@ def test_TC_13_26_proxy_invalidate_on_used_sort(qapp, store) -> None:
     spy_invalidate.assert_called_once()
 
 
+# Spec: TC-13-26 - negative companion: sortColumn != USED_COL -> no invalidate.
 def test_proxy_not_invalidated_when_sort_not_used(qapp, store) -> None:
     pane = LibraryPane()
     pane._model.set_tracks([_track("/a.mp3"), _track("/b.mp3", title="B")])

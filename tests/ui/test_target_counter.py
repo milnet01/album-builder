@@ -89,6 +89,7 @@ def test_approved_album_disables_all_controls(counter: TargetCounter) -> None:
     assert not counter.field.isEnabled()
 
 
+# Spec: TC-04-20
 # Indie-review L6-M3: typing a target below the current selection count
 # bypasses the at-target floor invariant. The down-arrow click is gated,
 # but typing `1` into the field on a 5-track album emitted
@@ -105,6 +106,7 @@ def test_typing_target_below_selected_reverts(counter: TargetCounter) -> None:
     assert received == []
 
 
+# Spec: TC-04-20
 def test_typing_target_at_selected_floor_accepted(counter: TargetCounter) -> None:
     """Boundary: typing exactly the selected count is OK (the same as
     the down-arrow's 'cannot go below selected' rule — Spec 04 §16)."""

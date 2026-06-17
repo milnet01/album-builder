@@ -35,6 +35,7 @@ def test_corrupt_state_falls_back_to_defaults(tmp_path: Path) -> None:
     assert state.current_album_id is None  # default
 
 
+# Spec: TC-10-13 - state.json schema_version > 1 -> fall back to defaults.
 def test_too_new_state_falls_back_to_defaults(tmp_path: Path) -> None:
     (tmp_path / ".album-builder").mkdir()
     (tmp_path / ".album-builder" / "state.json").write_text(
@@ -128,6 +129,7 @@ def test_splitter_sizes_accepts_zero(tmp_path: Path) -> None:
     assert state.window.splitter_sizes == [5, 0, 5]
 
 
+# Spec: TC-10-03 - migrate_forward walks the chain and produces <file>.v<old>.bak.
 # Indie-review L2-H3 (Theme C recurrence): Spec 10 §79 mandates that
 # schema migration writes `<file>.v<old>.bak` preserving the original
 # bytes before rewriting the migrated form. Latent until v2 schema lands;

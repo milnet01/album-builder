@@ -18,6 +18,7 @@ def xdg_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path / "album-builder"
 
 
+# Spec: TC-10-19 - settings.json missing -> load returns defaults.
 def test_read_tracks_folder_missing_file_returns_none(xdg_config: Path) -> None:
     assert settings.read_tracks_folder() is None
 
@@ -76,6 +77,7 @@ def test_read_albums_folder_returns_configured_path(xdg_config: Path, tmp_path: 
     assert settings.read_albums_folder() == target
 
 
+# Spec: TC-10-19 - settings.json missing -> load returns defaults.
 def test_read_albums_folder_missing_file_returns_none(xdg_config: Path) -> None:
     assert settings.read_albums_folder() is None
 
@@ -121,11 +123,13 @@ def test_audio_round_trip(xdg_config: Path) -> None:
     assert settings.read_audio() == settings.AudioSettings(volume=65, muted=True)
 
 
+# Spec: TC-10-19 - settings.json missing -> load returns defaults.
 def test_audio_defaults_when_file_missing(xdg_config: Path) -> None:
     """Spec 06 §Implementation notes: default volume is 80, muted off."""
     assert settings.read_audio() == settings.AudioSettings(volume=80, muted=False)
 
 
+# Spec: TC-10-20 - settings.json partial (missing audio block) -> fields default.
 def test_audio_defaults_when_audio_block_missing(xdg_config: Path) -> None:
     xdg_config.mkdir(parents=True)
     (xdg_config / "settings.json").write_text(json.dumps({"tracks_folder": "/x"}))
@@ -171,6 +175,7 @@ def test_audio_rejects_bool_volume(xdg_config: Path) -> None:
     assert a.muted is False
 
 
+# Spec: TC-10-20 - settings.json partial round-trip: existing fields preserved.
 def test_audio_write_preserves_tracks_folder(xdg_config: Path) -> None:
     """Spec 10: settings.json round-trip is partial — writing audio must not
     erase a previously-set tracks_folder."""
@@ -194,6 +199,7 @@ def test_alignment_defaults_when_file_missing(xdg_config: Path) -> None:
     )
 
 
+# Spec: TC-10-20 - settings.json partial (missing alignment block) -> fields default.
 def test_alignment_defaults_when_block_missing(xdg_config: Path) -> None:
     xdg_config.mkdir(parents=True)
     (xdg_config / "settings.json").write_text(json.dumps({"tracks_folder": "/x"}))
@@ -235,6 +241,7 @@ def test_alignment_accepts_each_known_model_size(xdg_config: Path) -> None:
         assert settings.read_alignment().model_size == size
 
 
+# Spec: TC-10-20 - settings.json partial round-trip: sibling block preserved.
 def test_alignment_write_preserves_audio_block(xdg_config: Path) -> None:
     """Audio + alignment blocks are siblings — write one must not erase the other."""
     settings.write_audio(settings.AudioSettings(volume=42, muted=False))

@@ -80,6 +80,7 @@ def test_tracker_cached_hint_skips_search_for_forward_within_line(qtbot, monkeyp
     assert calls["n"] == 0
 
 
+# Spec: TC-07-04
 # Tier 3 (L4-M3): forward line-crossing fast path. The common case is "tick
 # crossed exactly one line boundary"; the cached-hint check now tries hint+1
 # before falling back to a linear scan, so a foreground-playing track stays

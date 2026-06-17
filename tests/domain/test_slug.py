@@ -76,6 +76,7 @@ def test_unique_slug_appends_2_then_3(tmp_path: Path) -> None:
     assert unique_slug(tmp_path, "memoirs-of-a-sinner") == "memoirs-of-a-sinner (3)"
 
 
+# Spec: TC-02-04
 def test_unique_slug_handles_existing_file_not_dir(tmp_path: Path) -> None:
     """A file (not a folder) at the slug path also counts as collision —
     `Album.create` would fail mkdir if we treated it as free."""
