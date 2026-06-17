@@ -1,6 +1,9 @@
 # 14 — Playback Queue (domain)
 
-**Status:** Reviewed - ready for implementation (Phase A of the music-player epic) · **Last updated:** 2026-06-17 · **Depends on:** 00, 01, 02, 05, 06 · **Blocks:** music-player Phases B-G
+**Status:** Implemented (Phase A of the music-player epic) · **Last updated:** 2026-06-17 · **Depends on:** 00, 01, 02, 05, 06 · **Blocks:** music-player Phases B-G
+
+Implemented in `src/album_builder/domain/play_queue.py`; all 33 TC contracts
+covered in `tests/domain/test_play_queue.py`.
 
 > **Cold-eyes loop log (2026-06-17):** 5 loops, 2 independent reviewers per loop
 > (accuracy/consistency + completeness/testability lenses), all briefed cold.
