@@ -168,6 +168,7 @@ The asymmetry is intentional, not historical drift.
 | [11](./11-theme-icon.md) | Theme & icon assets | Dark+colourful palette, Qt stylesheet, icon |
 | [12](./12-packaging.md) | Packaging & launcher | venv installer, .desktop file, KDE integration |
 | [13](./13-track-usage-indicator.md) | Track usage indicator | Cross-album popularity badge in the library pane (v0.6.0) |
+| [14](./14-playback-queue.md) | Playback queue (domain) | Ordered mutable queue, shuffle (deck) / repeat, cursor; Phase A of the music-player epic |
 
 ## Cross-cutting non-functional requirements
 
