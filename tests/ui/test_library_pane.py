@@ -12,31 +12,35 @@ from album_builder.ui.library_pane import LibraryPane
 
 
 @pytest.fixture
-def populated_pane(qtbot, tracks_dir: Path):
-    lib = Library.scan(tracks_dir)
+def lib(tracks_dir: Path) -> Library:
+    return Library.scan(tracks_dir)
+
+
+@pytest.fixture
+def populated_pane(qtbot, lib: Library):
     pane = LibraryPane()
     pane.set_library(lib)
     qtbot.addWidget(pane)
-    return pane, lib
+    return pane
 
 
 # Spec: TC-01-09
-def test_library_pane_shows_all_tracks(populated_pane) -> None:
-    pane, lib = populated_pane
+def test_library_pane_shows_all_tracks(populated_pane, lib) -> None:
+    pane = populated_pane
     assert pane.row_count() == len(lib.tracks)
 
 
 # Spec: TC-01-13
 def test_library_pane_search_filters(populated_pane) -> None:
-    pane, _lib = populated_pane
+    pane = populated_pane
     pane.search_box.setText("intro")
     # _on_search_changed is synchronous — no qtbot.wait needed.
     assert pane.row_count() == 1
 
 
 # Spec: TC-01-13
-def test_library_pane_search_clear_restores_all(populated_pane) -> None:
-    pane, lib = populated_pane
+def test_library_pane_search_clear_restores_all(populated_pane, lib) -> None:
+    pane = populated_pane
     pane.search_box.setText("nope-nothing-matches")
     assert pane.row_count() == 0
     pane.search_box.setText("")
@@ -45,7 +49,7 @@ def test_library_pane_search_clear_restores_all(populated_pane) -> None:
 
 # Spec: TC-01-09
 def test_library_pane_sort_by_title(populated_pane) -> None:
-    pane, _lib = populated_pane
+    pane = populated_pane
     pane.table.sortByColumn(0, Qt.SortOrder.AscendingOrder)
     titles = [pane.title_at(i) for i in range(pane.row_count())]
     assert titles == sorted(titles, key=str.lower)
@@ -68,7 +72,7 @@ def test_track_table_model_data_handles_out_of_range_row() -> None:
 def test_library_pane_default_sort_is_title_ascending(populated_pane) -> None:
     """Spec 01: 'Default sort: Title ascending'. The pane must apply this at
     construction time so the user sees a deterministic order on first launch."""
-    pane, _lib = populated_pane
+    pane = populated_pane
     titles = [pane.title_at(i) for i in range(pane.row_count())]
     assert titles == sorted(titles, key=str.lower)
 
@@ -81,15 +85,15 @@ def test_library_pane_search_matches_album_artist(populated_pane) -> None:
     artist='Other Artist' so its album_artist is the only field that hits.
     The search must surface all 3, not just the 2 whose displayed artist
     column also says '18 Down'."""
-    pane, _lib = populated_pane
+    pane = populated_pane
     pane.search_box.setText("18 down")
     assert pane.row_count() == 3
 
 
 # Spec: TC-04-14
-def test_at_target_disables_off_toggles(populated_pane, qtbot) -> None:
+def test_at_target_disables_off_toggles(populated_pane, qtbot, lib) -> None:
     from album_builder.domain.album import Album
-    pane, lib = populated_pane
+    pane = populated_pane
     a = Album.create(name="x", target_count=2)
     a.select(lib.tracks[0].path)
     a.select(lib.tracks[1].path)  # now at target
@@ -100,9 +104,9 @@ def test_at_target_disables_off_toggles(populated_pane, qtbot) -> None:
 
 
 # Spec: TC-04-15
-def test_below_target_re_enables_off_toggles(populated_pane) -> None:
+def test_below_target_re_enables_off_toggles(populated_pane, lib) -> None:
     from album_builder.domain.album import Album
-    pane, lib = populated_pane
+    pane = populated_pane
     a = Album.create(name="x", target_count=2)
     a.select(lib.tracks[0].path)
     a.select(lib.tracks[1].path)
@@ -114,9 +118,9 @@ def test_below_target_re_enables_off_toggles(populated_pane) -> None:
 
 
 # Spec: TC-04-16
-def test_approved_album_disables_all_toggles(populated_pane) -> None:
+def test_approved_album_disables_all_toggles(populated_pane, lib) -> None:
     from album_builder.domain.album import Album, AlbumStatus
-    pane, lib = populated_pane
+    pane = populated_pane
     a = Album.create(name="x", target_count=3)
     a.select(lib.tracks[0].path)
     a.status = AlbumStatus.APPROVED
@@ -125,9 +129,9 @@ def test_approved_album_disables_all_toggles(populated_pane) -> None:
 
 
 # Spec: TC-04-18
-def test_selected_row_has_accent_strip(populated_pane) -> None:
+def test_selected_row_has_accent_strip(populated_pane, lib) -> None:
     from album_builder.domain.album import Album
-    pane, lib = populated_pane
+    pane = populated_pane
     a = Album.create(name="x", target_count=3)
     a.select(lib.tracks[0].path)
     pane.set_current_album(a)
@@ -136,13 +140,13 @@ def test_selected_row_has_accent_strip(populated_pane) -> None:
 
 
 # Spec: TC-04-19
-def test_missing_selected_row_has_warning_accent(populated_pane, tracks_dir: Path) -> None:
+def test_missing_selected_row_has_warning_accent(populated_pane, lib, tracks_dir: Path) -> None:
     """Spec 04 visual rules row 5: a selected row whose track is missing
     on disk renders the accent strip in `warning` (amber), not `primary`."""
     from album_builder.domain.album import Album
     from album_builder.domain.track import Track
 
-    pane, lib = populated_pane
+    pane = populated_pane
     real = lib.tracks[0]
     missing = Track(
         path=real.path, title=real.title, artist=real.artist,
@@ -164,10 +168,10 @@ def test_missing_selected_row_has_warning_accent(populated_pane, tracks_dir: Pat
 
 # Indie-review L5-H1: Spec 00 §Sort order requires case-insensitive locale-aware
 # comparison, not raw codepoint. casefold() handles German ß, Turkish I, etc.
-def test_sort_role_returns_casefolded_strings(populated_pane) -> None:
+def test_sort_role_returns_casefolded_strings(populated_pane, lib) -> None:
     from album_builder.ui.library_pane import COLUMNS, TrackTableModel
 
-    pane, lib = populated_pane
+    pane = populated_pane
     model: TrackTableModel = pane._model
     # Find the first non-toggle column (Title at index 0).
     idx = model.index(0, 0)
@@ -183,11 +187,11 @@ def test_sort_role_returns_casefolded_strings(populated_pane) -> None:
 
 # Indie-review L5-H4: AccessibleTextRole must say "selected" / "not selected",
 # not the raw glyph (Spec 11 / WCAG 2.2 §4.1.2).
-def test_toggle_column_accessible_text_describes_state(populated_pane) -> None:
+def test_toggle_column_accessible_text_describes_state(populated_pane, lib) -> None:
     from album_builder.domain.album import Album
     from album_builder.ui.library_pane import COLUMNS
 
-    pane, lib = populated_pane
+    pane = populated_pane
     a = Album.create(name="x", target_count=3)
     a.select(lib.tracks[0].path)
     pane.set_current_album(a)
@@ -201,11 +205,11 @@ def test_toggle_column_accessible_text_describes_state(populated_pane) -> None:
 
 
 # Indie-review L5-M7: approved-album tooltip on the toggle cell.
-def test_approved_album_toggle_has_tooltip(populated_pane) -> None:
+def test_approved_album_toggle_has_tooltip(populated_pane, lib) -> None:
     from album_builder.domain.album import Album, AlbumStatus
     from album_builder.ui.library_pane import COLUMNS
 
-    pane, lib = populated_pane
+    pane = populated_pane
     a = Album.create(name="x", target_count=3)
     a.select(lib.tracks[0].path)
     a.status = AlbumStatus.APPROVED
@@ -220,8 +224,8 @@ def test_approved_album_toggle_has_tooltip(populated_pane) -> None:
 # The amended TC-06-15 (v0.5.2) covers the player-observable swap; that
 # assertion lives in test_TC_06_17_18_19_row_play_pause::test_cross_row_
 # click_swaps_source. This test is the still-useful signal-emit half.
-def test_library_pane_emits_preview_play_request(populated_pane) -> None:
-    pane, lib = populated_pane
+def test_library_pane_emits_preview_play_request(populated_pane, lib) -> None:
+    pane = populated_pane
     captured = []
     pane.preview_play_requested.connect(captured.append)
     from album_builder.ui.library_pane import COLUMNS
@@ -236,7 +240,7 @@ def test_library_pane_emits_preview_play_request(populated_pane) -> None:
 
 # Spec 06: preview-play does NOT toggle selection.
 def test_library_pane_preview_play_does_not_toggle_selection(populated_pane) -> None:
-    pane, _lib = populated_pane
+    pane = populated_pane
     selections = []
     pane.selection_toggled.connect(lambda *a: selections.append(a))
     from album_builder.ui.library_pane import COLUMNS

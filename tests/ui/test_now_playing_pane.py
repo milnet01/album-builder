@@ -33,21 +33,20 @@ def _make_track(tmp: Path, **over) -> Track:
 
 @pytest.fixture
 def pane(qtbot):
-    p = Player()
-    pane = NowPlayingPane(p)
-    qtbot.addWidget(pane)
-    pane.show()
-    return pane, p
+    p = NowPlayingPane(Player())
+    qtbot.addWidget(p)
+    p.show()
+    return p
 
 
 def test_no_track_shows_placeholder(pane) -> None:
-    p, _ = pane
+    p = pane
     assert p.title_label.text() == ""
     assert p.placeholder_label.isVisible()
 
 
 def test_set_track_shows_metadata(pane, tmp_path: Path) -> None:
-    p, _ = pane
+    p = pane
     p.set_track(_make_track(tmp_path))
     assert p.title_label.text() == "Walking The Line"
     assert p.artist_label.text() == "18 Down"
@@ -58,7 +57,7 @@ def test_set_track_shows_metadata(pane, tmp_path: Path) -> None:
 
 
 def test_set_track_none_clears(pane, tmp_path: Path) -> None:
-    p, _ = pane
+    p = pane
     p.set_track(_make_track(tmp_path))
     p.set_track(None)
     assert p.title_label.text() == ""
@@ -67,19 +66,19 @@ def test_set_track_none_clears(pane, tmp_path: Path) -> None:
 
 
 def test_set_track_with_no_composer_clears_label(pane, tmp_path: Path) -> None:
-    p, _ = pane
+    p = pane
     p.set_track(_make_track(tmp_path, composer=""))
     assert p.composer_label.text() == ""
 
 
 def test_set_track_with_no_comment_clears_label(pane, tmp_path: Path) -> None:
-    p, _ = pane
+    p = pane
     p.set_track(_make_track(tmp_path, comment=""))
     assert p.comment_label.text() == ""
 
 
 def test_set_track_with_no_cover_shows_placeholder_text(pane, tmp_path: Path) -> None:
-    p, _ = pane
+    p = pane
     p.set_track(_make_track(tmp_path, cover_data=None))
     assert p.cover_label.text() == "(no cover)"
 
@@ -88,19 +87,19 @@ def test_lyrics_panel_present(pane) -> None:
     """v0.4.0: the v0.3.0 LyricsPlaceholder QFrame is replaced by the
     Spec 07 LyricsPanel widget. Pin the contract so MainWindow can rely
     on the attribute when wiring tracker + alignment service."""
-    p, _ = pane
+    p = pane
     assert p.lyrics_panel is not None
     assert p.lyrics_panel.objectName() == "LyricsPanel"
 
 
 def test_transport_bar_present(pane) -> None:
-    p, _ = pane
+    p = pane
     assert p.transport is not None
 
 
 def test_invalid_cover_data_shows_unavailable_text(pane, tmp_path: Path) -> None:
     """Bytes that don't decode as a known image format must not crash."""
-    p, _ = pane
+    p = pane
     p.set_track(_make_track(tmp_path, cover_data=b"\x00\x01not-an-image"))
     assert p.cover_label.text() == "(cover unavailable)"
 
@@ -110,7 +109,7 @@ def test_invalid_cover_data_shows_unavailable_text(pane, tmp_path: Path) -> None
 # lyrics" to "no track" leaves the prior track's lyrics on screen.
 def test_set_track_none_clears_lyrics_panel(pane, tmp_path: Path) -> None:
     from album_builder.domain.lyrics import LyricLine, Lyrics
-    p, _ = pane
+    p = pane
 
     # Seed lyrics from a previous track.
     p.lyrics_panel.set_lyrics(Lyrics(lines=(
