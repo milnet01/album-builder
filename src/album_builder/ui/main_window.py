@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QSplitter,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -47,12 +48,14 @@ from album_builder.services.alignment_status import AlignmentStatus, compute_sta
 from album_builder.services.export import ExportFailed
 from album_builder.services.library_watcher import LibraryWatcher
 from album_builder.services.lyrics_tracker import LyricsTracker
+from album_builder.services.playback_controller import PlaybackController
 from album_builder.services.player import Player, PlayerState
 from album_builder.services.report import list_warnings, report_paths_for
 from album_builder.services.usage_index import UsageIndex
 from album_builder.ui.album_order_pane import AlbumOrderPane
 from album_builder.ui.library_pane import LibraryPane
 from album_builder.ui.now_playing_pane import NowPlayingPane
+from album_builder.ui.queue_pane import QueuePane
 from album_builder.ui.theme import Glyphs, Palette, qt_stylesheet
 from album_builder.ui.toast import Toast
 from album_builder.ui.top_bar import TopBar
@@ -146,8 +149,9 @@ class MainWindow(QMainWindow):
         outer.setContentsMargins(12, 12, 12, 12)
         outer.setSpacing(10)
 
+        # TopBar is constructed here but added to the first tab below (Spec 15
+        # two-tab restructure), not directly to `outer`.
         self.top_bar = TopBar(store)
-        outer.addWidget(self.top_bar)
 
         # Player + audio settings (Spec 06).
         self._player = Player(self)
@@ -155,6 +159,12 @@ class MainWindow(QMainWindow):
         self._player.set_volume(audio.volume)
         self._player.set_muted(audio.muted)
         self._player.error.connect(self._on_player_error)
+
+        # Library-wide playback orchestrator (Spec 15). Single owner of every
+        # set_source / play / stop in response to queue navigation; preview and
+        # the context-menu actions all route through it so there is no second
+        # playback path fighting auto-advance.
+        self._controller = PlaybackController(self._player, self)
 
         # UI-tier settings cached at startup (Spec 09 §The approve flow
         # step 6 + Spec 10 §`settings.json` schema). Re-reading on every
@@ -198,7 +208,22 @@ class MainWindow(QMainWindow):
         # first paint. Stash the desired sizes and apply them in showEvent
         # once the splitter has its real width.
         self._restore_splitter_sizes: list[int] = list(state.window.splitter_sizes)
-        outer.addWidget(self.splitter, stretch=1)
+
+        # Spec 15 two-tab restructure: curation (TopBar + splitter) is tab 1
+        # "Album Builder"; the Up Next list is tab 2 "Player". The QTabWidget
+        # is the central widget's main content; the Toast overlay and the
+        # debounced state-save timer are unchanged.
+        self.tabs = QTabWidget()
+        curation = QWidget()
+        curation_layout = QVBoxLayout(curation)
+        curation_layout.setContentsMargins(0, 0, 0, 0)
+        curation_layout.setSpacing(10)
+        curation_layout.addWidget(self.top_bar)
+        curation_layout.addWidget(self.splitter, stretch=1)
+        self.tabs.addTab(curation, "Album Builder")
+        self.queue_pane = QueuePane()
+        self.tabs.addTab(self.queue_pane, "Player")
+        outer.addWidget(self.tabs, stretch=1)
 
         # Toast overlays the bottom of the central widget. Position is
         # updated on resize so it always sits above the bottom edge.
@@ -227,6 +252,20 @@ class MainWindow(QMainWindow):
         # only when the player is STOPPED.
         self.library_pane.row_body_clicked.connect(self._on_row_body_clicked)
         self.album_order_pane.row_body_clicked.connect(self._on_row_body_clicked)
+        # Spec 15: library context-menu actions -> controller commands. The
+        # play-all/from-here adapter passes start_index as the controller's
+        # keyword-only arg (the signal carries it positionally).
+        self.library_pane.play_tracks_requested.connect(
+            lambda tracks, start: self._controller.play_tracks(tracks, start_index=start)
+        )
+        self.library_pane.enqueue_requested.connect(self._controller.enqueue)
+        self.library_pane.play_next_requested.connect(self._controller.play_next)
+        # Controller -> UI: queue_changed rebuilds the Up Next list (and pulls
+        # the highlight); current_changed updates the now-playing pane, re-syncs
+        # lyrics, and writes last-played. row_activated jumps to a deck slot.
+        self._controller.queue_changed.connect(self._on_queue_changed)
+        self._controller.current_changed.connect(self._on_player_current_changed)
+        self.queue_pane.row_activated.connect(self._controller.jump_to_position)
         library_watcher.tracks_changed.connect(self.library_pane.set_library)
         # Lyrics: tracker → panel (current-line index); panel → service (Align-now)
         self._tracker.current_line_changed.connect(
@@ -621,17 +660,12 @@ class MainWindow(QMainWindow):
         self._sync_lyrics_for_track(track)
 
     def _on_preview_play(self, path: Path) -> None:
-        # Spec 06 TC-06-17/18: same-row click on the active source
-        # toggles play/pause without reloading. PLAYING -> PAUSED via
-        # Player.toggle(); PAUSED/STOPPED -> PLAYING via the same toggle
-        # path. ERROR is handled below as a fresh load (the spec's
-        # documented ERROR -> STOPPED reset path).
-        active_source = self._player.source()
-        state = self._player.state()
-        if path == active_source and state in (PlayerState.PLAYING, PlayerState.PAUSED):
-            self._player.toggle()
-            return
-
+        # Spec 15: preview now flows through the controller, the single
+        # playback path. The controller applies the Spec 06 load-or-toggle
+        # gate (toggle iff this is the active+PLAYING/PAUSED source; reload
+        # otherwise, incl. the STOPPED-active and ERROR-active rows). The
+        # now-playing pane / lyrics / last-played updates ride current_changed
+        # (see _on_player_current_changed); the play-glyph rides state_changed.
         track = next(
             (t for t in self._library_watcher.library().tracks if t.path == path),
             None,
@@ -639,12 +673,33 @@ class MainWindow(QMainWindow):
         if track is None:
             self._toast.show_message(f"Track not in library: {path}")
             return
-        self._player.set_source(path)
-        self._player.play()
-        self.now_playing_pane.set_track(track)
-        self._sync_lyrics_for_track(track)
-        self._state.last_played_track_path = path
-        self._state_save_timer.start()
+        self._controller.preview(track)
+
+    def _on_player_current_changed(self, track: Track | None) -> None:
+        """Slot on controller.current_changed (Spec 15). Updates the parts of
+        the old inline preview path that track *which* track plays - now
+        signal-driven so auto-advance updates them too. The library play-glyph
+        is NOT updated here; it rides Player.state_changed (TC-06-19)."""
+        if track is None:
+            # Queue cleared (play_tracks([]) on a non-empty queue). Clear the
+            # now-playing surface; nothing is loaded.
+            self.now_playing_pane.set_track(None)
+            self._tracker.set_lyrics(None)
+        else:
+            self.now_playing_pane.set_track(track)
+            self._sync_lyrics_for_track(track)
+            self._state.last_played_track_path = track.path
+            self._state_save_timer.start()
+        # Pull the Up Next highlight to the queue's current deck slot.
+        self.queue_pane.set_current(self._controller.current_position())
+
+    def _on_queue_changed(self, play_order) -> None:
+        """Slot on controller.queue_changed (Spec 15). Rebuilds the Up Next
+        list and pulls the highlight to the current deck slot - so the staged-
+        current highlight appears even on a queue_changed-only event (e.g.
+        enqueue-on-empty), not just on current_changed."""
+        self.queue_pane.set_queue(play_order)
+        self.queue_pane.set_current(self._controller.current_position())
 
     def _sync_lyrics_for_track(self, track: Track) -> None:
         """Spec 07: cache hit → READY + load LRC + tracker takes over;

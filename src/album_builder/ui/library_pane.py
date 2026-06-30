@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMenu,
     QStyledItemDelegate,
     QStyleOptionViewItem,
     QTableView,
@@ -477,6 +478,13 @@ class LibraryPane(QFrame):
     # is STOPPED). Layered on top of the existing preview_play / toggle
     # signals — those still fire from their own columns independently.
     row_body_clicked = pyqtSignal(object)               # Type: Path
+    # Spec 15 (Phase B) library-wide playback actions, emitted from the
+    # right-click context menu. Payloads are `Track` objects (which the model
+    # already holds) - the bulk actions need the *ordered view*, which only
+    # the proxy knows, so a Path->Track re-lookup in MainWindow is avoided.
+    play_tracks_requested = pyqtSignal(object, int)     # Type: (list[Track], start_index)
+    enqueue_requested = pyqtSignal(object)              # Type: list[Track]
+    play_next_requested = pyqtSignal(object)            # Type: Track
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -544,6 +552,9 @@ class LibraryPane(QFrame):
         # so Enter routes through `_on_table_activated` which only handles
         # the _play and _toggle columns.
         self.table.activated.connect(self._on_table_activated)
+        # Spec 15 (Phase B): right-click context menu with the playback actions.
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._on_context_menu)
         self.table.setAccessibleName("Track library")
         self.table.setAccessibleDescription(
             "Searchable list of tracks. First column previews playback; "
@@ -660,6 +671,50 @@ class LibraryPane(QFrame):
         col_attr = COLUMNS[view_index.column()][1]
         if col_attr in ("_play", "_toggle"):
             self._on_table_clicked(view_index)
+
+    def view_order_tracks(self) -> list[Track]:
+        """Return the current view (proxy) order as a `Track` list, top to
+        bottom. The context-menu bulk actions build their payloads from this so
+        a search filter / sort is honoured (Spec 15 §library_pane, TC-15-22)."""
+        tracks: list[Track] = []
+        for view_row in range(self._proxy.rowCount()):
+            src = self._proxy.mapToSource(self._proxy.index(view_row, 0))
+            tracks.append(self._model.track_at(src.row()))
+        return tracks
+
+    def _build_context_menu(self, view_index: QModelIndex) -> QMenu | None:
+        """Build the playback context menu for `view_index`, with each action
+        pre-connected to its emit. Returns None for an invalid index. Kept
+        separate from `_on_context_menu` (which calls `exec`) so tests can
+        trigger actions without a modal event loop."""
+        if not view_index.isValid():
+            return None
+        view_row = view_index.row()
+        src = self._proxy.mapToSource(view_index)
+        if src.row() >= self._model.rowCount():
+            return None
+        clicked = self._model.track_at(src.row())
+        menu = QMenu(self.table)
+        menu.addAction(
+            "Play all",
+            lambda: self.play_tracks_requested.emit(self.view_order_tracks(), 0),
+        )
+        menu.addAction(
+            "Play from here",
+            lambda: self.play_tracks_requested.emit(self.view_order_tracks(), view_row),
+        )
+        menu.addAction(
+            "Play next", lambda: self.play_next_requested.emit(clicked),
+        )
+        menu.addAction(
+            "Add to queue", lambda: self.enqueue_requested.emit([clicked]),
+        )
+        return menu
+
+    def _on_context_menu(self, pos) -> None:
+        menu = self._build_context_menu(self.table.indexAt(pos))
+        if menu is not None:
+            menu.exec(self.table.viewport().mapToGlobal(pos))
 
     def set_row_body_cursor_for_state(self, *, stopped: bool) -> None:
         """Spec 06 TC-06-26: PointingHandCursor when the player is STOPPED

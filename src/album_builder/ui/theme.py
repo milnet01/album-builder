@@ -287,6 +287,21 @@ def qt_stylesheet(p: Palette) -> str:
     QPushButton#LyricsAlignNow:hover {{
         border-color: {p.accent_primary_1};
     }}
+    /* Spec 15 §Player tab - the Up Next list. Selected row reuses the
+       accent fill as the now-playing highlight. */
+    QListWidget#QueueList {{
+        background-color: {p.bg_pane};
+        border: 1px solid {p.border};
+        border-radius: 6px;
+    }}
+    QListWidget#QueueList::item {{
+        padding: 4px 8px;
+        color: {p.text_primary};
+    }}
+    QListWidget#QueueList::item:selected {{
+        background-color: {p.accent_primary_1};
+        color: #ffffff;
+    }}
     /* Spec 06 transient error notice. */
     QFrame#Toast {{
         background-color: {p.bg_elevated};
