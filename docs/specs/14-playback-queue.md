@@ -94,6 +94,15 @@ Query (no mutation):
 - `is_empty() -> bool` — true when there are no entries. `__len__() -> int` —
   membership size (entry count), so `len(queue)` works.
 - `shuffle_enabled() -> bool`, `repeat_mode() -> RepeatMode`.
+- `current_play_order_index() -> int` — the current entry's position within
+  `play_order()` (the bare cursor `_cursor`, not `_deck[_cursor]`), or `-1` if
+  empty. **Added in Phase B (Spec 15)** for the Up Next highlight.
+- `jump_to_play_order_index(pos: int) -> Track | None` — make the entry at
+  play-order position `pos` current (sets the cursor to `pos`); `IndexError`
+  outside `[0, len)`. **Added in Phase B (Spec 15)** for the Up Next double-click.
+  The play-order-addressed counterpart to `jump_to(index)`. Contracts for both
+  additions are detailed in Spec 15 §Phase A domain amendment (additive, no
+  Phase A behavior change).
 
 Load / membership mutation:
 

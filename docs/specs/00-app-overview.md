@@ -169,6 +169,7 @@ The asymmetry is intentional, not historical drift.
 | [12](./12-packaging.md) | Packaging & launcher | venv installer, .desktop file, KDE integration |
 | [13](./13-track-usage-indicator.md) | Track usage indicator | Cross-album popularity badge in the library pane (v0.6.0) |
 | [14](./14-playback-queue.md) | Playback queue (domain) | Ordered mutable queue, shuffle (deck) / repeat, cursor; Phase A of the music-player epic |
+| [15](./15-library-playback-wiring.md) | Library-wide playback wiring | PlaybackController service, library play actions, two-tab shell + Up Next list; Phase B of the music-player epic |
 
 ## Cross-cutting non-functional requirements
 
