@@ -1,0 +1,11 @@
+{
+    "docs_dir": "docs",
+    "roadmap": "ROADMAP.md",
+    "source_roots": [
+        "src/album_builder"
+    ],
+    "specs_dir": "docs/specs",
+    "test_roots": [
+        "tests"
+    ]
+}
