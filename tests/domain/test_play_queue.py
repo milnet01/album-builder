@@ -490,3 +490,42 @@ def test_missing_track_passthrough() -> None:
     reached.append(q.next())
     reached.append(q.next())
     assert missing in reached  # reached by navigation, not skipped
+
+
+# Spec: TC-15-02a - current_play_order_index() returns the bare cursor (deck slot),
+# not _deck[_cursor] (the natural index). Phase B domain amendment (Spec 15).
+def test_current_play_order_index_is_deck_slot_not_natural() -> None:
+    q = PlayQueue(random.Random(0))
+    assert q.current_play_order_index() == -1  # empty
+    q.set_tracks([A, B, C])
+    assert q.current_play_order_index() == 0
+    q.next()
+    assert q.current_play_order_index() == 1
+    # Under shuffle, walking next() the cursor (deck slot) must be 0,1,2,3,4 -
+    # if the method wrongly returned _deck[_cursor] (natural index) it would
+    # diverge from the cursor whenever the seeded deck is not the identity.
+    q = PlayQueue(random.Random(0))
+    q.set_tracks([A, B, C, D, E])
+    q.set_shuffle(True)
+    for i in range(len(q)):
+        assert q.current_play_order_index() == i
+        assert q.play_order()[i] == q.current()
+        assert q.entries()[q.current_index()] == q.current()
+        q.next()
+
+
+# Spec: TC-15-02b - jump_to_play_order_index(pos) makes the entry at deck slot
+# pos current; raises IndexError outside [0, len). Phase B domain amendment.
+def test_jump_to_play_order_index() -> None:
+    q = PlayQueue(random.Random(0))
+    q.set_tracks([A, B, C, D, E])
+    q.set_shuffle(True)
+    play_order = q.play_order()
+    res = q.jump_to_play_order_index(3)
+    assert q.current_play_order_index() == 3
+    assert q.current() == play_order[3]
+    assert res == play_order[3]
+    with pytest.raises(IndexError):
+        q.jump_to_play_order_index(5)
+    with pytest.raises(IndexError):
+        q.jump_to_play_order_index(-1)

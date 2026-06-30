@@ -57,6 +57,14 @@ class PlayQueue:
             return -1
         return self._deck[self._cursor]
 
+    def current_play_order_index(self) -> int:
+        """Play-order position of the current entry (the cursor / deck slot), or
+        -1 if empty. This is the bare ``_cursor`` - the index into ``play_order()``
+        - NOT ``_deck[_cursor]`` (that is the natural index, ``current_index()``).
+        Added in Phase B (Spec 15) for the Up Next highlight, which addresses the
+        deck by slot so a duplicated track highlights the playing copy only."""
+        return self._cursor
+
     def is_empty(self) -> bool:
         return not self._entries
 
@@ -194,6 +202,18 @@ class PlayQueue:
         if not 0 <= index < n:
             raise IndexError(f"index {index} out of range [0, {n})")
         self._cursor = self._deck.index(index)
+        return self.current()
+
+    def jump_to_play_order_index(self, pos: int) -> Track | None:
+        """Make the entry at play-order position ``pos`` (deck slot) the current
+        entry. The play-order-addressed counterpart to ``jump_to`` (which takes a
+        natural index); ``pos`` is an index into ``play_order()``. Out of range
+        ``[0, len)`` raises ``IndexError``. Added in Phase B (Spec 15) for the Up
+        Next double-click, where the clicked row IS a deck slot and cannot be
+        reduced to a natural index when a ``Track`` appears twice."""
+        if not 0 <= pos < len(self._deck):
+            raise IndexError(f"pos {pos} out of range [0, {len(self._deck)})")
+        self._cursor = pos
         return self.current()
 
     # -- mode mutation ------------------------------------------------------
