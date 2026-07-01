@@ -199,8 +199,10 @@ Commands:
   `current_changed` (see the enqueue-on-empty edge case).
 - `next() -> None` — manual skip forward: `PlayQueue.next()` (manual=True); load
   +play a *different* result, or if it is `None` (end of queue, repeat `OFF`) stop
-  the player and leave the current entry as-is. On an **empty** queue it is a no-op
-  (queue returns `None`; player untouched). Emits `queue_changed` iff
+  the player and leave the current entry as-is. On an **empty** queue
+  `PlayQueue.next()` also returns `None`, so the same branch calls `Player.stop()`;
+  on an already-stopped player that is unobservable (no state transition), so the
+  current entry and player are effectively unchanged. Emits `queue_changed` iff
   `shuffle_enabled()` (a forward step under shuffle may have reshuffled on a wrap;
   per the `queue_changed` rule the controller emits on every shuffled forward step
   rather than detecting the wrap).
@@ -531,7 +533,7 @@ on repeat mode (its transport is Phase C), so it emits no signal.
 | `play_tracks([])` clearing a **non-empty** queue | Queue cleared, `Player.set_source(None)`, player stopped; the current track changes (`X -> None`), so `current_changed(None)` is emitted; `queue_changed(())`. On an **already-empty** controller the current track is still `None`, so no `current_changed` fires; `queue_changed(())` still fires (it always fires per call). |
 | `play_tracks(tracks, start_index=k)` with `k` out of range | `PlayQueue.set_tracks` raises `IndexError`; the controller does not catch it and does not alter the currently-playing track (atomic — queue unchanged, player untouched). |
 | `next()` at end of queue, repeat `OFF` | `queue.next()` returns `None`; `Player.stop()`; current entry unchanged; no `current_changed`. |
-| `previous()` / `next()` / `jump_to` on an empty queue | No-op (queue returns `None`); player untouched. |
+| `previous()` / `next()` / `jump_to` on an empty queue | `previous()` / `jump_to` are true no-ops (player untouched); `next()` calls a benign `Player.stop()` (queue yields `None`, the same branch as end-of-queue) - unobservable on an already-stopped player, so no state change. |
 | Track end under repeat `OFF` at the last track | The `Player` has already stopped on EndOfMedia (Spec 06); the controller does nothing further (no controller `stop()` call). Current stays on the last track; Up Next highlight stays; no auto-advance, no `current_changed`. |
 | Current source is a missing / undecodable file | `Player` emits `error` + enters `ERROR` state (Spec 06 §Errors & edge cases); the controller does **not** auto-skip in Phase B (a skip-on-error rule needs an all-missing-queue loop guard — deferred to Phase C). The track stays current; the error toast surfaces as today. |
 | `enqueue` / `play_next` while a track is playing | Queue grows; playback is uninterrupted; `queue_changed` updates the Up Next list. |
