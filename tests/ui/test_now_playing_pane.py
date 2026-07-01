@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from album_builder.domain.track import Track
+from album_builder.services.playback_controller import PlaybackController
 from album_builder.services.player import Player
 from album_builder.ui.now_playing_pane import NowPlayingPane
 
@@ -33,7 +34,8 @@ def _make_track(tmp: Path, **over) -> Track:
 
 @pytest.fixture
 def pane(qtbot):
-    p = NowPlayingPane(Player())
+    player = Player()
+    p = NowPlayingPane(player, PlaybackController(player))
     qtbot.addWidget(p)
     p.show()
     return p

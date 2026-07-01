@@ -14,6 +14,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import QApplication
 
 from album_builder.domain.track import Track
+from album_builder.services.playback_controller import PlaybackController
 from album_builder.services.player import Player
 from album_builder.ui.lyrics_panel import LyricsPanel
 from album_builder.ui.now_playing_pane import NowPlayingPane
@@ -56,7 +57,7 @@ def test_lyrics_panel_uses_min_height_not_fixed(qtbot) -> None:
 # and does not add a competing addStretch after it.
 def test_now_playing_pane_gives_lyrics_non_zero_stretch(qtbot, tmp_path: Path) -> None:
     p = Player()
-    pane = NowPlayingPane(p)
+    pane = NowPlayingPane(p, PlaybackController(p))
     qtbot.addWidget(pane)
     layout = pane.layout()
     # Find the index of the lyrics panel in the QVBoxLayout.
@@ -86,7 +87,7 @@ def test_now_playing_pane_gives_lyrics_non_zero_stretch(qtbot, tmp_path: Path) -
 # Spec: TC-07-16(c) — at 420x800, the lyrics panel grows past 300 px.
 def test_lyrics_panel_grows_when_pane_is_tall(qtbot, tmp_path: Path) -> None:
     p = Player()
-    pane = NowPlayingPane(p)
+    pane = NowPlayingPane(p, PlaybackController(p))
     qtbot.addWidget(pane)
     pane.resize(420, 800)
     QApplication.processEvents()

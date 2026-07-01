@@ -198,7 +198,7 @@ class MainWindow(QMainWindow):
         self.library_pane.set_usage_index(self._usage_index)
         self.library_pane.set_library(library_watcher.library())
         self.album_order_pane = AlbumOrderPane()
-        self.now_playing_pane = NowPlayingPane(self._player)
+        self.now_playing_pane = NowPlayingPane(self._player, self._controller)
         self.splitter.addWidget(self.library_pane)
         self.splitter.addWidget(self.album_order_pane)
         self.splitter.addWidget(self.now_playing_pane)

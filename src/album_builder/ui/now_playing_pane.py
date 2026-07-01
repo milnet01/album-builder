@@ -12,13 +12,16 @@ from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout
 
 from album_builder.domain.track import Track
+from album_builder.services.playback_controller import PlaybackController
 from album_builder.services.player import Player
 from album_builder.ui.lyrics_panel import LyricsPanel
 from album_builder.ui.transport_bar import TransportBar
 
 
 class NowPlayingPane(QFrame):
-    def __init__(self, player: Player, parent=None) -> None:
+    def __init__(
+        self, player: Player, controller: PlaybackController, parent=None
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("Pane")
 
@@ -67,7 +70,7 @@ class NowPlayingPane(QFrame):
         self.lyrics_panel = LyricsPanel()
         layout.addWidget(self.lyrics_panel, stretch=1)
 
-        self.transport = TransportBar(player)
+        self.transport = TransportBar(player, controller)
         layout.addWidget(self.transport)
 
         self.set_track(None)

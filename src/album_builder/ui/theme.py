@@ -227,6 +227,15 @@ def qt_stylesheet(p: Palette) -> str:
         font-size: 14pt;
         padding: 4px 8px;
     }}
+    /* Spec 16 - active (checked) state for the shuffle/repeat toggles. The
+       base QPushButton rule sets a background, so Qt's native checked look is
+       invisible without this explicit rule. */
+    QPushButton#TransportShuffle:checked,
+    QPushButton#TransportRepeat:checked {{
+        background-color: {p.accent_primary_1};
+        color: {p.text_primary};
+        border-color: {p.accent_primary_1};
+    }}
     QLabel#TransportTime {{
         color: {p.text_secondary};
         font-family: "JetBrains Mono", "Fira Code", monospace;
@@ -365,6 +374,13 @@ class Glyphs:
     PAUSE = "⏸"                 # U+23F8 - Spec 06 transport pause
     MUTE = "\U0001f507"         # U+1F507 - Spec 06 mute
     UNMUTE = "\U0001f50a"       # U+1F50A - Spec 06 unmute
+    # Spec 16 transport controls (Phase C). Arrows as literal codepoints
+    # (like PLAY/PAUSE); shuffle/repeat as emoji \U escapes (like MUTE/UNMUTE).
+    SKIP_PREV = "⏮"             # U+23EE - Spec 16 previous-track
+    SKIP_NEXT = "⏭"             # U+23ED - Spec 16 next-track
+    SHUFFLE = "\U0001f500"      # U+1F500 - Spec 16 shuffle toggle
+    REPEAT_ALL = "\U0001f501"   # U+1F501 - Spec 16 repeat off/all
+    REPEAT_ONE = "\U0001f502"   # U+1F502 - Spec 16 repeat one
     # Spec 11 doesn't enumerate a close glyph; ASCII "x" is the long-standing
     # convention for close-button affordances (matches macOS, GTK, web UIs)
     # and renders identically across all font stacks. (Theme J closure.)
