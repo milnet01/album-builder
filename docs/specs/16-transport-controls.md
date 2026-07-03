@@ -476,9 +476,10 @@ through the cycle.
 - Gapless / crossfade playback build (deferred to a dedicated spec sequenced with
   Phase F — see §Gapless investigation). Phase C ships only the documented finding.
 - Equaliser / ReplayGain / audio effects (Phase F).
-- Persisting shuffle / repeat / volume state across restarts (Phase D — Spec 10
-  amendment or a new persistence spec). This phase seeds the buttons from the
-  controller's in-memory mode only.
+- Persisting shuffle / repeat / volume state across restarts (a later persistence
+  phase — Spec 10 amendment or a new persistence spec; the roadmap's Phase D is
+  saved playlists, Spec 17). This phase seeds the buttons from the controller's
+  in-memory mode only.
 - A polished now-playing surface (cover art, synced lyrics in the Player tab) —
   Phase E; this phase touches only the transport bar row.
 - Skip-unplayable / auto-skip-on-error in the transport (still deferred; the

@@ -171,6 +171,7 @@ The asymmetry is intentional, not historical drift.
 | [14](./14-playback-queue.md) | Playback queue (domain) | Ordered mutable queue, shuffle (deck) / repeat, cursor; Phase A of the music-player epic |
 | [15](./15-library-playback-wiring.md) | Library-wide playback wiring | PlaybackController service, library play actions, two-tab shell + Up Next list; Phase B of the music-player epic |
 | [16](./16-transport-controls.md) | Transport controls | prev/next/shuffle/repeat buttons wired to PlaybackController; gapless spike (deferred); Phase C of the music-player epic |
+| [17](./17-saved-playlists.md) | Saved playlists | Named reorderable playlists; playlists.json (atomic + debounced + schema-migration); CRUD UI in the Player tab; Phase D of the music-player epic |
 
 ## Cross-cutting non-functional requirements
 
