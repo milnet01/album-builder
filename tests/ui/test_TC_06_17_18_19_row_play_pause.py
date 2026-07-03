@@ -82,17 +82,21 @@ def test_active_playing_row_click_pauses_without_reload(main_window, qtbot, monk
     # only cares about the reported state).
     main_window._player._set_state_for_test(PlayerState.PLAYING)
 
-    # Second click on the same row — must NOT call set_source again.
+    # Second click on the same row — must NOT call set_source again. The
+    # dispatch (toggle-vs-reload) runs synchronously inside the click handler,
+    # so the no-reload check is deterministic the instant the call returns.
     main_window._on_preview_play(track_paths[0])
-    qtbot.wait(50)
     assert set_source_calls == [track_paths[0]], (
         "TC-06-17: same-row click on active+playing source must not reload "
         f"(set_source called {len(set_source_calls)} times: {set_source_calls})"
     )
-    # State must have transitioned to PAUSED via the toggle path.
-    assert main_window._player.state() == PlayerState.PAUSED, (
-        "TC-06-17: same-row click on active+playing source pauses; "
-        f"state is {main_window._player.state()}"
+    # The toggle routed to the real Player.pause(); its PausedState arrives
+    # asynchronously from the QtMultimedia backend. Poll for it rather than
+    # racing a fixed deadline (mirrors test_transport_play_flips_library_row_glyph
+    # below, which waits on the real PLAYING transition). A fixed 50ms wait
+    # missed this transition under CPU load, flaking the test in a loaded suite.
+    qtbot.waitUntil(
+        lambda: main_window._player.state() == PlayerState.PAUSED, timeout=3000,
     )
     # Source unchanged.
     assert main_window._player.source() == track_paths[0]
