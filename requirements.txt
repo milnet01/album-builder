@@ -1,6 +1,11 @@
-PyQt6>=6.6,<7
-mutagen>=1.47,<2
+# Runtime dependencies. Floors = minimum-supported version; no upper caps, so
+# a fresh install / CI always resolves to the latest release (dependency-
+# currency standard: docs/standards/dependency-currency.md). If a newer
+# version ever breaks a feature, add a documented cap here AND a ledger entry
+# in that standard -- never an undocumented pin.
+PyQt6>=6.6
+mutagen>=1.47
 # Phase 4 (v0.5.0) — report generation + cover normalisation
-Jinja2>=3.1,<4
-weasyprint>=68,<70
-Pillow>=11,<13
+Jinja2>=3.1
+weasyprint>=68
+Pillow>=11

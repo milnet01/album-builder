@@ -46,6 +46,7 @@ Signals flow up via `pyqtSignal(object)`. Disk writes flow down through `Debounc
 - **Atomic writes** — every persistence write through `atomic_write_text` / `atomic_write_bytes` (tmp + fsync + `os.replace`). Multi-file transactions use `atomic_pair.scan_reports_dir` for load-time recovery.
 - **Tests cite spec contracts** — every test has `# Spec: TC-NN-MM` (or `WCAG_*` / `RFC_*`). New load-bearing test files prefix the filename with the contract anchor (`test_TC_NN_*`); existing files keep their names (forward-only, no retroactive rename).
 - **Commits** — conventional (`feat: / fix: / docs: / test: / refactor: / chore:`); one logical change per commit; **no `Co-Authored-By` footer** (verify with `git log -10 --format=%B`).
+- **Dependency currency** — all deps run latest (features *and* security); `requirements*.txt` carry floors only, no upper caps. Any hold-back is documented (never a silent pin) in `docs/standards/dependency-currency.md`, which holds the ledger + retest triggers. Operationalises global §5.
 
 ## Slash commands
 
@@ -58,4 +59,4 @@ Global rules apply in full unless this file overrides them — don't restate, fo
 - **`~/.claude/CLAUDE.md`** — development discipline (§1-5: no workarounds without root-cause fix, shortest correct implementation, reuse before rewriting, six-month test, current external-library idioms), git push cadence (§6: public repo push freely; private batch + confirm), PR-workflow opt-in (§7), and the **Karpathy clarity rules** (§8-12: surface ambiguity, push back when a simpler path exists, reproduce-before-fix for bugs, stay in your lane on edits, state a verify-step plan for multi-step work).
 - **`/mnt/Games/CLAUDE.md`** — privileged commands use `SUDO_ASKPASS=/usr/libexec/ssh/ksshaskpass sudo -A -p "Claude Code: <action>"`.
 
-Public GitHub repo (`milnet01/album-builder`) — push freely on main; free Linux CI minutes.
+Public GitHub repo (`milnet01/album-builder`) — push freely on main; free Linux CI minutes. CI is `.github/workflows/ci.yml`; its single check step runs `./local-CI.sh` (ruff + full pytest), so running that script locally reproduces the CI gate exactly.

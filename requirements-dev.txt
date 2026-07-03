@@ -1,4 +1,6 @@
 -r requirements.txt
-pytest>=8,<9
-pytest-qt>=4.4,<5
+# No upper caps -- see docs/standards/dependency-currency.md. pytest 9 (major)
+# verified green 2026-07-03.
+pytest>=8
+pytest-qt>=4.4
 ruff>=0.5
