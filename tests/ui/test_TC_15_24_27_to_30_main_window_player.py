@@ -9,8 +9,6 @@ title / Up Next highlight, all synchronous.
 
 from __future__ import annotations
 
-from album_builder.ui.queue_pane import QueuePane
-
 
 # Spec: TC-15-24
 def test_two_tabs_album_builder_and_player(main_window) -> None:
@@ -19,8 +17,11 @@ def test_two_tabs_album_builder_and_player(main_window) -> None:
     assert tabs.tabText(0) == "Album Builder"
     assert tabs.tabText(1) == "Player"
     assert tabs.currentIndex() == 0                       # default tab
-    assert isinstance(tabs.widget(1), QueuePane)
-    assert tabs.widget(1) is main_window.queue_pane
+    # Spec 17 (Phase D) restructured the Player tab into a container hosting
+    # the PlaylistsPane above the live Up Next QueuePane.
+    player_tab = tabs.widget(1)
+    assert player_tab.isAncestorOf(main_window.queue_pane)
+    assert player_tab.isAncestorOf(main_window.playlists_pane)
     # The curation splitter lives under the first tab.
     assert tabs.widget(0).isAncestorOf(main_window.splitter)
 

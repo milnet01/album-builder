@@ -485,6 +485,9 @@ class LibraryPane(QFrame):
     play_tracks_requested = pyqtSignal(object, int)     # Type: (list[Track], start_index)
     enqueue_requested = pyqtSignal(object)              # Type: list[Track]
     play_next_requested = pyqtSignal(object)            # Type: Track
+    # Spec 17 (Phase D) "Add to playlist" submenu. Payload is
+    # (playlist_id | None, list[Track]); None means "a new playlist".
+    add_to_playlist_requested = pyqtSignal(object, object)  # Type: (str | None, list[Track])
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -508,6 +511,9 @@ class LibraryPane(QFrame):
         self._proxy.setSourceModel(self._model)
         self._proxy.setSortRole(Qt.ItemDataRole.UserRole)
         self._current_album: Album | None = None
+        # Spec 17 (Phase D): (id, name) of each known playlist, for the
+        # "Add to playlist" context submenu. Refreshed on PlaylistStore.changed.
+        self._playlists_meta: list[tuple[str, str]] = []
 
         title_col = _column_index("title")
         play_col = _column_index("_play")
@@ -564,6 +570,12 @@ class LibraryPane(QFrame):
 
     def set_library(self, library: Library) -> None:
         self._model.set_tracks(library.tracks)
+
+    def set_playlists(self, playlists) -> None:
+        """Stash (id, name) for each playlist so the next-built "Add to
+        playlist" submenu lists them (Spec 17, Phase D). The menu is built
+        fresh per right-click, so no live menu needs updating here."""
+        self._playlists_meta = [(pl.id, pl.name) for pl in playlists]
 
     def set_usage_index(self, usage_index: UsageIndex) -> None:
         """Inject the UsageIndex reference and connect the changed signal.
@@ -709,6 +721,19 @@ class LibraryPane(QFrame):
         menu.addAction(
             "Add to queue", lambda: self.enqueue_requested.emit([clicked]),
         )
+        # Spec 17 (Phase D): "Add to playlist" submenu. "New playlist..." emits
+        # a None id (MainWindow prompts a name + creates); one entry per known
+        # playlist adds to it directly. v1 adds the single right-clicked track.
+        playlist_menu = menu.addMenu("Add to playlist")
+        playlist_menu.addAction(
+            "New playlist...",
+            lambda: self.add_to_playlist_requested.emit(None, [clicked]),
+        )
+        for pl_id, name in self._playlists_meta:
+            playlist_menu.addAction(
+                name,
+                lambda _checked=False, i=pl_id: self.add_to_playlist_requested.emit(i, [clicked]),
+            )
         return menu
 
     def _on_context_menu(self, pos) -> None:

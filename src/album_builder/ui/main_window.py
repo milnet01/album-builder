@@ -50,11 +50,13 @@ from album_builder.services.library_watcher import LibraryWatcher
 from album_builder.services.lyrics_tracker import LyricsTracker
 from album_builder.services.playback_controller import PlaybackController
 from album_builder.services.player import Player, PlayerState
+from album_builder.services.playlist_store import PlaylistStore
 from album_builder.services.report import list_warnings, report_paths_for
 from album_builder.services.usage_index import UsageIndex
 from album_builder.ui.album_order_pane import AlbumOrderPane
 from album_builder.ui.library_pane import LibraryPane
 from album_builder.ui.now_playing_pane import NowPlayingPane
+from album_builder.ui.playlists_pane import PlaylistsPane
 from album_builder.ui.queue_pane import QueuePane
 from album_builder.ui.theme import Glyphs, Palette, qt_stylesheet
 from album_builder.ui.toast import Toast
@@ -166,6 +168,11 @@ class MainWindow(QMainWindow):
         # playback path fighting auto-advance.
         self._controller = PlaybackController(self._player, self)
 
+        # Saved playlists (Spec 17, Phase D). Owns playlists.json; a corrupt
+        # file degrades to an empty catalogue with load_failed set (toasted
+        # once self._toast exists, below). Needs no library at construction.
+        self._playlist_store = PlaylistStore(project_root, parent=self)
+
         # UI-tier settings cached at startup (Spec 09 §The approve flow
         # step 6 + Spec 10 §`settings.json` schema). Re-reading on every
         # approve would add disk I/O to a hot path; if the user changes
@@ -221,13 +228,32 @@ class MainWindow(QMainWindow):
         curation_layout.addWidget(self.top_bar)
         curation_layout.addWidget(self.splitter, stretch=1)
         self.tabs.addTab(curation, "Album Builder")
+        # Spec 17 (Phase D): the Player tab stacks the saved-playlists surface
+        # above the live Up Next queue (same container pattern the curation tab
+        # uses for TopBar + splitter).
+        self.playlists_pane = PlaylistsPane()
         self.queue_pane = QueuePane()
-        self.tabs.addTab(self.queue_pane, "Player")
+        player_tab = QWidget()
+        player_layout = QVBoxLayout(player_tab)
+        player_layout.setContentsMargins(0, 0, 0, 0)
+        player_layout.setSpacing(10)
+        player_layout.addWidget(self.playlists_pane, stretch=1)
+        player_layout.addWidget(self.queue_pane, stretch=1)
+        self.tabs.addTab(player_tab, "Player")
         outer.addWidget(self.tabs, stretch=1)
 
         # Toast overlays the bottom of the central widget. Position is
         # updated on resize so it always sits above the bottom edge.
         self._toast = Toast(self)
+
+        # Spec 17 §Startup degradation: a corrupt playlists.json started an
+        # empty catalogue without touching the file (it is renamed to
+        # .corrupt.bak on the first save). Tell the user via a toast.
+        if self._playlist_store.load_failed:
+            self._show_toast(
+                "playlists.json was unreadable; started an empty list. "
+                "Your original file is preserved as playlists.json.corrupt.bak."
+            )
 
         # Debounced state-save timer for splitter / geometry mutations (TC-03-10).
         self._state_save_timer = QTimer(self)
@@ -267,6 +293,23 @@ class MainWindow(QMainWindow):
         self._controller.current_changed.connect(self._on_player_current_changed)
         self.queue_pane.row_activated.connect(self._controller.jump_to_position)
         library_watcher.tracks_changed.connect(self.library_pane.set_library)
+        # Spec 17 (Phase D): saved playlists. The store drives both panes; both
+        # are seeded once at construction (and the library once, so tracks
+        # render with titles before the first rescan). tracks_changed also
+        # re-resolves "(missing)" markers as the library changes.
+        self._playlist_store.changed.connect(self.playlists_pane.set_playlists)
+        self._playlist_store.changed.connect(self.library_pane.set_playlists)
+        self.playlists_pane.set_playlists(self._playlist_store.playlists())
+        self.library_pane.set_playlists(self._playlist_store.playlists())
+        self.playlists_pane.set_library(library_watcher.library())
+        library_watcher.tracks_changed.connect(self.playlists_pane.set_library)
+        self.playlists_pane.create_requested.connect(self._on_new_playlist)
+        self.playlists_pane.rename_committed.connect(self._on_rename_playlist)
+        self.playlists_pane.delete_requested.connect(self._on_delete_playlist)
+        self.playlists_pane.move_track_requested.connect(self._playlist_store.move_track)
+        self.playlists_pane.remove_track_requested.connect(self._playlist_store.remove_track)
+        self.playlists_pane.play_requested.connect(self._on_play_playlist)
+        self.library_pane.add_to_playlist_requested.connect(self._on_add_to_playlist)
         # Lyrics: tracker → panel (current-line index); panel → service (Align-now)
         self._tracker.current_line_changed.connect(
             self.now_playing_pane.lyrics_panel.set_current_line
@@ -525,6 +568,70 @@ class MainWindow(QMainWindow):
             return
         self._store.delete(album_id)
         self.top_bar.switcher.set_current(self._store.current_album_id)
+
+    # --- Saved playlists (Spec 17, Phase D) --------------------------------
+
+    def _on_new_playlist(self) -> None:
+        name, ok = QInputDialog.getText(self, "New playlist", "Playlist name:")
+        # A cancelled or strip-empty name creates nothing (so Playlist.create's
+        # ValueError is never reached). Spec 17 §Create.
+        if not ok or not name.strip():
+            return
+        self._playlist_store.create(name.strip())
+
+    def _on_rename_playlist(self, playlist_id: str, new_name: str) -> None:
+        try:
+            self._playlist_store.rename(playlist_id, new_name)
+        except ValueError:
+            # Empty name: the store rejected it (no persist, no changed). Revert
+            # the inline edit by re-rendering from the store (Spec 17 §Rename).
+            self.playlists_pane.set_playlists(self._playlist_store.playlists())
+
+    def _on_delete_playlist(self, playlist_id: str) -> None:
+        pl = self._playlist_store.find(playlist_id)
+        if pl is None:
+            return
+        # Default-Cancel confirm: a deleted playlist keeps no backup (unlike an
+        # album's .trash), so the safer default-Cancel form is used here rather
+        # than the plainer question() Yes/No shorthand (Spec 17 §Delete).
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Delete playlist")
+        msg.setText(f"Delete playlist '{pl.name}'? This cannot be undone.")
+        msg.setIcon(QMessageBox.Icon.Question)
+        delete_btn = msg.addButton("Delete", QMessageBox.ButtonRole.AcceptRole)
+        cancel_btn = msg.addButton(QMessageBox.StandardButton.Cancel)
+        msg.setDefaultButton(cancel_btn)
+        msg.exec()
+        if msg.clickedButton() is not delete_btn:
+            return
+        self._playlist_store.delete(playlist_id)
+
+    def _on_play_playlist(self, playlist_id: str) -> None:
+        pl = self._playlist_store.find(playlist_id)
+        if pl is None:
+            return
+        library = self._library_watcher.library()
+        resolved = [
+            track
+            for track in (library.find(p) for p in pl.track_paths)
+            if track is not None
+        ]
+        if not resolved:
+            # Empty or all-missing: play_tracks([]) would clear/stop the live
+            # queue, so leave it untouched and toast instead (Spec 17 §Play,
+            # TC-17-22).
+            self._show_toast("Playlist is empty or all its tracks are missing.")
+            return
+        self._controller.play_tracks(resolved)
+
+    def _on_add_to_playlist(self, playlist_id: str | None, tracks: list[Track]) -> None:
+        if playlist_id is None:
+            name, ok = QInputDialog.getText(self, "New playlist", "Playlist name:")
+            if not ok or not name.strip():
+                return  # cancelled / empty: no playlist created, no track added
+            playlist_id = self._playlist_store.create(name.strip()).id
+        for track in tracks:
+            self._playlist_store.add_track(playlist_id, track.path)
 
     def _on_selection_toggled(self, path: Path, new_state: bool) -> None:
         album = self._current_album()

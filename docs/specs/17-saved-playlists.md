@@ -1,6 +1,6 @@
 # 17 — Saved playlists (persistence + ui)
 
-**Status:** Reviewed - ready to implement (Phase D of the music-player epic) · **Last updated:** 2026-07-03 · **Depends on:** 00, 01, 02, 03, 10, 11, 14, 15, 16 · **Blocks:** music-player Phases E-G
+**Status:** Implemented (Phase D of the music-player epic) · **Last updated:** 2026-07-03 · **Depends on:** 00, 01, 02, 03, 10, 11, 14, 15, 16 · **Blocks:** music-player Phases E-G
 
 > **Cold-eyes loop log (2026-07-03):** 7 loops, 2 independent reviewers per loop
 > (accuracy/conflicts + completeness/testability lenses), briefed cold every pass

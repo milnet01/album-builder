@@ -33,10 +33,11 @@ def _menu_for_view_row(pane: LibraryPane, view_row: int):
 
 
 # Spec: TC-15-20
-def test_context_menu_exposes_exactly_four_actions(pane) -> None:
+def test_context_menu_exposes_expected_actions(pane) -> None:
+    # Spec 17 (Phase D, TC-17-19) added "Add to playlist" as a fifth entry.
     menu = _menu_for_view_row(pane, 0)
     assert [a.text() for a in menu.actions()] == [
-        "Play all", "Play from here", "Play next", "Add to queue",
+        "Play all", "Play from here", "Play next", "Add to queue", "Add to playlist",
     ]
 
 
