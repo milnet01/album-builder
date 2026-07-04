@@ -130,6 +130,13 @@ class LyricsPanel(QFrame):
     def current_line(self) -> int:
         return self._current_index
 
+    def set_palette(self, palette: Palette) -> None:
+        """Spec 19: adopt a new theme palette and repaint the per-line lyric
+        colours (past/now/future brushes are computed imperatively from the
+        palette, so they don't follow the global stylesheet swap)."""
+        self._palette = palette
+        self._restyle_items()
+
     def is_align_button_visible(self) -> bool:
         """Logical visibility — survives offscreen test widgets where Qt's
         own `isVisible()` returns False until the parent is `show()`-n."""

@@ -10,7 +10,7 @@ from pathlib import Path
 from uuid import UUID
 
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt6.QtGui import QActionGroup, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
@@ -31,9 +31,11 @@ from album_builder.domain.track import Track
 from album_builder.persistence.lrc_io import read_lrc
 from album_builder.persistence.settings import (
     AudioSettings,
+    UiSettings,
     read_audio,
     read_ui,
     write_audio,
+    write_ui,
 )
 from album_builder.persistence.state_io import AppState, WindowState, save_state
 from album_builder.services.album_store import (
@@ -58,7 +60,7 @@ from album_builder.ui.library_pane import LibraryPane
 from album_builder.ui.now_playing_pane import NowPlayingPane
 from album_builder.ui.playlists_pane import PlaylistsPane
 from album_builder.ui.queue_pane import QueuePane
-from album_builder.ui.theme import Glyphs, Palette, qt_stylesheet
+from album_builder.ui.theme import THEMES, Glyphs, palette_for, qt_stylesheet
 from album_builder.ui.toast import Toast
 from album_builder.ui.top_bar import TopBar
 from album_builder.version import __version__
@@ -143,7 +145,9 @@ class MainWindow(QMainWindow):
         # doesn't make the app unusable.
         self.resize(max(400, state.window.width), max(300, state.window.height))
         self.move(max(0, state.window.x), max(0, state.window.y))
-        self.setStyleSheet(qt_stylesheet(Palette.dark_colourful()))
+        # Spec 19: the stylesheet is applied by _apply_theme at the end of
+        # __init__ (once the menu + palette-caching widgets exist), from the
+        # persisted ui.theme, rather than a hardcoded dark-colourful here.
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -355,6 +359,73 @@ class MainWindow(QMainWindow):
             albums = store.list()
             if albums:
                 self.top_bar.switcher.set_current(albums[0].id)
+
+        # Spec 19: build the menu bar (File / View -> Theme / Help), then apply
+        # the persisted theme through the same path a live switch uses (the two
+        # palette-caching widgets and the menu radio now exist).
+        self._current_theme = "dark-colourful"
+        self._build_menu_bar()
+        self._apply_theme(self._ui_settings.theme, persist=False)
+
+    # ---- Theme (Spec 19) --------------------------------------------
+
+    def _build_menu_bar(self) -> None:
+        bar = self.menuBar()
+
+        file_menu = bar.addMenu("File")
+        # Menu items wrap the EXISTING handlers/shortcuts (Ctrl+N / Ctrl+Q are
+        # still bound in _wire_shortcuts); no accelerator is set here to avoid a
+        # second, ambiguous binding for the same key. Late-bound lambdas so the
+        # handler is looked up on self at trigger time (overridable, testable).
+        file_menu.addAction("New Album", lambda: self._on_new_album())
+        file_menu.addSeparator()
+        file_menu.addAction("Quit", lambda: self.close())
+
+        view_menu = bar.addMenu("View")
+        theme_menu = view_menu.addMenu("Theme")
+        self._theme_group = QActionGroup(self)
+        self._theme_group.setExclusive(True)
+        self._theme_actions: dict[str, object] = {}
+        for theme_id, (display_name, _factory) in THEMES.items():
+            act = theme_menu.addAction(display_name)
+            act.setCheckable(True)
+            self._theme_group.addAction(act)
+            # `triggered` fires on user activation only (not on programmatic
+            # setChecked), so the check in _apply_theme cannot re-enter here.
+            act.triggered.connect(
+                lambda _checked=False, tid=theme_id: self._apply_theme(
+                    tid, persist=True
+                )
+            )
+            self._theme_actions[theme_id] = act
+
+        help_menu = bar.addMenu("Help")
+        help_menu.addAction("Keyboard shortcuts", lambda: self._show_help())
+
+    def _apply_theme(self, theme_id: str, *, persist: bool) -> None:
+        palette = palette_for(theme_id)
+        self.setStyleSheet(qt_stylesheet(palette))
+        # Refresh the two imperative-styled widgets (the rest follow the QSS swap).
+        self.now_playing_pane.lyrics_panel.set_palette(palette)
+        self.library_pane.set_palette(palette)
+        self._current_theme = theme_id
+        action = self._theme_actions.get(theme_id)
+        if action is not None:
+            action.setChecked(True)
+        if persist:
+            new_settings = UiSettings(
+                open_report_folder_on_approve=(
+                    self._ui_settings.open_report_folder_on_approve
+                ),
+                theme=theme_id,
+            )
+            try:
+                write_ui(new_settings)
+                self._ui_settings = new_settings
+            except OSError as exc:
+                # An uncaught exception in this triggered slot would qFatal the
+                # app; a failed settings write must only cost persistence.
+                self._show_toast(f"Couldn't save theme choice: {exc}")
 
     def _current_album(self):
         cid = self.top_bar.switcher.current_id

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 
@@ -48,6 +49,97 @@ class Palette:
             success_dark="#059669",
             warning="#f97316",
             danger="#ef4444",
+        )
+
+    # Spec 19 additional themes. Every text/accent-as-text token below is tuned to
+    # meet the WCAG 2.2 AA contrast contract (Spec 19 §Accessibility), verified by
+    # the TC-19-04 contrast test — do not "brighten" a value without re-checking it.
+    @classmethod
+    def light(cls) -> Palette:
+        return cls(
+            bg_base="#f4f5f7",
+            bg_pane="#ffffff",
+            bg_elevated="#eceef2",
+            border="#d6d9e0",
+            border_strong="#b8bcc7",
+            text_primary="#1a1b22",
+            text_secondary="#4a4d5a",
+            text_tertiary="#5c606b",
+            text_placeholder="#63666f",
+            text_disabled="#a8abb5",
+            accent_primary_1="#6e3df0",
+            accent_primary_2="#c635a6",
+            accent_warm="#8a5a00",
+            success="#0a7d54",
+            success_dark="#065f3f",
+            warning="#b5510a",
+            danger="#c02626",
+        )
+
+    @classmethod
+    def dark_ocean(cls) -> Palette:
+        return cls(
+            bg_base="#0e1520",
+            bg_pane="#131c2b",
+            bg_elevated="#1a2536",
+            border="#223047",
+            border_strong="#33445f",
+            text_primary="#e6edf5",
+            text_secondary="#9db0c8",
+            text_tertiary="#8194ac",
+            text_placeholder="#93a4bd",
+            text_disabled="#47536a",
+            accent_primary_1="#3d7ff0",
+            accent_primary_2="#35b0c6",
+            accent_warm="#f6c343",
+            success="#10c98a",
+            success_dark="#0a9668",
+            warning="#f5972e",
+            danger="#f0555a",
+        )
+
+    @classmethod
+    def dark_ember(cls) -> Palette:
+        return cls(
+            bg_base="#17130f",
+            bg_pane="#1e1813",
+            bg_elevated="#271f18",
+            border="#362b21",
+            border_strong="#4a3a2c",
+            text_primary="#f2e9e0",
+            text_secondary="#c2ac98",
+            text_tertiary="#ab937e",
+            text_placeholder="#b39a84",
+            text_disabled="#5a4838",
+            accent_primary_1="#e0742a",
+            accent_primary_2="#d14d6a",
+            accent_warm="#f6b73c",
+            success="#6fbf4a",
+            success_dark="#4f9a30",
+            warning="#f0902e",
+            danger="#ef5350",
+        )
+
+    @classmethod
+    def dark_slate(cls) -> Palette:
+        return cls(
+            bg_base="#16181c",
+            bg_pane="#1c1f24",
+            bg_elevated="#24282e",
+            border="#2f343c",
+            border_strong="#434952",
+            text_primary="#e6e8ec",
+            text_secondary="#a6acb6",
+            text_tertiary="#9096a1",
+            text_placeholder="#969ca7",
+            text_disabled="#4c525c",
+            accent_primary_1="#5b8def",
+            accent_primary_2="#8a7fd6",
+            accent_warm="#e6b95c",
+            success="#3fbf87",
+            success_dark="#2c9668",
+            warning="#e88a34",
+            danger="#e85d62",
         )
 
 
@@ -389,3 +481,23 @@ class Glyphs:
     # success toast format ("Approved · report at <path>") and similar
     # "key1 · key2" UI strings. Widely available in system fonts.
     MIDDOT = "·"
+
+
+# Spec 19 theme registry: the single source of truth for "what themes exist, in what
+# menu order, with what display label". The View -> Theme menu and settings.py's
+# ALLOWED_THEMES both derive from these ids (settings.py lists them literally to keep
+# persistence Qt/ui-free; TC-19-05 asserts the two stay in sync).
+THEMES: dict[str, tuple[str, Callable[[], Palette]]] = {
+    "dark-colourful": ("Dark Colourful", Palette.dark_colourful),
+    "light": ("Light", Palette.light),
+    "dark-ocean": ("Dark Ocean", Palette.dark_ocean),
+    "dark-ember": ("Dark Ember", Palette.dark_ember),
+    "dark-slate": ("Dark Slate", Palette.dark_slate),
+}
+
+
+def palette_for(theme_id: str) -> Palette:
+    """Resolve a theme id to its Palette; an unknown id degrades to dark-colourful
+    (mirrors read_ui's whitelist fallback), so a corrupt setting can't crash the UI."""
+    name_factory = THEMES.get(theme_id) or THEMES["dark-colourful"]
+    return name_factory[1]()

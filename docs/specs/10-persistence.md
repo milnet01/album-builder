@@ -276,7 +276,7 @@ Spec 12 owns *what settings exist*; this spec owns the bytes. Lives at `~/.confi
 | `audio.muted` | bool | false |
 | `alignment.auto_align_on_play` | bool | false |
 | `alignment.model_size` | string | `"medium.en"` |
-| `ui.theme` | string | `"dark-colourful"` (only valid value in v1) |
+| `ui.theme` | string | one of `theme.THEMES` (`"dark-colourful"`, `"light"`, `"dark-ocean"`, `"dark-ember"`, `"dark-slate"`); unknown values fall back to `"dark-colourful"` (Spec 19) |
 | `ui.open_report_folder_on_approve` | bool | true |
 
 ## Errors & edge cases

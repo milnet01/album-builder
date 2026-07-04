@@ -201,10 +201,16 @@ def write_alignment(alignment: AlignmentSettings) -> None:
     _write_settings(data)
 
 
-ALLOWED_THEMES = frozenset({"dark-colourful"})
-"""Spec 10 §`settings.json` schema row `ui.theme`: only `"dark-colourful"`
-is valid in v1. A hand-edited `"theme": "light"` falls back to the
-default rather than propagating an unknown value into the UI layer."""
+# Spec 19: the five built-in theme ids. Listed literally (not imported from
+# ui.theme) because persistence must not import the ui layer ("writes down");
+# theme.THEMES is the canonical set and tests/ui/test_TC_19_themes asserts this
+# list stays in sync with it (TC-19-05).
+ALLOWED_THEMES = frozenset(
+    {"dark-colourful", "light", "dark-ocean", "dark-ember", "dark-slate"}
+)
+"""Spec 10 §`settings.json` schema row `ui.theme`: the valid theme ids. A
+hand-edited unknown value (e.g. `"theme": "neon"`) falls back to the default
+rather than propagating an unrecognised value into the UI layer."""
 
 
 def read_ui() -> UiSettings:

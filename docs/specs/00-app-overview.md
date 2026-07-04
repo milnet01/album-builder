@@ -172,6 +172,8 @@ The asymmetry is intentional, not historical drift.
 | [15](./15-library-playback-wiring.md) | Library-wide playback wiring | PlaybackController service, library play actions, two-tab shell + Up Next list; Phase B of the music-player epic |
 | [16](./16-transport-controls.md) | Transport controls | prev/next/shuffle/repeat buttons wired to PlaybackController; gapless spike (deferred); Phase C of the music-player epic |
 | [17](./17-saved-playlists.md) | Saved playlists | Named reorderable playlists; playlists.json (atomic + debounced + schema-migration); CRUD UI in the Player tab; Phase D of the music-player epic |
+| [18](./18-player-mode-surface.md) | Player-mode surface | Dedicated listening tab (now-playing card + full transport + synced lyrics + Up Next/Playlists), two coherent transport surfaces; Phase E of the music-player epic (spec ready, not yet implemented) |
+| [19](./19-themes.md) | Themes | Five built-in themes (Light + 3 dark variants + dark-colourful), WCAG-AA palettes, live `View -> Theme` switcher persisted in `ui.theme` |
 
 ## Cross-cutting non-functional requirements
 

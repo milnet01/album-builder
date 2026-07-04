@@ -543,9 +543,10 @@ class LibraryPane(QFrame):
         # Spec 13 §The badge: column-scoped delegate attachment.
         # Never setItemDelegate (which would repaint other cells).
         used_col = _column_index("_used")
-        self.table.setItemDelegateForColumn(
-            used_col, UsageBadgeDelegate(self.table),
-        )
+        # Spec 19: keep a handle so set_palette can recolour the badge on a
+        # theme switch (the fill is painted imperatively from the palette).
+        self._usage_delegate = UsageBadgeDelegate(self.table)
+        self.table.setItemDelegateForColumn(used_col, self._usage_delegate)
         self.table.setColumnWidth(used_col, 40)
         self.table.setMinimumWidth(450)
         # Spec 01: default sort is Title ascending.
@@ -570,6 +571,13 @@ class LibraryPane(QFrame):
 
     def set_library(self, library: Library) -> None:
         self._model.set_tracks(library.tracks)
+
+    def set_palette(self, palette: Palette) -> None:
+        """Spec 19: adopt a new theme palette. The usage-badge fill is painted
+        imperatively from the palette, so update the delegate and repaint (the
+        rest of the pane follows the global stylesheet swap)."""
+        self._usage_delegate._palette = palette
+        self.table.viewport().update()
 
     def set_playlists(self, playlists) -> None:
         """Stash (id, name) for each playlist so the next-built "Add to
