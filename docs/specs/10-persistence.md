@@ -259,6 +259,7 @@ Spec 12 owns *what settings exist*; this spec owns the bytes. Lives at `~/.confi
     "model_size": "medium.en"
   },
   "audio": { "muted": false, "volume": 80 },
+  "replaygain": { "enabled": false, "mode": "album" },
   "schema_version": 1,
   "tracks_folder": "/mnt/Games/Scripts/Linux/Music_Production/Tracks",
   "ui": {
@@ -276,6 +277,8 @@ Spec 12 owns *what settings exist*; this spec owns the bytes. Lives at `~/.confi
 | `audio.muted` | bool | false |
 | `alignment.auto_align_on_play` | bool | false |
 | `alignment.model_size` | string | `"medium.en"` |
+| `replaygain.enabled` | bool | false (Spec 21; opt-in loudness levelling) |
+| `replaygain.mode` | string | `"album"` or `"track"`; unknown values fall back to `"album"` (Spec 21) |
 | `ui.theme` | string | one of `theme.THEMES` (`"dark-colourful"`, `"light"`, `"dark-ocean"`, `"dark-ember"`, `"dark-slate"`); unknown values fall back to `"dark-colourful"` (Spec 19) |
 | `ui.open_report_folder_on_approve` | bool | true |
 

@@ -68,6 +68,12 @@ class Player(QObject):
         self._source: Path | None = None
         self._duration_seconds = 0.0
         self._state = PlayerState.STOPPED
+        # Spec 21: user volume (0-100) is the source of truth; the applied
+        # QAudioOutput level is the composite user_volume/100 * replaygain_factor.
+        # _user_volume inits to 100 (the QAudioOutput default) so the first
+        # set_volume(audio.volume) at construction applies.
+        self._user_volume = 100
+        self._replaygain_factor = 1.0
         # Track whether we've seen the first decode error this session so
         # the codec-missing dialog only surfaces once (Spec 06 TC-06-07).
         self._codec_dialog_shown = False
@@ -174,18 +180,40 @@ class Player(QObject):
         self._duration_seconds = float(seconds)
 
     def set_volume(self, vol: int) -> None:
-        # Spec 18 INV-18-1: apply to _output BEFORE emitting. The two volume
-        # sliders echo back into set_volume; the guard's early-return relies on
-        # self.volume() already reflecting v on the re-entrant call, else the
-        # guard misses and re-emits (infinite loop). Emit on real change only.
+        # Spec 18 INV-18-1 / Spec 21: the two volume sliders echo back into
+        # set_volume; the guard's early-return relies on self.volume() (== the
+        # user volume) already reflecting v on the re-entrant call, else the guard
+        # misses and re-emits (infinite loop). Load-bearing order: assign
+        # _user_volume BEFORE the emit (the guard hinges on it, not on _output).
+        # Emit on real change only.
         v = max(0, min(100, int(vol)))
         if v == self.volume():
             return
-        self._output.setVolume(v / 100.0)
+        self._user_volume = v
+        self._apply_output_volume()
         self.volume_changed.emit(v)
 
     def volume(self) -> int:
-        return round(self._output.volume() * 100)
+        # Spec 21: the USER volume, not a read-back of the output level (which
+        # folds in the ReplayGain factor). This is what the sliders, the Spec 18
+        # volume_changed payload, and the MPRIS Volume property all read.
+        return self._user_volume
+
+    def set_replaygain_factor(self, factor: float) -> None:
+        # Spec 21: multiply an internal loudness-normalization factor into the
+        # output level. Emits NO volume_changed (INV-21-2) - the user volume is
+        # unchanged; only the internal scaling is, so the slider must not move.
+        f = float(factor)
+        if f == self._replaygain_factor:
+            return
+        self._replaygain_factor = f
+        self._apply_output_volume()
+
+    def _apply_output_volume(self) -> None:
+        # Spec 21 INV-21-3: composite clamped to [0,1] in-app so no >1.0 level
+        # reaches the device (no clipping); attenuation always fully applies.
+        composite = self._user_volume / 100.0 * self._replaygain_factor
+        self._output.setVolume(max(0.0, min(1.0, composite)))
 
     def set_muted(self, m: bool) -> None:
         # Change-guarded for idempotency only: the subscriber (_sync_mute_glyph)

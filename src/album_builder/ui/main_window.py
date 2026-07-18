@@ -31,10 +31,13 @@ from album_builder.domain.track import Track
 from album_builder.persistence.lrc_io import read_lrc
 from album_builder.persistence.settings import (
     AudioSettings,
+    ReplayGainSettings,
     UiSettings,
     read_audio,
+    read_replaygain,
     read_ui,
     write_audio,
+    write_replaygain,
     write_ui,
 )
 from album_builder.persistence.state_io import AppState, WindowState, save_state
@@ -54,6 +57,7 @@ from album_builder.services.mpris import MprisService
 from album_builder.services.playback_controller import PlaybackController
 from album_builder.services.player import Player, PlayerState
 from album_builder.services.playlist_store import PlaylistStore
+from album_builder.services.replaygain import ReplayGainService
 from album_builder.services.report import list_warnings, report_paths_for
 from album_builder.services.usage_index import UsageIndex
 from album_builder.ui.album_order_pane import AlbumOrderPane
@@ -346,6 +350,15 @@ class MainWindow(QMainWindow):
             self._player, self._controller, self, self.windowIcon(), parent=self
         )
 
+        # Spec 21 (Phase F): ReplayGain volume normalization. Built before the
+        # last-played restore branch below (which dereferences it) and before the
+        # menu build (which reads its state). Parented to self. Persistence lives
+        # in the menu handlers (guarded), not the service - mirroring _apply_theme.
+        self._replaygain_settings = read_replaygain()
+        self._replaygain = ReplayGainService(
+            self._player, self._controller, self._replaygain_settings, parent=self
+        )
+
         # Spec 00 keyboard shortcuts (closes indie-review Theme E).
         self._wire_shortcuts()
 
@@ -359,6 +372,10 @@ class MainWindow(QMainWindow):
             if track is not None:
                 self._player.set_source(track.path)
                 self._set_track_all(track)
+                # Spec 21: the restore path bypasses the controller, so
+                # current_changed never fires for it - level the restored track
+                # explicitly so it plays levelled from the first play.
+                self._replaygain.on_track_changed(track)
                 # Spec 07 cache-hit at startup: if the LRC is fresh, show
                 # the lyrics paused at zero alongside the track.
                 self._sync_lyrics_for_track(track)
@@ -418,6 +435,26 @@ class MainWindow(QMainWindow):
             )
             self._theme_actions[theme_id] = act
 
+        # Spec 21: Playback -> Volume Levelling, after View and before Help.
+        playback_menu = bar.addMenu("Playback")
+        self._rg_toggle_action = playback_menu.addAction("Volume Levelling (ReplayGain)")
+        self._rg_toggle_action.setCheckable(True)
+        self._rg_toggle_action.setChecked(self._replaygain.enabled())
+        self._rg_toggle_action.triggered.connect(
+            lambda checked: self._on_replaygain_toggled(checked)
+        )
+        ref_menu = playback_menu.addMenu("Levelling reference")
+        self._rg_mode_group = QActionGroup(self)
+        self._rg_mode_group.setExclusive(True)
+        for mode_id, display_name in (("album", "Album"), ("track", "Track")):
+            act = ref_menu.addAction(display_name)
+            act.setCheckable(True)
+            act.setChecked(self._replaygain.mode() == mode_id)
+            self._rg_mode_group.addAction(act)
+            act.triggered.connect(
+                lambda _checked=False, mid=mode_id: self._on_replaygain_mode(mid)
+            )
+
         help_menu = bar.addMenu("Help")
         help_menu.addAction("Keyboard shortcuts", lambda: self._show_help())
 
@@ -447,6 +484,26 @@ class MainWindow(QMainWindow):
                 # An uncaught exception in this triggered slot would qFatal the
                 # app; a failed settings write must only cost persistence.
                 self._show_toast(f"Couldn't save theme choice: {exc}")
+
+    # ---- ReplayGain (Spec 21) ---------------------------------------
+
+    def _on_replaygain_toggled(self, checked: bool) -> None:
+        # Runtime re-level via the service, then persist (guarded like
+        # _apply_theme - an uncaught raise in this triggered slot would qFatal).
+        self._replaygain.set_enabled(checked)
+        self._persist_replaygain(enabled=checked, mode=self._replaygain.mode())
+
+    def _on_replaygain_mode(self, mode: str) -> None:
+        self._replaygain.set_mode(mode)
+        self._persist_replaygain(enabled=self._replaygain.enabled(), mode=mode)
+
+    def _persist_replaygain(self, *, enabled: bool, mode: str) -> None:
+        new_settings = ReplayGainSettings(enabled=enabled, mode=mode)
+        try:
+            write_replaygain(new_settings)
+            self._replaygain_settings = new_settings
+        except OSError as exc:
+            self._show_toast(f"Couldn't save levelling choice: {exc}")
 
     def _current_album(self):
         cid = self.top_bar.switcher.current_id

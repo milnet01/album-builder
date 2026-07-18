@@ -46,6 +46,25 @@ class AlignmentSettings:
     model_size: str = DEFAULT_MODEL_SIZE
 
 
+DEFAULT_REPLAYGAIN_ENABLED = False
+DEFAULT_REPLAYGAIN_MODE = "album"
+# Spec 21 §Public API: the two levelling-reference modes. `album` uses
+# REPLAYGAIN_ALBUM_GAIN (keeps an album's dynamics), `track` uses TRACK_GAIN
+# (every track equal-loud). A hand-edited unknown value falls back to the default.
+ALLOWED_REPLAYGAIN_MODES = frozenset({"album", "track"})
+
+
+@dataclass(frozen=True)
+class ReplayGainSettings:
+    """Spec 21 §Public API: opt-in ReplayGain volume normalization.
+
+    Off by default (like alignment); `mode` is the levelling reference.
+    """
+
+    enabled: bool = DEFAULT_REPLAYGAIN_ENABLED
+    mode: str = DEFAULT_REPLAYGAIN_MODE
+
+
 @dataclass(frozen=True)
 class UiSettings:
     """Spec 09 §The approve flow + Spec 10 §`settings.json` schema.
@@ -198,6 +217,34 @@ def write_alignment(alignment: AlignmentSettings) -> None:
         "auto_align_on_play": alignment.auto_align_on_play,
         "model_size": alignment.model_size,
     }
+    _write_settings(data)
+
+
+def read_replaygain() -> ReplayGainSettings:
+    """Return the replaygain block (enabled, mode), defaults if absent/malformed.
+
+    Spec 21: defaults are enabled=False (opt-in) and mode="album". Bool guard on
+    `enabled` (rejects 0/1 sneaking in); whitelist guard on `mode` via
+    ALLOWED_REPLAYGAIN_MODES. Mirrors read_alignment / read_ui.
+    """
+    data = _read_settings_dict()
+    block = data.get("replaygain")
+    if not isinstance(block, dict):
+        return ReplayGainSettings()
+    raw_enabled = block.get("enabled", DEFAULT_REPLAYGAIN_ENABLED)
+    enabled = raw_enabled if isinstance(raw_enabled, bool) else DEFAULT_REPLAYGAIN_ENABLED
+    raw_mode = block.get("mode", DEFAULT_REPLAYGAIN_MODE)
+    if isinstance(raw_mode, str) and raw_mode in ALLOWED_REPLAYGAIN_MODES:
+        mode = raw_mode
+    else:
+        mode = DEFAULT_REPLAYGAIN_MODE
+    return ReplayGainSettings(enabled=enabled, mode=mode)
+
+
+def write_replaygain(rg: ReplayGainSettings) -> None:
+    """Write replaygain block to settings.json, preserving other top-level keys."""
+    data = _read_settings_dict()
+    data["replaygain"] = {"enabled": rg.enabled, "mode": rg.mode}
     _write_settings(data)
 
 

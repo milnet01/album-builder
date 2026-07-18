@@ -1,6 +1,6 @@
 # 21 - ReplayGain volume normalization (opt-in loudness levelling)
 
-**Status:** Reviewed - ready to implement (Phase F of the music-player epic) - **Last updated:** 2026-07-18 - **Depends on:** 00, 01, 06, 10, 15, 18, 19 - **References (does not extend):** 20 - **Blocks:** none
+**Status:** Implemented (Phase F of the music-player epic) - **Last updated:** 2026-07-18 - **Depends on:** 00, 01, 06, 10, 15, 18, 19 - **References (does not extend):** 20 - **Blocks:** none
 
 > **Cold-eyes loop log (2026-07-18):** 3 loops, 3 independent reviewers per loop
 > (feasibility/PyQt6+mutagen, cross-spec-drift, completeness/testability lenses), all

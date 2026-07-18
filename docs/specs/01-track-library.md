@@ -54,7 +54,11 @@ class Track:
     duration_seconds: float
     file_size_bytes: int
     is_missing: bool                    # True if path no longer exists
+    replaygain_track_gain: float | None = None   # Spec 21: dB, None if no TXXX tag
+    replaygain_album_gain: float | None = None   # Spec 21: dB, None if no TXXX tag
 ```
+
+The two `replaygain_*` fields (Spec 21) carry `= None` defaults and are appended last so the frozen dataclass's non-default fields still precede them; they are read from ID3 `TXXX` ReplayGain frames at scan time.
 
 `cover_data` is held in memory because covers are typically <500 KB and the library is bounded (~tens to low-hundreds of tracks). At higher scales we'd cache to disk; not v1. Bytes are passed through to the now-playing pane untouched — Qt's `QPixmap.loadFromData()` handles format detection from `cover_mime`.
 
@@ -97,7 +101,7 @@ how reviewers confirm coverage validates the spec, not the implementation.
 - **TC-01-02** — `Library.scan(nonexistent)` returns `Library(tracks=())`. Same for an unreadable folder (`PermissionError` on `iterdir`).
 - **TC-01-03** — Files with unsupported extensions are silently skipped by the scan.
 - **TC-01-04** — `Track.from_path(audio)` parses ID3v2 tags: `TIT2→title`, `TPE1→artist`, `TPE2→album_artist`, `TALB→album`, `TCOM→composer`, `COMM→comment`, `USLT→lyrics_text`, `APIC (image/*)→cover_data + cover_mime`.
-- **TC-01-05** — When tags are absent, `Track.from_path` populates placeholders: `title = path.name`, `artist = "Unknown artist"`, `album_artist` cascades from `artist`, `album/composer/comment = ""`, `lyrics_text/cover_data/cover_mime = None`.
+- **TC-01-05** — When tags are absent, `Track.from_path` populates placeholders: `title = path.name`, `artist = "Unknown artist"`, `album_artist` cascades from `artist`, `album/composer/comment = ""`, `lyrics_text/cover_data/cover_mime = None`, and (Spec 21) `replaygain_track_gain/replaygain_album_gain = None`.
 - **TC-01-06** — `Track.album_artist` falls back to `Track.artist` when `TPE2` is missing.
 - **TC-01-07** — `Library.search(q)` matches case-insensitive substring against `title`, `artist`, `album_artist`, `composer`, `album`. Empty query returns all tracks.
 - **TC-01-08** — `Library.sorted(SortKey.TITLE)` is title-ascending; `ascending=False` reverses. Same shape for `ARTIST`, `ALBUM`, `COMPOSER`, `DURATION`.
@@ -142,5 +146,5 @@ The watcher mechanism (TC-01-P2-01, TC-01-P2-02) ships in Phase 2 via the `Libra
 
 - Recursive subfolder scanning (could be added with a single config flag later).
 - Duplicate detection by audio fingerprint.
-- ReplayGain / loudness analysis.
+- ReplayGain loudness *analysis* / scanning. (Reading pre-existing ReplayGain **tags** is in scope per Spec 21; computing/writing them is not.)
 - Writing tags back to files.

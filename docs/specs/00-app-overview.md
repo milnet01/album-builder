@@ -175,6 +175,7 @@ The asymmetry is intentional, not historical drift.
 | [18](./18-player-mode-surface.md) | Player-mode surface | Dedicated listening tab (now-playing card + full transport + synced lyrics + Up Next/Playlists), two coherent transport surfaces; Phase E of the music-player epic (implemented) |
 | [19](./19-themes.md) | Themes | Five built-in themes (Light + 3 dark variants + dark-colourful), WCAG-AA palettes, live `View -> Theme` switcher persisted in `ui.theme` |
 | [20](./20-mpris-tray-integration.md) | MPRIS2 + tray | D-Bus MPRIS2 service (Plasma media controls, lock screen, hardware media keys) + system-tray control surface, driven by the same Player/PlaybackController; Phase G of the music-player epic (implemented) |
+| [21](./21-replaygain.md) | ReplayGain | Opt-in loudness normalization: read ID3 `TXXX` ReplayGain tags, scale the output volume by a track/album-gain factor (user volume unchanged), toggled via a Playback menu; Phase F of the music-player epic (implemented) |
 
 ## Cross-cutting non-functional requirements
 

@@ -25,6 +25,11 @@ class Track:
     duration_seconds: float
     file_size_bytes: int
     is_missing: bool
+    # Spec 21: ReplayGain loudness offsets in dB, read from ID3 TXXX frames at
+    # scan time; None when the file carries no ReplayGain tag. Appended last with
+    # defaults so the frozen dataclass's non-default fields still precede them.
+    replaygain_track_gain: float | None = None
+    replaygain_album_gain: float | None = None
 
     @classmethod
     def from_path(cls, path: Path, *, allow_missing: bool = False) -> Track:
@@ -47,6 +52,7 @@ class Track:
         comment = _comment_text(id3)
         lyrics_text = _lyrics_text(id3)
         cover_data, cover_mime = _first_apic_image(id3)
+        rg_track, rg_album = _read_replaygain(id3)
 
         return cls(
             path=path,
@@ -62,6 +68,8 @@ class Track:
             duration_seconds=duration,
             file_size_bytes=size,
             is_missing=False,
+            replaygain_track_gain=rg_track,
+            replaygain_album_gain=rg_album,
         )
 
     @classmethod
@@ -166,3 +174,36 @@ def _first_apic_image(id3: ID3 | None) -> tuple[bytes | None, str | None]:
         if mime.startswith("image/"):
             return frame.data, mime
     return None, None
+
+
+def _read_replaygain(id3: ID3 | None) -> tuple[float | None, float | None]:
+    """Return (track_gain, album_gain) in dB from ID3 TXXX ReplayGain frames.
+
+    Spec 21: mutagen keys a TXXX frame `TXXX:<desc>` case-*sensitively* (a file
+    may carry `TXXX:replaygain_track_gain` or the uppercase form), so we iterate
+    and match the description case-insensitively rather than indexing one fixed
+    key. The value is the frame's first text string ("-6.48 dB"); the gain is its
+    leading float. A value that doesn't parse (non-numeric / empty) is skipped,
+    treated as absent. RVA2 / Vorbis-comment / MP4 forms are out of scope this
+    phase - a file with only those reads (None, None).
+    """
+    if id3 is None:
+        return None, None
+    track_gain: float | None = None
+    album_gain: float | None = None
+    for key in id3.keys():
+        if not key.startswith("TXXX:"):
+            continue
+        desc = key[len("TXXX:"):].lower()
+        if desc == "replaygain_track_gain":
+            track_gain = _parse_gain_db(id3[key])
+        elif desc == "replaygain_album_gain":
+            album_gain = _parse_gain_db(id3[key])
+    return track_gain, album_gain
+
+
+def _parse_gain_db(frame) -> float | None:
+    try:
+        return float(str(frame.text[0]).split()[0])
+    except (ValueError, IndexError):
+        return None

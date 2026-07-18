@@ -151,7 +151,8 @@ is load-bearing: the two volume sliders echo back into `set_volume`, and the gua
 early-return relies on `self.volume()` already reflecting the new value on that
 re-entrant call — if an implementer reorders the emit before `_output.setVolume`, the
 re-entrant `set_volume(v)` reads the *old* value, the guard misses, and it re-emits (an
-infinite loop). `set_muted` has no echo path (its subscriber only re-reads
+infinite loop). (Post-**Spec 21** the equivalent hazard is reordering the emit before
+`self._user_volume = v`, since `volume()` now reads `_user_volume`.) `set_muted` has no echo path (its subscriber only re-reads
 `player.muted()`), so ordering is not correctness-critical there — it applies `setMuted`
 before emitting for consistency only. TC-18-05's no-loop assertion is the proxy guard
 for this invariant. Setter body:
@@ -161,7 +162,8 @@ def set_volume(self, vol: int) -> None:
     v = max(0, min(100, int(vol)))
     if v == self.volume():
         return
-    self._output.setVolume(v / 100.0)
+    self._user_volume = v            # Spec 21: user volume is the source of truth;
+    self._apply_output_volume()      # applied level = user/100 * replaygain_factor (clamped)
     self.volume_changed.emit(v)
 
 def set_muted(self, m: bool) -> None:
@@ -177,11 +179,13 @@ The guard is load-bearing: `TransportBar` connects `volume_changed` to
 mid-drag (see the `transport_bar.py` subscriptions under §Public API). A change from
 one bar echoes to the other slider, whose
 `valueChanged` re-invokes `set_volume` with the *same* value — the guard early-returns
-there, terminating the echo after one no-op call. `self.volume()` reads
-`round(self._output.volume() * 100)`, which round-trips integer percents, so the
-guard compares like for like. (Reading current mute/volume through the existing
-getters, not a shadow field, keeps `_output` the single source of truth as Spec 06
-established.)
+there, terminating the echo after one no-op call. `self.volume()` returns the user
+volume (**Spec 21** decoupled it: `volume()` returns `_user_volume`, not
+`round(self._output.volume() * 100)`, because the output level now folds in the
+ReplayGain factor), so the guard still compares like for like — and the load-bearing
+order becomes `_user_volume`-before-emit. (Mute is unchanged: it still reads
+`_output.isMuted()` through the existing getter, no shadow field; only volume gained the
+`_user_volume` source-of-truth field, per Spec 21.)
 
 ### `services/playback_controller.py` — `PlaybackController` broadcast additions
 
