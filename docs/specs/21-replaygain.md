@@ -1,6 +1,30 @@
 # 21 - ReplayGain volume normalization (opt-in loudness levelling)
 
-**Status:** Draft - authoring (Phase F of the music-player epic) - **Last updated:** 2026-07-18 - **Depends on:** 00, 01, 06, 10, 15, 18, 19 - **Blocks:** none
+**Status:** Reviewed - ready to implement (Phase F of the music-player epic) - **Last updated:** 2026-07-18 - **Depends on:** 00, 01, 06, 10, 15, 18, 19 - **References (does not extend):** 20 - **Blocks:** none
+
+> **Cold-eyes loop log (2026-07-18):** 3 loops, 3 independent reviewers per loop
+> (feasibility/PyQt6+mutagen, cross-spec-drift, completeness/testability lenses), all
+> briefed cold (no prior-loop findings shared); reviewers verified every claim against
+> the venv + source. Severity decayed loop-over-loop; every verified finding
+> (HIGH/MEDIUM/LOW) was fixed against current source each pass.
+> **Loop 1 (5 HIGH):** the "no change to Spec 18" claim was false (the volume decoupling
+> supersedes Spec 18's `volume()` read-back rationale); the restored last-played track
+> (bypasses the controller) never got a factor; the RVA2 fallback was under-specified +
+> internally inconsistent; `write_replaygain` in a `triggered` slot could `qFatal`
+> without the Spec-19 guard; `_reapply`'s current-track source was undefined. Resolved
+> by: caching `_current` (fed by `current_changed` + the restore path), dropping RVA2 to
+> out-of-scope (TXXX-only), moving guarded persistence to the menu handler, adding Spec
+> 01/18 amendments, and `= None`-defaulting the new Track fields.
+> **Loop 2 (1 HIGH):** the restore-path re-level line had no MainWindow-level TC (an
+> implementer could omit it with a green suite); construction-order's binding constraint
+> (before the restore branch, not just before the menu build); Spec 06's Out-of-scope
+> ReplayGain line unreconciled; an RVA2 dangling reference in the Errors table. Added
+> TC-21-09, tightened the ordering + amendments.
+> **Loop 3:** two reviewers clean/structural-pass; residual findings were doc-precision
+> polish (name `_user_volume`-before-emit as the post-decoupling load-bearing order;
+> reword only the volume half of Spec 18's mute/volume sentence; spell out the mode
+> handler's persisted pair; state the `__init__` settings-copy). Accepted at polish
+> convergence.
 
 The A-G phase letters are defined in the **Fully-featured music player mode** epic
 bullet under `ROADMAP.md` heading `## Future / deferred`. This spec promotes the one
@@ -141,7 +165,9 @@ back to today's behavior (no offset; the track plays at the user's set volume).
     than raising.) If the picked-plus-fallback pair is both `None` -> `1.0`.
   - Return `10 ** (db / 20)`.
 - `ReplayGainService(QObject)` - `ReplayGainService(player, controller, settings, parent=None)`
-  where `settings` is a `ReplayGainSettings`. Owns the live `enabled` + `mode` state and
+  where `settings` is a `ReplayGainSettings`. `__init__` copies `settings.enabled` /
+  `settings.mode` into `self._enabled` / `self._mode` (the runtime state the getters and
+  `_apply` read). Owns the live `enabled` + `mode` state and
   a **cached current track**, subscribes to `PlaybackController.current_changed`, and
   pushes the computed factor to the `Player`. It is the single place that turns
   "settings + current track" into a `Player.set_replaygain_factor` call. It holds
@@ -178,9 +204,14 @@ level** are distinct - the ReplayGain factor multiplies into the latter only:
 - `set_volume(vol)` - clamp to `[0,100]`; the Spec 18 INV-18-1 change-guard is the
   **unchanged** `if v == self.volume(): return` - its text does not change, but because
   `volume()` now returns `_user_volume` (below) the guard still compares against the
-  user value, not the factor-scaled output; on a real change, set `_user_volume`, call
-  `_apply_output_volume()` (applies to `_output` **before** emitting - INV-18-1
-  preserved), then emit `volume_changed(v)`.
+  user value, not the factor-scaled output; on a real change, **set `_user_volume`,
+  then** call `_apply_output_volume()`, then emit `volume_changed(v)`. **Load-bearing
+  order (the post-decoupling form of INV-18-1):** `_user_volume` must be assigned
+  *before* the emit, because the two-slider echo's re-entrant `set_volume` compares
+  against `self.volume()` (== `_user_volume`) and must see the new value to early-return.
+  (Pre-decoupling the load-bearing fact was "`_output` applied before emit"; that
+  ordering is retained for cleanliness but the guard now hinges on `_user_volume`, not
+  `_output`.)
 - `set_replaygain_factor(factor)` - change-guarded (`if factor == self._replaygain_factor:
   return`); store `_replaygain_factor` and call `_apply_output_volume()`. **Emits no
   `volume_changed`** (INV-21-2) - the user volume did not change; only the internal
@@ -225,7 +256,10 @@ can't `qFatal` the app from inside a `triggered` slot):
 - the toggle handler calls `self._replaygain.set_enabled(checked)` (runtime + re-level),
   then persists: `try: write_replaygain(ReplayGainSettings(enabled=checked, mode=self._replaygain.mode())); self._replaygain_settings = ...` `except OSError as exc: self._show_toast(f"Couldn't save levelling choice: {exc}")`.
 - the mode-radio handler calls `self._replaygain.set_mode(mode)` then persists the same
-  guarded way. The menu is the only new in-window UI.
+  guarded way: `write_replaygain(ReplayGainSettings(enabled=self._replaygain.enabled(), mode=mode))`
+  (read `enabled` back from the service, symmetric with the toggle handler reading
+  `mode()` from the service - so the persisted pair always matches the runtime state).
+  The menu is the only new in-window UI.
 
 ## Behavior rules
 
@@ -335,7 +369,12 @@ reaches the device.
   composite output level, a read-back would no longer equal the user volume, so `volume()`
   returns `_user_volume` instead. Amend Spec 18's `set_volume`/`volume()` body + that
   rationale to the composite form; the echo-guard's *behavior* (terminate after one no-op
-  compare) is unchanged because the guard now compares user value to user value (INV-21-1).
+  compare) is unchanged because the guard now compares user value to user value (INV-21-1),
+  and the load-bearing order becomes `_user_volume`-before-emit. **Reword only the volume
+  half** - Spec 18's sentence bundles mute (*"Reading current mute/volume through the
+  existing getters, not a shadow field..."*); mute is **unchanged** (still reads
+  `_output.isMuted()`, no shadow field), so keep the mute clause and rewrite only the
+  volume clause (do not blanket-delete the sentence).
 - **Spec 10 (`10-persistence.md`)** - add the `replaygain` block (`enabled: bool`,
   `mode: "album"|"track"`) to the `settings.json` schema, alongside `audio` /
   `alignment` / `ui`.
@@ -377,7 +416,9 @@ playback).
   `_output.volume() == pytest.approx(0.6)`; a boost `set_replaygain_factor(2.0)` at the
   then-current volume 60 clamps `_output.volume() == pytest.approx(1.0)` (`0.6*2=1.2`
   clamped); `set_replaygain_factor` emits **no** `volume_changed` (spy the signal);
-  `set_volume` still emits it once on a real change (INV-18-1 preserved).
+  `set_volume` still emits it once on a real change (INV-18-1 preserved). Also assert
+  `volume() == 60` while a non-`1.0` factor is active (INV-21-1: the user-level read the
+  Spec 20 MPRIS `Volume` getter relies on is unaffected by the factor).
 - **TC-21-06** - `ReplayGainService` (spy `player.set_replaygain_factor`): with
   `enabled=False`, `on_track_changed(track)` calls the setter **with `1.0`**
   (`assert_called_with(1.0)`, not `assert_not_called` - the service always drives the
