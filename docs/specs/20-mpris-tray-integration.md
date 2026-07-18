@@ -143,27 +143,31 @@ def seek(self, seconds: float) -> None:
     `pyqtProperty('QVariantMap')` for `Metadata` (`a{sv}`);
     `pyqtProperty('QStringList')` for `SupportedUriSchemes` / `SupportedMimeTypes`
     (`as`); `QDBusObjectPath` for `o`; `str`/`bool`/`float` for `s`/`b`/`d`.
-  - **Metadata `a{sv}` values — build the whole map as one `QDBusArgument`.** A nested
-    value inside an `a{sv}` has no property to declare its type, so the per-value pins
-    that work at the property level do NOT work here: a plain `int` marshals
-    value-dependently (int32 overflow), a plain `list[str]` can marshal as `av` not
-    `as`, and `QStringList` is **not a constructible value** in PyQt6 6.11 (no
-    importable `QtCore.QStringList` / `QtDBus.QStringList`). `QVariant(qlonglong)` is
-    likewise not a valid int64 pin (`qlonglong` isn't importable; `QVariant(<int>)` is
-    value-dependent). Split the concern: the pure `track_metadata` helper returns a
-    **plain Python dict** (the logical content — unit-tested by TC-20-03), and a shared
-    **`_metadata_argument(dict) -> QDBusArgument`** helper converts that dict into a
-    **single `QDBusArgument`**-built `a{sv}` with each value at its intended signature:
-    `mpris:length` added as `QMetaType.Type.LongLong` (`x`), `xesam:artist` written via
-    `beginArray(QMetaType.Type.QString.value)` (`as`), `mpris:trackid` as a
-    `QDBusObjectPath` (`o`), the rest as strings. Both the `Metadata` property getter
-    and the service's `PropertiesChanged{Metadata}` emit call `_metadata_argument` (one
-    conversion, not two); a plain `dict` mixing `QDBusObjectPath` + int + list is
-    fragile and must not be shipped. Because a built `QDBusArgument` is a write-mode
-    marshalling buffer (not in-process inspectable), the **no-bus unit tests assert the
-    pure `track_metadata` dict** (TC-20-03/05/11); the `_metadata_argument` wire
-    signatures are verified only by the `AB_INTEGRATION_DBUS` test — worth an early
-    implementation spike since the whole nested-`a{sv}` approach rides on it.
+  - **Metadata `a{sv}` values — a plain dict whose per-value types are pinned (NOT a
+    whole-map `QDBusArgument`).** **Verified over a live bus (2026-07-18):** returning a
+    `QDBusArgument` from a `pyqtProperty('QVariantMap')` getter **hard-aborts the
+    process (SIGABRT)** the instant a client reads the property — PyQt coerces the
+    return to `QVariantMap`, a `QDBusArgument` is not coercible, and the `TypeError`
+    inside the C++ property-read callback calls `abort()`. So the getter **must return a
+    plain `dict`** (which QtDBus marshals as `a{sv}`). The per-value type traps are then
+    fixed by wrapping only the values that need a non-default type — verified by
+    `dbus-send` to produce the right wire signatures with no crash:
+    - `mpris:length` — a `QDBusArgument` with `.add(us, QMetaType.Type.LongLong.value)`
+      -> marshals `x` (a plain `int` gives `i`/int32, overflowing past ~35.8 min).
+    - `xesam:artist` — a `QDBusArgument` built `beginArray(QMetaType.Type.QString.value)`
+      + `add(name)` + `endArray()` -> marshals `as` (a plain `list[str]` gives `av`).
+    - `mpris:trackid` — a `QDBusObjectPath` -> marshals `o` (verified even inside a
+      plain dict).
+    - `xesam:title` / `xesam:album` / `mpris:artUrl` — plain `str` (`s`).
+    Split the concern: the pure `track_metadata` helper returns a **plain Python dict**
+    of logical values (int length, `list` artist, `str` trackid — unit-tested by
+    TC-20-03), and a shared **`_metadata_variant_map(dict) -> dict`** helper returns a
+    new dict with those four keys re-wrapped in their typed carriers (the value the
+    `Metadata` getter returns and the `PropertiesChanged{Metadata}` emit sends). A
+    unit test CAN assert `_metadata_variant_map`'s output is a `dict` (never a
+    `QDBusArgument`) with a `QDBusObjectPath` trackid — the direct regression guard for
+    the crash cause — but the int64/`as` **wire** signatures are opaque in-process and
+    verified only by the `AB_INTEGRATION_DBUS` bus-read test.
   - **Signals / slots carrying `x`** — `Seeked = pyqtSignal('qlonglong')`;
     `Seek(offset)` is `@pyqtSlot('qlonglong')`; `SetPosition` is
     `@pyqtSlot(QDBusObjectPath, 'qlonglong')`. A `pyqtSignal(int)` / `@pyqtSlot(int)`
@@ -229,14 +233,14 @@ no shadow state of its own. Property reads pull live from those.
     rate control). `MinimumRate=MaximumRate=1.0`.
   - `Shuffle: 'b'` R/W -> get `controller.shuffle_enabled()`; set
     `controller.set_shuffle(value)`.
-  - `Metadata: 'a{sv}'` R/O (`pyqtProperty('QVariantMap', ...)`) -> the getter builds
-    the logical dict `track_metadata(controller.current_track(), self.art_url(), self.track_no())` and
-    **returns it converted to a `QDBusArgument`-built `a{sv}`** via the shared
-    `_metadata_argument(dict)` helper (§mapping helpers / type-pin note) — it must NOT
-    return the plain dict (which marshals the int32/`av` traps the type-pin note
-    forbids). The same `_metadata_argument` builds the `PropertiesChanged{Metadata}`
-    changed-value, which additionally nests as `{"Metadata": <variant of a{sv}>}`
-    (`QDBusVariant`-wrapped) — see §MprisService.
+  - `Metadata: 'a{sv}'` R/O (`pyqtProperty('QVariantMap', ...)`) -> the getter returns
+    `_metadata_variant_map(track_metadata(controller.current_track(), self.art_url(),
+    self.track_no()))` — a **plain `dict`** whose per-value types are pinned (§mapping
+    helpers / type-pin note). It must **not** return a whole-map `QDBusArgument` (that
+    aborts the process on read — see the type-pin note) nor the un-pinned pure dict
+    (int32/`av` traps). The same `_metadata_variant_map` output feeds the
+    `PropertiesChanged{Metadata}` changed-value, which additionally nests as
+    `{"Metadata": <variant of a{sv}>}` (`QDBusVariant`-wrapped) — see §MprisService.
   - `Volume: 'd'` R/W -> get `player.volume()/100.0`; set
     `player.set_volume(round(value*100))`. (MPRIS has no mute concept; muting the app
     does **not** change `Volume` — it reflects the underlying level either way.)
@@ -272,8 +276,8 @@ no shadow state of its own. Property reads pull live from those.
     immediately if `not self.available`; otherwise builds
     `org.freedesktop.DBus.Properties.PropertiesChanged` with args
     `(interface, {changed}, [invalidated])` — the `changed` values typed per §Public
-    API (`s`/`b`/`d` scalars pin fine; a changed `Metadata` value uses the
-    `_metadata_argument` `QDBusArgument`, `QDBusVariant`-wrapped; there is no top-level
+    API (`s`/`b`/`d` scalars pin fine; a changed `Metadata` value is the
+    `_metadata_variant_map` dict, `QDBusVariant`-wrapped; there is no top-level
     `x` in any `PropertiesChanged` set — `mpris:length` lives inside `Metadata`)
     — and hands it to a distinct low-level send step (the session-bus `send`), which
     tests spy to verify the guard (TC-20-09) independently of the handler->chokepoint
@@ -286,7 +290,7 @@ no shadow state of its own. Property reads pull live from those.
     `QDBusMessage` would marshal value-dependently (`i`/int32 under ~35.8 min), whereas
     the `'qlonglong'`-typed pyqtSignal is pinned to `x`. (`PropertiesChanged` has no
     top-level `x` — its `mpris:length` sits *inside* the `Metadata` `a{sv}`, typed by
-    `_metadata_argument` — so its `createSignal` path is safe.) The test seam is the
+    `_metadata_variant_map` — so its `createSignal` path is safe.) The test seam is the
     adaptor's `Seeked` pyqtSignal itself (`QSignalSpy`-observable): the guard fires it
     zero times when unavailable, once when available.
 - Owns the **cover-art temp file** (refresh connected unconditionally, independent of
@@ -499,9 +503,13 @@ bus; it is skipped by default (mirrors the audio-integration gating in
   `Shuffle` / `Volume` / `Position` / `Rate` / `MinimumRate` / `MaximumRate` return the
   mapped values for a fake player+controller in a known state (e.g. PLAYING, repeat ALL,
   shuffle on, volume 40, position 12.0s); `Rate` / `MinimumRate` / `MaximumRate` are all
-  `1.0`. `Metadata` is **not** asserted here — the getter returns an opaque
-  (write-mode) `QDBusArgument`; its logical content is asserted via the pure
-  `track_metadata` dict in TC-20-03, and its wire signature by `AB_INTEGRATION_DBUS`.
+  `1.0`. For `Metadata`, the getter returns `_metadata_variant_map(...)` — assert it is
+  a **`dict`** (never a `QDBusArgument` — the direct regression guard for the SIGABRT
+  crash, since returning a `QDBusArgument` from a `pyqtProperty('QVariantMap')` aborts
+  on read) whose `mpris:trackid` value is a `QDBusObjectPath` and whose `mpris:length` /
+  `xesam:artist` values are `QDBusArgument` carriers (not a plain int / list). The
+  logical values are asserted via the pure `track_metadata` dict (TC-20-03); the int64 /
+  `as` **wire** signatures — opaque in-process — only by `AB_INTEGRATION_DBUS`.
 - **TC-20-06** — Writing the adaptor's `LoopStatus="Track"` calls
   `controller.set_repeat(ONE)`; `Shuffle=True` calls `controller.set_shuffle(True)`;
   `Volume=0.4` calls `player.set_volume(40)`; writing `Rate=2.0` is accepted (no
@@ -540,8 +548,8 @@ bus; it is skipped by default (mirrors the audio-integration gating in
 - **TC-20-11** — Cover-art lifecycle (no bus needed — art refresh is connected
   unconditionally, independent of `available`): on `current_changed` to a track with
   `cover_data`, `service._art_url` is a `file://` path to an existing temp file and the
-  pure `track_metadata(current_track, service._art_url)` dict carries `mpris:artUrl`
-  (asserted on the readable dict, not the opaque getter); switching to a track with no
+  pure `track_metadata(current_track, service._art_url, service._track_no)` dict carries
+  `mpris:artUrl` (asserted on the readable pure dict); switching to a track with no
   cover removes the prior temp file and drops `mpris:artUrl`; `current_changed(None)`
   removes it too.
 - **TC-20-12** — `TrayIcon` with tray available builds a 6-action menu
