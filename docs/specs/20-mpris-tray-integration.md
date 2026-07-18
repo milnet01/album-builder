@@ -1,6 +1,38 @@
 # 20 — MPRIS2 + system-tray desktop integration (Linux)
 
-**Status:** Draft - authored 2026-07-18 (Phase G of the music-player epic) · **Depends on:** 00, 06, 14, 15, 16, 18 · **Blocks:** none (final planned phase of the epic)
+**Status:** Reviewed - ready to implement (Phase G of the music-player epic) · **Last updated:** 2026-07-18 · **Depends on:** 00, 06, 14, 15, 16, 18 · **Blocks:** none (final planned phase of the epic)
+
+> **Cold-eyes loop log (2026-07-18):** 7 loops, 2-3 independent reviewers per loop
+> (MPRIS2/D-Bus-conformance, PyQt6-QtDBus-feasibility, app-integration, cross-spec+tests
+> lenses), all briefed cold (no prior-loop findings shared); reviewers verified PyQt6
+> claims against the venv and spiked marshalling over a live session bus. Severity
+> decayed loop-over-loop; every verified finding (CRITICAL/HIGH/MEDIUM/LOW) was fixed
+> against current source each pass.
+> **Loop 1 (HIGH):** int64/object-path marshalling under-pinned; `duration_changed` not
+> wired; PropertiesChanged untestable (raw bus message, wiring gated behind `available`);
+> missing root-adaptor/Rate/OpenUri tests; `SupportedMimeTypes` inaccurate.
+> **Loop 2 (CRITICAL):** `Q_CLASSINFO` is absent in PyQt6 (use `@pyqtClassInfo`);
+> `QVariant(qlonglong)` is not a valid int64 pin; the connect-unconditionally test seam
+> contradicted the "wires nothing" degrade language.
+> **Loop 3 (MEDIUM):** nested-`a{sv}` value can't be a `QStringList` (needs a
+> `QDBusArgument` carrier); `Seeked` relay mechanism / `SetPosition` unit conversion /
+> service parenting underspecified.
+> **Loop 4 (HIGH):** the `Metadata` getter read a `_art_url` it didn't own (no bridge);
+> two no-bus TCs asserted an opaque `QDBusArgument`.
+> **Loop 5 (MEDIUM):** top-level `Seeked` `x` unpinned in the manual send; `mpris:length`
+> source-of-truth (`track.duration_seconds`, not async `player.duration()`); synthetic
+> `trackid` derivation undefined.
+> **Loop 6 (CRITICAL, live-bus-verified):** returning a whole-map `QDBusArgument` from a
+> `pyqtProperty('QVariantMap')` getter **hard-aborts the process (SIGABRT)** on client
+> read — the mandated Metadata mechanism was fatal. Re-spiked over a real bus: the getter
+> must return a **plain dict** with per-value typed carriers (`QDBusArgument` int64
+> length, `QDBusArgument` `as` artist, `QDBusObjectPath` trackid), which is non-crashing
+> **and** conformant (`dbus-send`-verified). Added the return-is-a-dict unit regression
+> guard.
+> **Loop 7:** two reviewers, both cold, both live-bus-verifying the Metadata fix — zero
+> CRITICAL/HIGH/MEDIUM; residual findings were doc-precision polish (a stale 2-arg
+> signature in a prose listing; a `setAutoRelaySignals` rationale nit), fixed in-pass.
+> Accepted at polish convergence.
 
 The A-G phase letters are defined in the **Fully-featured music player mode** epic
 bullet under `ROADMAP.md` heading `## Future / deferred`.
