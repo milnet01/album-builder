@@ -99,18 +99,31 @@ def seek(self, seconds: float) -> None:
 - `repeat_mode(status: str) -> RepeatMode` — inverse; unknown string -> `OFF`
   (defensive: a client may send an out-of-enum value).
 - `track_metadata(track: Track | None, art_url: str | None) -> dict` — builds the
-  MPRIS `a{sv}` map. Always includes `mpris:trackid` (a D-Bus object path; a synthetic
-  stable path derived from the track index/id, e.g.
-  `/org/mpris/MediaPlayer2/albumbuilder/track/<n>` — MPRIS requires a valid object
-  path, **never** an empty string). On a track: adds `mpris:length` (duration in
-  **microseconds**, `int`), `xesam:title` (str), `xesam:artist` (a **list** `[str]`,
-  per the `as` signature — a bare string is a conformance bug), `xesam:album` (str),
-  and `mpris:artUrl` (str) **iff** `art_url` is not None. On `None` track: a minimal
-  map with only a placeholder `mpris:trackid` (the MPRIS "no track" sentinel path
-  `/org/mpris/MediaPlayer2/TrackList/NoTrack`) and no other keys.
+  MPRIS `a{sv}` map. Always includes `mpris:trackid` **as a `QDBusObjectPath`** (a
+  bare `str` would marshal as `s`, not the required `o`, and would break
+  `SetPosition`'s object-path comparison) — a synthetic stable path derived from the
+  track index/id, e.g. `/org/mpris/MediaPlayer2/albumbuilder/track/<n>`; MPRIS requires
+  a valid object path, **never** an empty string. On a track: adds `mpris:length`
+  (duration in **microseconds**, wrapped **`QVariant(qlonglong)`** — see the type-pin
+  note below), `xesam:title` (str), `xesam:artist` (a **list** `[str]`, per the `as`
+  signature — a bare string is a conformance bug), `xesam:album` (str), and
+  `mpris:artUrl` (str) **iff** `art_url` is not None. On `None` track: a minimal map
+  with only a placeholder `mpris:trackid` (the MPRIS "no track" sentinel path
+  `/org/mpris/MediaPlayer2/TrackList/NoTrack`, still a `QDBusObjectPath`) and no other
+  keys.
 - Volume/position scaling is inline in the adaptor (trivial): MPRIS `Volume` (double
   0.0-1.0) `<-> player.volume()` (int 0-100) as `v/100.0` and `round(d*100)`;
   `Position` (int microseconds) `= round(player.position() * 1_000_000)`.
+- **D-Bus type pinning (load-bearing — PyQt6 marshals a Python `int` value-dependently:
+  a 3-minute length in us is `i`/int32, a 40-minute length is `u`/uint, only past
+  ~71 min does it reach `x`/int64).** So every `x` (`Time_In_Us`) value MUST be an
+  explicitly int64-typed `QVariant`, and `pyqtProperty` types must be pinned to the
+  Qt type, not the D-Bus letter. Mapping the implementer applies: `s`->`str`,
+  `b`->`bool`, `d`->`float`, `x`->`'qlonglong'` (property) / `QVariant(qlonglong)`
+  (metadata value), `o`->`QDBusObjectPath`, `a{sv}`->`'QVariantMap'`. In particular
+  `Position` is `pyqtProperty('qlonglong', ...)` and `mpris:length` is a
+  `QVariant`-wrapped int64 — a naive `pyqtProperty(int)` / plain-`int` dict entry is
+  **non-conformant** (int32, overflows past ~35.8 min).
 
 ### `services/mpris.py` — `MediaPlayer2Adaptor` (root interface)
 
@@ -118,14 +131,19 @@ def seek(self, seconds: float) -> None:
 Constructed with the host `QObject`, a reference to the `MainWindow` (for Raise) and
 the `QApplication` (for Quit). Members:
 
-- Methods (`pyqtSlot`): `Raise()` -> bring the main window to the front (reuse the
-  app's existing raise path — un-minimise, `show`, `raise_`, `activateWindow`);
-  `Quit()` -> `QApplication.quit()`.
+- Methods (`pyqtSlot`): `Raise()` -> bring the main window to the front by the same
+  four ops `app._bring_to_front` uses (clear `WindowMinimized`, `show`, `raise_`,
+  `activateWindow`) applied to the passed-in `window`. That helper is a private
+  module function in `app.py`; rather than import a private symbol across modules,
+  the service performs the four ops on `window` directly (the tray's Show/Hide reuses
+  the same small helper). `Quit()` -> `QApplication.quit()`.
 - Properties (`pyqtProperty`, all read-only): `CanQuit=True`, `CanRaise=True`,
   `HasTrackList=False`, `Identity="Album Builder"` (from `QApplication.applicationName`),
   `DesktopEntry="album-builder"` (matches `app.setDesktopFileName`), `SupportedUriSchemes=["file"]`,
-  `SupportedMimeTypes=["audio/mpeg", "audio/flac", "audio/ogg", "audio/x-wav"]` (the
-  formats the library scans). `Fullscreen` / `CanSetFullscreen` are **omitted**
+  `SupportedMimeTypes=["audio/mpeg", "audio/mp4", "audio/flac", "audio/ogg",
+  "audio/opus", "audio/x-wav"]` (covering the library's scan extensions
+  `.mp3/.mpeg/.m4a/.flac/.ogg/.opus/.wav` per `domain/library.py` — advisory only,
+  since `OpenUri` is a no-op). `Fullscreen` / `CanSetFullscreen` are **omitted**
   (optional in MPRIS; the app has no fullscreen mode).
 
 ### `services/mpris.py` — `MediaPlayer2PlayerAdaptor` (player interface)
@@ -141,10 +159,12 @@ state.
     `PlayPause()` -> `player.toggle()`; `Stop()` -> `player.stop()`.
   - `Seek(offset: 'x')` -> seek to `player.position() + offset/1e6` seconds
     (offset is signed microseconds; `Player.seek` already clamps to `[0, dur-1]`).
-  - `SetPosition(track_id: 'o', position: 'x')` -> **only if** `track_id` equals the
-    current track's synthetic trackid, `player.seek(position/1e6)`; otherwise ignore
-    (the MPRIS race-guard — a stale client request against a track that already
-    changed must be dropped).
+  - `SetPosition(track_id: 'o', position: 'x')` -> ignore unless `track_id` equals the
+    current track's synthetic trackid (the MPRIS race-guard — a stale client request
+    against a track that already changed must be dropped) **and** `0 <= position <=
+    length` (MPRIS requires a no-op, not a clamp, for an out-of-range position — so
+    the adaptor range-checks against `player.duration()` **before** calling
+    `player.seek(position/1e6)`, rather than relying on `Player.seek`'s clamp).
   - `OpenUri(uri: 's')` -> **no-op** (the app plays only its own library; opening
     arbitrary URIs is out of scope). `SupportedUriSchemes` still lists `file` for
     honesty about what the app *could* accept, but Phase G does not wire OpenUri to a
@@ -157,7 +177,11 @@ state.
     rate control). `MinimumRate=MaximumRate=1.0`.
   - `Shuffle: 'b'` R/W -> get `controller.shuffle_enabled()`; set
     `controller.set_shuffle(value)`.
-  - `Metadata: 'a{sv}'` R/O -> `track_metadata(controller.current_track(), self._art_url)`.
+  - `Metadata: 'a{sv}'` R/O -> `track_metadata(controller.current_track(), self._art_url)`
+    (`pyqtProperty('QVariantMap', ...)`). Note the `PropertiesChanged{Metadata}` emit
+    nests an `a{sv}` inside the outer `a{sv}` (`{"Metadata": <variant of a{sv}>}`);
+    QtDBus does not reliably auto-wrap a nested Python dict, so the changed-value must
+    be an explicitly-typed `QDBusVariant`/`QVariant(QVariantMap)` — see §MprisService.
   - `Volume: 'd'` R/W -> get `player.volume()/100.0`; set
     `player.set_volume(round(value*100))`. (MPRIS has no mute concept; muting the app
     does **not** change `Volume` — it reflects the underlying level either way.)
@@ -177,24 +201,43 @@ state.
   `/org/mpris/MediaPlayer2` and the bus name `org.mpris.MediaPlayer2.albumbuilder` on
   the session bus. Sets `self.available` accordingly; on any failure logs once and
   leaves the adaptors un-registered (they exist but are unreachable — harmless).
-- Owns the **cover-art temp file**: on `current_changed`, if the new track has
-  `cover_data`, writes it to a temp file (via `tempfile`, suffixed by the decoded
-  image type) and sets `self._art_url = "file://" + path`; deletes the *previous*
-  temp file first. On no cover / no track, clears `_art_url` and removes the temp
-  file. A single rolling temp file (not one-per-track) bounds disk use; cleaned up in
-  a `deleteLater` / `closeEvent` teardown path.
-- **PropertiesChanged wiring** (only when `available`): connects
-  - `player.state_changed` -> emit `PropertiesChanged` for `PlaybackStatus`;
-  - `controller.current_changed` -> refresh art, then emit for `Metadata`,
-    `CanGoNext`, `CanGoPrevious`, `CanPlay`, `CanPause`, `CanSeek`;
-  - `controller.queue_changed` -> emit for `CanGoNext` / `CanGoPrevious`;
-  - `player.volume_changed` -> emit for `Volume`;
-  - `controller.shuffle_changed` -> emit for `Shuffle`;
-  - `controller.repeat_changed` -> emit for `LoopStatus`;
-  - `player.seeked` -> emit the `Seeked` signal (not a PropertiesChanged).
-
-  `PropertiesChanged` is built as `org.freedesktop.DBus.Properties.PropertiesChanged`
-  with args `(interface_name, {changed}, [invalidated])` and sent on the session bus.
+- **Signal handlers connect unconditionally; the bus gate lives only at the emit
+  chokepoint (the test seam).** The app-side handlers and the art refresh are wired at
+  construction **regardless of `available`**, so they run and update `_art_url` even on
+  a no-bus run; the only thing `available` gates is the actual D-Bus send. Two
+  chokepoints carry that gate and are the interceptable seam tests patch/spy:
+  - `_emit_properties_changed(interface, changed: dict, invalidated: list)` — returns
+    immediately if `not self.available`; otherwise builds
+    `org.freedesktop.DBus.Properties.PropertiesChanged` with args
+    `(interface, {changed}, [invalidated])` — the `changed` values typed per §Public
+    API (int64 `x`, `QVariantMap` for the nested `Metadata` `a{sv}`, object-path `o`)
+    — and sends it on the session bus.
+  - `_emit_seeked(position_us: int)` — returns if not available; else emits the
+    adaptor's `Seeked` D-Bus signal.
+- Owns the **cover-art temp file** (refresh connected unconditionally, independent of
+  the bus gate): on `current_changed`, if the new track has `cover_data`, writes it to
+  a temp file (via `tempfile`, suffixed by the `cover_mime`-decoded image type) and
+  sets `self._art_url = "file://" + path`; deletes the *previous* temp file first. On
+  no cover / no track, clears `_art_url` and removes the temp file. A single rolling
+  temp file (not one-per-track) bounds disk use; cleaned up in a `deleteLater` /
+  `closeEvent` teardown path.
+- **Handler -> chokepoint wiring** (connected unconditionally; each handler calls
+  `_emit_properties_changed`, which no-ops when not available):
+  - `player.state_changed` -> `PlaybackStatus`;
+  - `controller.current_changed` -> refresh art, then `Metadata`, `CanGoNext`,
+    `CanGoPrevious`, `CanPlay`, `CanPause`, `CanSeek`;
+  - `player.duration_changed` -> `Metadata` (its `mpris:length`) + `CanSeek`.
+    **Load-bearing:** `QMediaPlayer` reports duration *asynchronously, after*
+    `current_changed` (at track-change time `player.duration()` is still 0), so without
+    this handler `mpris:length` stays 0 and `CanSeek` stays false until some unrelated
+    change — Plasma's seek bar would never enable. This handler re-emits once the real
+    duration arrives.
+  - `controller.queue_changed` -> `CanGoNext` / `CanGoPrevious`;
+  - `player.volume_changed` -> `Volume`;
+  - `controller.shuffle_changed` -> `Shuffle`;
+  - `controller.repeat_changed` -> `LoopStatus`;
+  - `player.seeked` -> `_emit_seeked(round(seconds*1e6))` (the `Seeked` D-Bus signal,
+    not a PropertiesChanged).
 
 ### `ui/tray.py` — `TrayIcon(QSystemTrayIcon)`
 
@@ -208,8 +251,9 @@ state.
 - `activated` on `Trigger` (left-click) -> toggle the window (show + raise if hidden
   or minimised; hide if visible and active). `Context` (right-click) shows the menu
   (Qt default).
-- Uses the app icon (passed in from `resolve_app_icon`); falls back to a themed icon
-  name if none.
+- Uses the app icon passed in by `MainWindow` (`self.windowIcon()`, which `app.py`
+  sets via `setWindowIcon` from `resolve_app_icon`); falls back to a themed icon name
+  if the passed icon is null.
 
 ### `ui/main_window.py` — construction + teardown
 
@@ -313,7 +357,10 @@ table is unchanged; the OS owns the hardware keys once an MPRIS service is prese
   emitted at the end of `seek()`. Add it to §Outputs (the signal list) and note it is
   the discontinuous-jump pulse (distinct from the continuous `position_changed`);
   its sole consumer in Phase G is the MPRIS `Seeked` relay. No behavior change to
-  `seek()` itself beyond the trailing emit.
+  `seek()` itself beyond the trailing emit. **While editing that list, also fold in
+  `volume_changed` / `muted_changed`** — Spec 18 (Phase E) added those two `Player`
+  signals but never amended Spec 06's §Outputs, so the list is already one increment
+  stale; add all three in the same edit so §Outputs matches the class.
 - **Spec 00 (`00-app-overview.md`)** — add the Spec 20 row to the spec index;
   note MPRIS2 media-key handling in the keyboard-shortcuts context (the OS owns the
   hardware keys; the in-app table is unchanged).
@@ -324,11 +371,17 @@ table is unchanged; the OS owns the hardware keys once an MPRIS service is prese
 
 Tests reference their TC ID via a `# Spec: TC-20-NN` marker. The D-Bus **registration**
 is environment-dependent, so the suite tests the pure mapping helpers, the adaptor
-property getters/setters against fake `Player`/`PlaybackController` doubles, the
-`PropertiesChanged` wiring via signal spies, the capability guards, and the tray menu
-actions — **none require a live bus**. A single opt-in integration test
-(`AB_INTEGRATION_DBUS=1`) may register against the real session bus; it is skipped by
-default (mirrors the audio-integration gating in `test_player.py`).
+property getters/setters against fake `Player`/`PlaybackController` doubles, and the
+tray menu actions — **none require a live bus**. The `PropertiesChanged` / `Seeked`
+wiring is tested at the **chokepoint seam** (§MprisService): a test patches
+`MprisService._emit_properties_changed` / `_emit_seeked` with a recorder and asserts
+the wired app-signals invoke it with the right `(interface, changed, invalidated)` —
+so the wiring is exercised **without** a live bus (the handlers connect
+unconditionally; only the send inside the chokepoint is bus-gated). Where a test needs
+the send path itself, it forces `available=True` and injects a fake bus. A single
+opt-in integration test (`AB_INTEGRATION_DBUS=1`) may register against the real session
+bus; it is skipped by default (mirrors the audio-integration gating in
+`test_player.py`).
 
 - **TC-20-01** — `playback_status` maps `PLAYING/PAUSED/STOPPED/ERROR` to
   `"Playing"/"Paused"/"Stopped"/"Stopped"`.
@@ -339,16 +392,21 @@ default (mirrors the audio-integration gating in `test_player.py`).
   `xesam:artist` as a **list** `[artist]`, `xesam:album` (str), and `mpris:artUrl`
   only when `art` is non-None; `track_metadata(None, None)` is the `NoTrack` sentinel
   map (trackid only, no length/title).
-- **TC-20-04** — `Player.seek(pos)` emits `seeked(clamped_pos)` once with the same
-  clamped value `Player.position`-round-trip would yield; a no-op path still emits the
-  landing value (the pulse is unconditional on a `seek` call).
+- **TC-20-04** — `Player.seek(pos)` emits `seeked` once, carrying the **clamped input
+  value** (the local `seconds` after `Player.seek`'s `[0, dur-1]` clamp — not a
+  `player.position()` read-back, which lags asynchronously). The pulse is
+  unconditional on a `seek()` call, including a no-op re-seek to the same value (a
+  harmless over-emit relative to MPRIS, which the service tolerates because `seek()` is
+  only called on discrete user gestures, never continuously).
 - **TC-20-05** — The player adaptor's `PlaybackStatus` / `LoopStatus` / `Shuffle` /
-  `Volume` / `Position` / `Metadata` getters return the mapped values for a fake
-  player+controller in a known state (e.g. PLAYING, repeat ALL, shuffle on, volume 40,
-  position 12.0s, a loaded track).
+  `Volume` / `Position` / `Metadata` / `Rate` / `MinimumRate` / `MaximumRate` getters
+  return the mapped values for a fake player+controller in a known state (e.g. PLAYING,
+  repeat ALL, shuffle on, volume 40, position 12.0s, a loaded track); `Rate` /
+  `MinimumRate` / `MaximumRate` are all `1.0`.
 - **TC-20-06** — Writing the adaptor's `LoopStatus="Track"` calls
   `controller.set_repeat(ONE)`; `Shuffle=True` calls `controller.set_shuffle(True)`;
-  `Volume=0.4` calls `player.set_volume(40)`. (Spy the setter on a fake.)
+  `Volume=0.4` calls `player.set_volume(40)`; writing `Rate=2.0` is accepted (no
+  raise) and changes nothing (`Rate` still reads `1.0`). (Spy the setter on a fake.)
 - **TC-20-07** — The adaptor methods `Next/Previous/Play/Pause/PlayPause/Stop` call the
   matching `controller`/`player` command exactly once; `Seek(2_000_000)` seeks to
   `position()+2.0`s; `SetPosition(current_id, 3_000_000)` seeks to 3.0s while
@@ -359,11 +417,16 @@ default (mirrors the audio-integration gating in `test_player.py`).
 - **TC-20-09** — `MprisService` with a fake bus-unavailable path sets
   `available=False`, connects no signals, and every forwarded call is a safe no-op
   (constructing it does not raise).
-- **TC-20-10** — When `available`, the service emits a `PropertiesChanged` (spied) on
-  `state_changed` (PlaybackStatus), `current_changed` (Metadata + Can* keys),
-  `volume_changed` (Volume), `shuffle_changed` (Shuffle), `repeat_changed`
-  (LoopStatus); and relays `Seeked` on `player.seeked`.
-- **TC-20-11** — Cover-art lifecycle: on `current_changed` to a track with
+- **TC-20-10** — Chokepoint wiring (no live bus): with `_emit_properties_changed`
+  patched to a recorder, `state_changed` invokes it for `PlaybackStatus`,
+  `current_changed` for `Metadata` + the Can* keys, `duration_changed` for
+  `Metadata` + `CanSeek`, `volume_changed` for `Volume`, `shuffle_changed` for
+  `Shuffle`, `repeat_changed` for `LoopStatus`; and `player.seeked` invokes
+  `_emit_seeked`. Assert each handler calls the chokepoint with the right interface +
+  changed-keys. The chokepoints themselves early-return when `not available` (assert a
+  no-bus service records nothing) — the handlers still run.
+- **TC-20-11** — Cover-art lifecycle (no bus needed — art refresh is connected
+  unconditionally, independent of `available`): on `current_changed` to a track with
   `cover_data`, `_art_url` is a `file://` path to an existing temp file and
   `Metadata` carries `mpris:artUrl`; switching to a track with no cover removes the
   prior temp file and drops `mpris:artUrl`; `current_changed(None)` removes it too.
@@ -376,6 +439,15 @@ default (mirrors the audio-integration gating in `test_player.py`).
 - **TC-20-14** — `MainWindow` constructs `_mpris` and `_tray` (both present as
   attributes, each self-guarded), and `closeEvent` unregisters MPRIS + removes the art
   temp file (spy the teardown) without disturbing the existing state-save.
+- **TC-20-15** — Root adaptor (`org.mpris.MediaPlayer2`): the read-only properties
+  return `CanQuit=True`, `CanRaise=True`, `HasTrackList=False`, `Identity="Album
+  Builder"`, `DesktopEntry="album-builder"`, `SupportedUriSchemes=["file"]`, and a
+  `SupportedMimeTypes` list including `audio/mpeg` and `audio/mp4`; `Quit()` calls
+  `QApplication.quit` (spied) and `Raise()` performs the un-minimise/show/raise/activate
+  ops on the passed-in window (assert `window.isVisible()` / spy `raise_`).
+- **TC-20-16** — `OpenUri("file:///x.mp3")` is a no-op: it does not raise and does not
+  call any `player`/`controller` load command (spy `play_tracks` / `preview` on a fake
+  and assert zero calls) — locking the declared-but-inert contract.
 
 ## Out of scope
 
