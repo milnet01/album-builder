@@ -109,17 +109,20 @@ back to today's behavior (no offset; the track plays at the user's set volume).
   absent). **These two fields carry `= None` defaults and are appended as the last two
   dataclass fields** - `Track` is `@dataclass(frozen=True)` whose existing fields are
   all non-default, so a defaulted field must come last (Python's "no non-default after
-  default" rule), and the defaults keep the ~8 existing keyword-`Track(...)` construction
-  sites in the test suite compiling unchanged. Populated in `from_path` from the
+  default" rule), and the defaults keep the existing keyword-`Track(...)` construction
+  sites across the test suite (~18) compiling unchanged. Populated in `from_path` from the
   already-opened `id3` object; `_missing` leaves both at their `None` default.
 - A module helper `_read_replaygain(id3: ID3 | None) -> tuple[float | None, float | None]`
   returns `(track_gain, album_gain)`:
   - Iterate `id3.keys()` for `TXXX` frames whose description (the part after
     `TXXX:`) equals `replaygain_track_gain` / `replaygain_album_gain`
-    **case-insensitively**; parse the leading float of the value (`"-6.48 dB"` ->
-    `-6.48`, via `float(text.split()[0])`). A value that does not parse (a
-    `ValueError` / `IndexError` from a non-numeric or empty text) is **skipped**
-    (treated as absent), not raised.
+    **case-insensitively**; the value is the frame's first text string
+    (`id3[key].text[0]` - a mutagen `TXXX` `.text` is a list), and the gain is the
+    leading float of it (`"-6.48 dB"` -> `-6.48`, via `float(value.split()[0])`). A
+    value that does not parse (a `ValueError` / `IndexError` from a non-numeric or
+    empty text) is **skipped** (treated as absent), not raised. If a file improbably
+    carries both a lower- and upper-case desc for the same field, the last-iterated
+    wins - acceptable, since no real tagger writes both.
   - Returns `(None, None)` when `id3` is `None` or neither `TXXX` form is present.
     **ID3 `TXXX` only** in this phase - `RVA2`, Vorbis-comment (FLAC/OGG/Opus), and MP4
     freeform ReplayGain are out of scope (such a file reads `None`, so it plays
@@ -193,10 +196,12 @@ level** are distinct - the ReplayGain factor multiplies into the latter only:
 
 **Construction (`__init__`).** Build
 `self._replaygain = ReplayGainService(self._player, self._controller, read_replaygain(), parent=self)`
-alongside the Spec 20 `self._mpris` / `self._tray` (after `self._controller` exists,
-**parented to `self`** so it lives and dies with `MainWindow`, and **before**
-`_build_menu_bar()` so the menu can read `self._replaygain.enabled()` / `.mode()` to set
-its initial checked state). Keep the read `ReplayGainSettings` on `self` (e.g.
+after `self._controller` exists and **before the last-played restore branch** (which
+now dereferences `self._replaygain`, below) - and therefore before `_build_menu_bar()`
+too (so the menu can read `self._replaygain.enabled()` / `.mode()` for its initial
+checked state). Placing it alongside the Spec 20 `self._mpris` / `self._tray` (which are
+built before the restore branch) satisfies both. **Parented to `self`** so it lives and
+dies with `MainWindow`. Keep the read `ReplayGainSettings` on `self` (e.g.
 `self._replaygain_settings`) the way the theme code keeps `self._ui_settings`, so the
 menu handler can preserve-and-rewrite it.
 
@@ -292,7 +297,7 @@ reaches the device.
 | `replaygain` block absent / malformed | `read_replaygain` returns defaults (`enabled=False`, `mode="album"`). |
 | `mode` a hand-edited unknown value | Falls back to `"album"` (whitelist guard). |
 | Track has no ReplayGain tags | `_read_replaygain` returns `(None, None)`; `gain_factor` -> `1.0`; plays at user volume. |
-| A `TXXX` gain value that does not parse (e.g. `"loud"`) | That tag is treated as absent (skipped, not raised); the other value / `RVA2` / `1.0` is used. |
+| A `TXXX` gain value that does not parse (e.g. `"loud"`) | That tag is treated as absent (skipped, not raised); the other `TXXX` value (or `1.0`) is used. |
 | Only `TRACK_GAIN` present, mode `album` (or vice versa) | Falls back to the present value (symmetric fallback). |
 | File with only `RVA2` / Vorbis-comment / MP4 ReplayGain (no `TXXX`) | Reads `None` in this phase (ID3 `TXXX`-only); plays unlevelled. Documented follow-up. |
 | Settings write fails (full / read-only disk) on a toggle or mode change | The menu handler catches `OSError` and toasts (`"Couldn't save levelling choice: ..."`); the runtime state + applied factor still change for this session, exactly as `_apply_theme` degrades. The app does **not** crash (an uncaught raise in a `triggered` slot `qFatal`s Qt). |
@@ -304,10 +309,14 @@ reaches the device.
 
 - **Spec 01 (`01-track-library.md`)** - `Track` is defined there. Add
   `replaygain_track_gain: float | None` and `replaygain_album_gain: float | None` (both
-  `= None`, appended last) to the dataclass field list (~§Track), and add the two fields
-  to **TC-01-05**'s "absent tags -> `None`" list (they read `None` when the file has no
-  `TXXX` ReplayGain). TC-01-04's parsed-frame list is unchanged (ReplayGain `TXXX` is a
-  new, separate parse path documented by TC-21-03, not one of TC-01-04's core frames).
+  `= None`, appended last) to the dataclass field list (Spec 01 §Data shape), and add
+  the two fields to **TC-01-05**'s "absent tags -> `None`" list (they read `None` when
+  the file has no `TXXX` ReplayGain). TC-01-04's parsed-frame list is unchanged
+  (ReplayGain `TXXX` is a new, separate parse path documented by TC-21-03, not one of
+  TC-01-04's core frames). Reconcile Spec 01's Out-of-scope line
+  `ReplayGain / loudness analysis` -> narrow it to *loudness analysis / scanning*, since
+  reading pre-existing ReplayGain **tags** is now in scope per this spec (tag *scanning*
+  remains out).
 - **Spec 06 (`06-audio-playback.md`)** - the volume section gains the composite-output
   note: `Player` now stores the user volume as the source of truth (`volume()` returns
   it) and multiplies an internal ReplayGain factor into the `QAudioOutput` level via
@@ -315,9 +324,11 @@ reaches the device.
   (`set_volume(50)` -> `QAudioOutput.volume() == 0.5`) now holds *when the factor is
   `1.0`* (the default; levelling off) - still true by default, but the direct
   `QAudioOutput.volume()` read-back is conditioned on the factor. The `audio.volume`
-  persistence is unchanged (it is the user volume). (Pre-existing, out of Spec 21's
-  scope: Spec 06 still says volume is "stored in `QSettings`" - it is `settings.json`;
-  flagged for a later docs sweep.)
+  persistence is unchanged (it is the user volume). **Also strike ReplayGain from Spec
+  06's Out-of-scope** (the line `Equalizer, ReplayGain, or any DSP` -> `Equalizer or any
+  audio DSP`), since read-only ReplayGain volume scaling is now in scope. (Pre-existing,
+  out of Spec 21's scope: Spec 06 still says volume is "stored in `QSettings`" - it is
+  `settings.json`; flagged for a later docs sweep.)
 - **Spec 18 (`18-player-mode-surface.md`)** - the INV-18-1 echo-guard rationale there
   states *"`self.volume()` reads `round(self._output.volume() * 100)` ... keeps `_output`
   the single source of truth"*. Spec 21 **supersedes** that read-back rationale: with the
@@ -356,15 +367,17 @@ playback).
 - **TC-21-04** - `gain_factor`: `None` track -> `1.0`; `album` mode picks the album
   gain (`gain_factor(track(album=-6.0), "album") == pytest.approx(10 ** (-6/20))`);
   falls back to track gain when album is `None`; `track` mode picks the track gain and
-  falls back to album; both `None` -> `1.0`.
+  falls back to album; both `None` -> `1.0`; an out-of-whitelist mode string (e.g.
+  `"weird"`) resolves like `album` (album-else-track), never raising - the total-function
+  default.
 - **TC-21-05** - `Player` composite: after `set_volume(80)` and
   `set_replaygain_factor(0.5)`, `_output.volume() == pytest.approx(0.4)` while
   `volume() == 80`; `set_volume(60)` then re-reads `_output.volume() ==
   pytest.approx(0.3)` (factor still applied); `set_replaygain_factor(1.0)` restores
-  `_output.volume() == pytest.approx(0.6)`; a boost `set_replaygain_factor(2.0)` at
-  volume 80 clamps `_output.volume() == pytest.approx(1.0)`; `set_replaygain_factor`
-  emits **no** `volume_changed` (spy the signal); `set_volume` still emits it once on a
-  real change (INV-18-1 preserved).
+  `_output.volume() == pytest.approx(0.6)`; a boost `set_replaygain_factor(2.0)` at the
+  then-current volume 60 clamps `_output.volume() == pytest.approx(1.0)` (`0.6*2=1.2`
+  clamped); `set_replaygain_factor` emits **no** `volume_changed` (spy the signal);
+  `set_volume` still emits it once on a real change (INV-18-1 preserved).
 - **TC-21-06** - `ReplayGainService` (spy `player.set_replaygain_factor`): with
   `enabled=False`, `on_track_changed(track)` calls the setter **with `1.0`**
   (`assert_called_with(1.0)`, not `assert_not_called` - the service always drives the
@@ -380,14 +393,23 @@ playback).
   `player.set_replaygain_factor` with the restored track's factor - proving the cache,
   not a live `controller.current_track()` query, is the source (which would mis-level to
   `1.0`).
-- **TC-21-08** - `MainWindow` Playback menu: the checkable **Volume Levelling** action
-  exists and reflects the persisted `enabled` at startup; triggering it calls
-  `ReplayGainService.set_enabled` with the new checked state **and** persists via
-  `write_replaygain` (spy it); the **Album** / **Track** radio group reflects the
-  persisted `mode` and triggering **Track** calls `set_mode("track")` + persists. A
-  `write_replaygain` raising `OSError` from the toggle handler is **caught** (a toast is
-  shown, `set_enabled` still ran) and does not propagate out of the slot - the
-  `_apply_theme` degrade parallel.
+- **TC-21-08** - `MainWindow` Playback menu: a top-level **Playback** menu exists,
+  positioned **after View and before Help** in the menu bar (assert the menu-bar action
+  order); the checkable **Volume Levelling** action reflects the persisted `enabled` at
+  startup; triggering it calls `ReplayGainService.set_enabled` with the new checked state
+  **and** persists via `write_replaygain` (spy it); the **Album** / **Track** radio group
+  reflects the persisted `mode` and triggering **Track** calls `set_mode("track")` +
+  persists. A `write_replaygain` raising `OSError` from the toggle handler is **caught**
+  (a toast is shown, `set_enabled` still ran) and does not propagate out of the slot -
+  the `_apply_theme` degrade parallel.
+- **TC-21-09** - `MainWindow` restore-path wiring: construct a `MainWindow` with
+  `state.last_played_track_path` pointing at a library track carrying an album gain and
+  with `replaygain.enabled=True`; after construction, `Player.set_replaygain_factor` has
+  been driven with that track's `gain_factor` (spy it, or read `_output.volume()`
+  reflecting the composite) - proving the restore branch calls
+  `self._replaygain.on_track_changed(track)`. This is the **only** coverage that the one
+  added `main_window.py` line exists; without it the service can be perfect (TC-21-06/07
+  green) while the restored first track ships unlevelled.
 
 ## Out of scope
 
