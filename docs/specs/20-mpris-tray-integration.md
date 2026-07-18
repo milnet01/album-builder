@@ -146,14 +146,19 @@ def seek(self, seconds: float) -> None:
     importable `QtCore.QStringList` / `QtDBus.QStringList`). `QVariant(qlonglong)` is
     likewise not a valid int64 pin (`qlonglong` isn't importable; `QVariant(<int>)` is
     value-dependent). Split the concern: the pure `track_metadata` helper returns a
-    **plain Python dict** (the logical content — unit-tested by TC-20-03), and the
-    **`Metadata` property getter** converts that dict into a **single `QDBusArgument`**
-    built `a{sv}` with each value at its intended signature: `mpris:length` added
-    as `QMetaType.Type.LongLong` (`x`), `xesam:artist` written via
+    **plain Python dict** (the logical content — unit-tested by TC-20-03), and a shared
+    **`_metadata_argument(dict) -> QDBusArgument`** helper converts that dict into a
+    **single `QDBusArgument`**-built `a{sv}` with each value at its intended signature:
+    `mpris:length` added as `QMetaType.Type.LongLong` (`x`), `xesam:artist` written via
     `beginArray(QMetaType.Type.QString.value)` (`as`), `mpris:trackid` as a
-    `QDBusObjectPath` (`o`), the rest as strings. A plain `dict` mixing
-    `QDBusObjectPath` + int + list is fragile and must not be shipped. The wire
-    signatures are verified at implementation by the `AB_INTEGRATION_DBUS` test.
+    `QDBusObjectPath` (`o`), the rest as strings. Both the `Metadata` property getter
+    and the service's `PropertiesChanged{Metadata}` emit call `_metadata_argument` (one
+    conversion, not two); a plain `dict` mixing `QDBusObjectPath` + int + list is
+    fragile and must not be shipped. Because a built `QDBusArgument` is a write-mode
+    marshalling buffer (not in-process inspectable), the **no-bus unit tests assert the
+    pure `track_metadata` dict** (TC-20-03/05/11); the `_metadata_argument` wire
+    signatures are verified only by the `AB_INTEGRATION_DBUS` test — worth an early
+    implementation spike since the whole nested-`a{sv}` approach rides on it.
   - **Signals / slots carrying `x`** — `Seeked = pyqtSignal('qlonglong')`;
     `Seek(offset)` is `@pyqtSlot('qlonglong')`; `SetPosition` is
     `@pyqtSlot(QDBusObjectPath, 'qlonglong')`. A `pyqtSignal(int)` / `@pyqtSlot(int)`
@@ -188,8 +193,10 @@ the `QApplication` (for Quit). Members:
 
 `QDBusAbstractAdaptor` decorated `@pyqtClassInfo("D-Bus Interface",
 "org.mpris.MediaPlayer2.Player")`. Constructed with the host `QObject`, the `Player`,
-and the `PlaybackController`. Property reads pull live from those; there is no shadow
-state.
+the `PlaybackController`, and an **`art_url()` getter callable** (bound to the
+service's rolling `_art_url` — the cover art is owned by `MprisService`, §MprisService,
+and read through this callable so the adaptor keeps no shadow state of its own). Property
+reads pull live from those.
 
 - Methods (`pyqtSlot`):
   - `Next()` -> `controller.next()`; `Previous()` -> `controller.previous()`.
@@ -216,11 +223,14 @@ state.
     rate control). `MinimumRate=MaximumRate=1.0`.
   - `Shuffle: 'b'` R/W -> get `controller.shuffle_enabled()`; set
     `controller.set_shuffle(value)`.
-  - `Metadata: 'a{sv}'` R/O -> `track_metadata(controller.current_track(), self._art_url)`
-    (`pyqtProperty('QVariantMap', ...)`). Note the `PropertiesChanged{Metadata}` emit
-    nests an `a{sv}` inside the outer `a{sv}` (`{"Metadata": <variant of a{sv}>}`);
-    QtDBus does not reliably auto-wrap a nested Python dict, so the changed-value must
-    be an explicitly-typed `QDBusVariant`/`QVariant(QVariantMap)` — see §MprisService.
+  - `Metadata: 'a{sv}'` R/O (`pyqtProperty('QVariantMap', ...)`) -> the getter builds
+    the logical dict `track_metadata(controller.current_track(), self.art_url())` and
+    **returns it converted to a `QDBusArgument`-built `a{sv}`** via the shared
+    `_metadata_argument(dict)` helper (§mapping helpers / type-pin note) — it must NOT
+    return the plain dict (which marshals the int32/`av` traps the type-pin note
+    forbids). The same `_metadata_argument` builds the `PropertiesChanged{Metadata}`
+    changed-value, which additionally nests as `{"Metadata": <variant of a{sv}>}`
+    (`QDBusVariant`-wrapped) — see §MprisService.
   - `Volume: 'd'` R/W -> get `player.volume()/100.0`; set
     `player.set_volume(round(value*100))`. (MPRIS has no mute concept; muting the app
     does **not** change `Volume` — it reflects the underlying level either way.)
@@ -236,10 +246,14 @@ state.
 ### `services/mpris.py` — `MprisService(QObject)`
 
 `MprisService(player, controller, window, parent=None)`:
-- Builds the host `QObject`, the two adaptors, and (guarded) registers the object at
-  `/org/mpris/MediaPlayer2` and the bus name `org.mpris.MediaPlayer2.albumbuilder` on
-  the session bus. Sets `self.available` accordingly; on any failure logs once and
-  leaves the adaptors un-registered (they exist but are unreachable — harmless).
+- Builds the host `QObject` and the two adaptors — the player adaptor is constructed
+  with an `art_url` getter bound to the service's own `_art_url` (e.g.
+  `lambda: self._art_url`), so the adaptor's `Metadata` getter and the service's
+  `PropertiesChanged{Metadata}` build read the one art-url source. Then (guarded)
+  registers the object at `/org/mpris/MediaPlayer2` and the bus name
+  `org.mpris.MediaPlayer2.albumbuilder` on the session bus. Sets `self.available`
+  accordingly; on any failure logs once and leaves the adaptors un-registered (they
+  exist but are unreachable — harmless).
 - **Signal handlers connect unconditionally; the bus gate lives only at the emit
   chokepoint (the test seam).** The app-side handlers and the art refresh are wired at
   construction **regardless of `available`**, so they run and update `_art_url` even on
@@ -462,18 +476,21 @@ bus; it is skipped by default (mirrors the audio-integration gating in
   clamp (`seconds > dur-1`) needs `_duration_seconds > 0`; since `Player` exposes no
   public duration setter, add a `_set_duration_for_test` seam (paralleling the existing
   `_set_state_for_test`) rather than poking the private field.
-- **TC-20-05** — The player adaptor's `PlaybackStatus` / `LoopStatus` / `Shuffle` /
-  `Volume` / `Position` / `Metadata` / `Rate` / `MinimumRate` / `MaximumRate` getters
-  return the mapped values for a fake player+controller in a known state (e.g. PLAYING,
-  repeat ALL, shuffle on, volume 40, position 12.0s, a loaded track); `Rate` /
-  `MinimumRate` / `MaximumRate` are all `1.0`.
+- **TC-20-05** — The player adaptor's scalar getters `PlaybackStatus` / `LoopStatus` /
+  `Shuffle` / `Volume` / `Position` / `Rate` / `MinimumRate` / `MaximumRate` return the
+  mapped values for a fake player+controller in a known state (e.g. PLAYING, repeat ALL,
+  shuffle on, volume 40, position 12.0s); `Rate` / `MinimumRate` / `MaximumRate` are all
+  `1.0`. `Metadata` is **not** asserted here — the getter returns an opaque
+  (write-mode) `QDBusArgument`; its logical content is asserted via the pure
+  `track_metadata` dict in TC-20-03, and its wire signature by `AB_INTEGRATION_DBUS`.
 - **TC-20-06** — Writing the adaptor's `LoopStatus="Track"` calls
   `controller.set_repeat(ONE)`; `Shuffle=True` calls `controller.set_shuffle(True)`;
   `Volume=0.4` calls `player.set_volume(40)`; writing `Rate=2.0` is accepted (no
   raise) and changes nothing (`Rate` still reads `1.0`). (Spy the setter on a fake.)
-  Out-of-range + mute independence: `Volume=1.5` -> `set_volume(150)` which the player
-  clamps to 100, so the `Volume` getter then reads `1.0`; muting the player leaves the
-  `Volume` getter reflecting the underlying level (not `0.0`) — MPRIS has no mute.
+  Out-of-range + mute independence: `Volume=1.5` -> `set_volume(150)` clamps to 100
+  (`Volume` reads `1.0`) and `Volume=-0.2` -> `set_volume(-20)` clamps to 0 (`Volume`
+  reads `0.0`); muting the player leaves the `Volume` getter reflecting the underlying
+  level (not `0.0`) — MPRIS has no mute.
 - **TC-20-07** — The adaptor methods `Next/Previous/Play/Pause/PlayPause/Stop` call the
   matching `controller`/`player` command exactly once; `Seek(2_000_000)` seeks to
   `position()+2.0`s; `SetPosition(current_id, 3_000_000)` seeks to 3.0s while
@@ -489,20 +506,25 @@ bus; it is skipped by default (mirrors the audio-integration gating in
   (not by patching the chokepoint itself, which would bypass the guard): with the
   low-level send spied, firing a wired app-signal (e.g. `state_changed`) while
   `available=False` invokes the send **zero** times; forcing `available=True` with a
-  fake bus makes the same signal invoke it once. Construction and signal-firing never
-  raise on the unavailable path.
+  fake bus makes the same signal invoke it once. The `_emit_seeked` guard is checked the
+  same way: `player.seeked` while `available=False` sends zero, once when forced
+  available. Construction and signal-firing never raise on the unavailable path.
 - **TC-20-10** — Chokepoint wiring (no live bus): with `_emit_properties_changed`
   patched to a recorder, `state_changed` invokes it for `PlaybackStatus`,
   `current_changed` for `Metadata` + the Can* keys, `duration_changed` for
   `Metadata` + `CanSeek`, `queue_changed` for `CanGoNext` / `CanGoPrevious`,
   `volume_changed` for `Volume`, `shuffle_changed` for `Shuffle`, `repeat_changed` for
-  `LoopStatus`; and `player.seeked` invokes `_emit_seeked`. Assert each of the eight
-  wired signals calls the chokepoint with the right interface + changed-keys.
+  `LoopStatus` — assert each of these **seven** calls `_emit_properties_changed` with
+  the right interface + changed-keys. Separately, with `_emit_seeked` **also** patched
+  to a recorder, `player.seeked(s)` invokes it once with the microsecond position (no
+  interface/changed-keys — it drives the `Seeked` signal, not a property change).
 - **TC-20-11** — Cover-art lifecycle (no bus needed — art refresh is connected
   unconditionally, independent of `available`): on `current_changed` to a track with
-  `cover_data`, `_art_url` is a `file://` path to an existing temp file and
-  `Metadata` carries `mpris:artUrl`; switching to a track with no cover removes the
-  prior temp file and drops `mpris:artUrl`; `current_changed(None)` removes it too.
+  `cover_data`, `service._art_url` is a `file://` path to an existing temp file and the
+  pure `track_metadata(current_track, service._art_url)` dict carries `mpris:artUrl`
+  (asserted on the readable dict, not the opaque getter); switching to a track with no
+  cover removes the prior temp file and drops `mpris:artUrl`; `current_changed(None)`
+  removes it too.
 - **TC-20-12** — `TrayIcon` with tray available builds a 6-action menu
   (Play/Pause, Next, Previous, separator, Show/Hide, Quit); the Play/Pause action
   label flips on `state_changed`. Each action's trigger calls the right command
