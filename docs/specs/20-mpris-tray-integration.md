@@ -65,8 +65,9 @@ desktop), so the app is unchanged on any environment that lacks them.
 - **Pure mapping helpers** — the value translations between the app's domain and the
   MPRIS wire types are module-level pure functions, unit-tested directly without a
   bus: `playback_status(PlayerState) -> str`, `loop_status(RepeatMode) -> str` and
-  its inverse `repeat_mode(str) -> RepeatMode`, `track_metadata(Track | None, art_url)
-  -> dict`, and the volume/position scalings. The adaptor is a thin shell over these.
+  its inverse `repeat_mode(str) -> RepeatMode`, `track_metadata(Track | None, art_url,
+  track_no) -> dict`, and the volume/position scalings. The adaptor is a thin shell over
+  these.
 - **Capability guard** — `MprisService.available` is `False` when the session bus is
   absent or `registerService` / `registerObject` fails; `TrayIcon.available` is
   `False` when `QSystemTrayIcon.isSystemTrayAvailable()` is false. An unavailable
@@ -283,9 +284,11 @@ no shadow state of its own. Property reads pull live from those.
     tests spy to verify the guard (TC-20-09) independently of the handler->chokepoint
     wiring (TC-20-10, which patches the chokepoint).
   - `_emit_seeked(position_us: int)` — returns if not available; else emits the player
-    adaptor's `Seeked = pyqtSignal('qlonglong')`. The player adaptor sets
-    `setAutoRelaySignals(True)`, so Qt relays that emission onto the bus **as `x`** —
-    this is why `Seeked` uses the pyqtSignal path, not the `createSignal`+append-int
+    adaptor's `Seeked = pyqtSignal('qlonglong')`. That signal is exported to the bus by
+    `registerObject(..., ExportAdaptors)` and typed **`x`** by its `'qlonglong'`
+    declaration, so emitting it reaches the bus as `x` (verified over a live bus; no
+    `setAutoRelaySignals` is needed — that governs host->adaptor relay, unused here).
+    This is why `Seeked` uses the pyqtSignal path, not the `createSignal`+append-int
     path `PropertiesChanged` uses: a plain Python int appended to a hand-built
     `QDBusMessage` would marshal value-dependently (`i`/int32 under ~35.8 min), whereas
     the `'qlonglong'`-typed pyqtSignal is pinned to `x`. (`PropertiesChanged` has no
