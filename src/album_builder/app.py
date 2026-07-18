@@ -24,7 +24,7 @@ import os
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QSharedMemory, Qt
+from PyQt6.QtCore import QSharedMemory
 from PyQt6.QtGui import QIcon
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMainWindow
@@ -34,6 +34,7 @@ from album_builder.persistence.state_io import load_state
 from album_builder.services.album_store import AlbumStore
 from album_builder.services.library_watcher import LibraryWatcher
 from album_builder.ui.main_window import MainWindow
+from album_builder.ui.window_util import bring_to_front
 from album_builder.version import __version__
 
 # Convenience fallback for `_resolve_tracks_dir`: only used in dev mode (a
@@ -213,19 +214,11 @@ def _accept_raise(server: QLocalServer, window: QMainWindow) -> None:
     def on_ready_read() -> None:
         message = sock.readAll().data().strip()
         if message == RAISE_MESSAGE.strip():
-            _bring_to_front(window)
+            bring_to_front(window)
         sock.disconnectFromServer()
 
     sock.readyRead.connect(on_ready_read)
     sock.disconnected.connect(sock.deleteLater)
-
-
-def _bring_to_front(window: QMainWindow) -> None:
-    state = window.windowState() & ~Qt.WindowState.WindowMinimized
-    window.setWindowState(state | Qt.WindowState.WindowActive)
-    window.show()
-    window.raise_()
-    window.activateWindow()
 
 
 def _resolve_project_root() -> Path:

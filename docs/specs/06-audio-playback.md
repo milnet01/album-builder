@@ -50,6 +50,8 @@ Play tracks for preview and karaoke-style listening. Provide play/pause, seek, p
 - `signal error(message: str)` — when playback fails.
 - `signal buffering_changed(buffering: bool)` — `True` on `QMediaPlayer.MediaStatus.BufferingMedia`, `False` on `BufferedMedia` (drives the "Buffering..." transport indicator; not an error condition).
 - `signal ended()` — natural end-of-track pulse, emitted on `MediaStatus.EndOfMedia`. Distinct from `state_changed(STOPPED)`, which also fires on user-stop; consumers needing to distinguish the two (e.g. future autoplay) subscribe here.
+- `signal volume_changed(percent: int)` / `signal muted_changed(muted: bool)` — the state owner announces its own volume/mute change so a second transport bar (Spec 18) stays coherent across two live surfaces on one `Player`.
+- `signal seeked(seconds: float)` — the **discontinuous-jump** pulse, emitted at the end of `seek()` with the clamped landing position. Distinct from the continuous `position_changed`: it fires only on a user scrub, not on natural progress. Its sole consumer (Spec 20 Phase G) is the MPRIS `Seeked` D-Bus relay. `seek()` also exposes a `_set_duration_for_test(seconds)` seam (test-only, paralleling `_set_state_for_test`) so the upper-clamp branch is testable without poking the private duration field.
 - `last_played_track_path` written to `.album-builder/state.json` (canonical schema in Spec 10 §`state.json`). On app restart the now-playing pane re-loads this track **paused at zero** — the play position is **not persisted** in v1 (this is intentional, not a bug; a future schema bump may add `last_position_seconds`).
 
 ## Implementation notes

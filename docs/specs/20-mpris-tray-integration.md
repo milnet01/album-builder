@@ -1,6 +1,6 @@
 # 20 — MPRIS2 + system-tray desktop integration (Linux)
 
-**Status:** Reviewed - ready to implement (Phase G of the music-player epic) · **Last updated:** 2026-07-18 · **Depends on:** 00, 06, 14, 15, 16, 18 · **Blocks:** none (final planned phase of the epic)
+**Status:** Implemented (Phase G of the music-player epic) · **Last updated:** 2026-07-18 · **Depends on:** 00, 06, 14, 15, 16, 18 · **Blocks:** none (final planned phase of the epic)
 
 > **Cold-eyes loop log (2026-07-18):** 7 loops, 2-3 independent reviewers per loop
 > (MPRIS2/D-Bus-conformance, PyQt6-QtDBus-feasibility, app-integration, cross-spec+tests
@@ -193,9 +193,10 @@ def seek(self, seconds: float) -> None:
       plain dict).
     - `xesam:title` / `xesam:album` / `mpris:artUrl` — plain `str` (`s`).
     Split the concern: the pure `track_metadata` helper returns a **plain Python dict**
-    of logical values (int length, `list` artist, `str` trackid — unit-tested by
-    TC-20-03), and a shared **`_metadata_variant_map(dict) -> dict`** helper returns a
-    new dict with those four keys re-wrapped in their typed carriers (the value the
+    of logical values (int length, `list` artist, `QDBusObjectPath` trackid — unit-tested
+    by TC-20-03), and a shared **`_metadata_variant_map(dict) -> dict`** helper returns a
+    new dict re-wrapping `mpris:length` (int64 carrier) and `xesam:artist` (`as` carrier)
+    and passing the already-typed `QDBusObjectPath` trackid through (the value the
     `Metadata` getter returns and the `PropertiesChanged{Metadata}` emit sends). A
     unit test CAN assert `_metadata_variant_map`'s output is a `dict` (never a
     `QDBusArgument`) with a `QDBusObjectPath` trackid — the direct regression guard for

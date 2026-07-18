@@ -54,6 +54,11 @@ class Player(QObject):
     # second TransportBar stays coherent (two live surfaces on one Player).
     volume_changed = pyqtSignal(int)         # Type: clamped 0-100 percent
     muted_changed = pyqtSignal(bool)         # Type: new mute state
+    # Spec 20: discontinuous-jump pulse (a user scrub, not natural progress),
+    # carrying the clamped landing position in seconds. Its sole Phase G
+    # consumer is the MPRIS `Seeked` relay; distinct from the continuous
+    # `position_changed` (which MPRIS clients poll, not react to).
+    seeked = pyqtSignal(float)               # Type: seconds (clamped landing)
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -132,6 +137,11 @@ class Player(QObject):
             seconds = min(seconds, self._duration_seconds - 1.0)
         seconds = max(0.0, seconds)
         self._player.setPosition(int(seconds * 1000))
+        # Spec 20: pulse the clamped landing so the MPRIS Seeked signal fires
+        # on discontinuous jumps. Emitted unconditionally on a seek() call
+        # (including a no-op re-seek) - harmless because seek() is only called
+        # on discrete user gestures, never continuously.
+        self.seeked.emit(seconds)
 
     def position(self) -> float:
         return self._player.position() / 1000.0
@@ -153,6 +163,15 @@ class Player(QObject):
         this; no signal is emitted (the direct writes it replaces emitted none
         either)."""
         self._state = state
+
+    def _set_duration_for_test(self, seconds: float) -> None:
+        """Test-only seam: pin the reported duration without a real decode.
+        A real QMediaPlayer reports duration asynchronously (durationChanged
+        fires after set_source), so a test that needs seek()'s upper clamp
+        (`seconds > dur - 1.0`, Spec 20 TC-20-04) exercised deterministically
+        sets it here rather than poking the private field. Parallels
+        `_set_state_for_test`; production never calls it; emits no signal."""
+        self._duration_seconds = float(seconds)
 
     def set_volume(self, vol: int) -> None:
         # Spec 18 INV-18-1: apply to _output BEFORE emitting. The two volume

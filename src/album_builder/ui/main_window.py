@@ -50,6 +50,7 @@ from album_builder.services.alignment_status import AlignmentStatus, compute_sta
 from album_builder.services.export import ExportFailed
 from album_builder.services.library_watcher import LibraryWatcher
 from album_builder.services.lyrics_tracker import LyricsTracker
+from album_builder.services.mpris import MprisService
 from album_builder.services.playback_controller import PlaybackController
 from album_builder.services.player import Player, PlayerState
 from album_builder.services.playlist_store import PlaylistStore
@@ -64,6 +65,7 @@ from album_builder.ui.queue_pane import QueuePane
 from album_builder.ui.theme import THEMES, Glyphs, palette_for, qt_stylesheet
 from album_builder.ui.toast import Toast
 from album_builder.ui.top_bar import TopBar
+from album_builder.ui.tray import TrayIcon
 from album_builder.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -333,6 +335,16 @@ class MainWindow(QMainWindow):
         # (active-path, playing) tuple on every state_changed.
         self._player.state_changed.connect(self._on_player_state_changed_for_rows)
         self.splitter.splitterMoved.connect(lambda *_: self._state_save_timer.start())
+
+        # Spec 20 (Phase G): MPRIS2 D-Bus service + system-tray control surface.
+        # Both drive the same Player / PlaybackController as the in-app transports
+        # (no second pipeline) and self-guard on desktop capability - no session
+        # bus or no system tray degrades to a silent no-op. Parented to self so
+        # they live and die with MainWindow.
+        self._mpris = MprisService(self._player, self._controller, self, parent=self)
+        self._tray = TrayIcon(
+            self._player, self._controller, self, self.windowIcon(), parent=self
+        )
 
         # Spec 00 keyboard shortcuts (closes indie-review Theme E).
         self._wire_shortcuts()
@@ -1086,6 +1098,15 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             logger.exception("write_audio() failed during closeEvent")
             failures.append(f"write_audio: {_redact_home(exc)}")
+        try:
+            # Spec 20: drop the bus name (clean relaunch) + remove the cover-art
+            # temp file, and hide the tray icon. Self-guarded on the no-op path.
+            self._mpris.unregister()
+            if self._tray.available:
+                self._tray.hide()
+        except Exception as exc:
+            logger.exception("MPRIS/tray teardown failed during closeEvent")
+            failures.append(f"mpris teardown: {_redact_home(exc)}")
         try:
             self._store.flush()
         except Exception as exc:
