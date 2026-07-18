@@ -110,12 +110,17 @@ def seek(self, seconds: float) -> None:
   `ALL -> "Playlist"`.
 - `repeat_mode(status: str) -> RepeatMode` — inverse; unknown string -> `OFF`
   (defensive: a client may send an out-of-enum value).
-- `track_metadata(track: Track | None, art_url: str | None) -> dict` — builds the
-  MPRIS `a{sv}` map. Always includes `mpris:trackid` **as a `QDBusObjectPath`** (a
-  bare `str` would marshal as `s`, not the required `o`, and would break
-  `SetPosition`'s object-path comparison) — a synthetic stable path derived from the
-  track index/id, e.g. `/org/mpris/MediaPlayer2/albumbuilder/track/<n>`; MPRIS requires
-  a valid object path, **never** an empty string. On a track: adds `mpris:length`
+- `track_metadata(track: Track | None, art_url: str | None, track_no: int) -> dict` —
+  builds the MPRIS `a{sv}` map. Always includes `mpris:trackid` **as a `QDBusObjectPath`**
+  (a bare `str` would marshal as `s`, not the required `o`, and would break
+  `SetPosition`'s object-path comparison) — the path is
+  `/org/mpris/MediaPlayer2/albumbuilder/track/<track_no>`, where `track_no` is a
+  **service-owned monotonic counter** bumped on every new loaded track (§MprisService).
+  `Track` has no id/index field and a play-order *position* would be wrong here (the id
+  must change per track-*instance* for the `SetPosition` race-guard, not per queue
+  slot); a monotonic integer is valid object-path charset (`[0-9]`) and changes exactly
+  when the track changes. MPRIS requires a valid object path, **never** an empty
+  string. On a track: adds `mpris:length`
   (duration in **microseconds**, int64-pinned — see the type-pin note below),
   `xesam:title` (str), `xesam:artist` (a list `[str]` in the dict — the property getter
   emits it as `as` via the `QDBusArgument` carrier; a bare string is a conformance
@@ -193,10 +198,11 @@ the `QApplication` (for Quit). Members:
 
 `QDBusAbstractAdaptor` decorated `@pyqtClassInfo("D-Bus Interface",
 "org.mpris.MediaPlayer2.Player")`. Constructed with the host `QObject`, the `Player`,
-the `PlaybackController`, and an **`art_url()` getter callable** (bound to the
-service's rolling `_art_url` — the cover art is owned by `MprisService`, §MprisService,
-and read through this callable so the adaptor keeps no shadow state of its own). Property
-reads pull live from those.
+the `PlaybackController`, and two getter callables bound to `MprisService` state:
+**`art_url()`** (the service's rolling `_art_url`) and **`track_no()`** (the service's
+monotonic track counter). The cover art and the trackid counter are owned by
+`MprisService` (§MprisService) and read through these callables, so the adaptor keeps
+no shadow state of its own. Property reads pull live from those.
 
 - Methods (`pyqtSlot`):
   - `Next()` -> `controller.next()`; `Previous()` -> `controller.previous()`.
@@ -224,7 +230,7 @@ reads pull live from those.
   - `Shuffle: 'b'` R/W -> get `controller.shuffle_enabled()`; set
     `controller.set_shuffle(value)`.
   - `Metadata: 'a{sv}'` R/O (`pyqtProperty('QVariantMap', ...)`) -> the getter builds
-    the logical dict `track_metadata(controller.current_track(), self.art_url())` and
+    the logical dict `track_metadata(controller.current_track(), self.art_url(), self.track_no())` and
     **returns it converted to a `QDBusArgument`-built `a{sv}`** via the shared
     `_metadata_argument(dict)` helper (§mapping helpers / type-pin note) — it must NOT
     return the plain dict (which marshals the int32/`av` traps the type-pin note
@@ -247,9 +253,12 @@ reads pull live from those.
 
 `MprisService(player, controller, window, parent=None)`:
 - Builds the host `QObject` and the two adaptors — the player adaptor is constructed
-  with an `art_url` getter bound to the service's own `_art_url` (e.g.
-  `lambda: self._art_url`), so the adaptor's `Metadata` getter and the service's
-  `PropertiesChanged{Metadata}` build read the one art-url source. Then (guarded)
+  with `art_url` and `track_no` getters bound to the service's own `_art_url` and
+  `_track_no` (e.g. `lambda: self._art_url`, `lambda: self._track_no`), so the adaptor's
+  `Metadata` getter and the service's `PropertiesChanged{Metadata}` build read the one
+  art-url + one trackid source. `_track_no` starts at 0 and is **incremented on every
+  `current_changed` to a non-None track** (in the same handler that refreshes art),
+  giving each loaded track a distinct trackid for the `SetPosition` race-guard. Then (guarded)
   registers the object at `/org/mpris/MediaPlayer2` and the bus name
   `org.mpris.MediaPlayer2.albumbuilder` on the session bus. Sets `self.available`
   accordingly; on any failure logs once and leaves the adaptors un-registered (they
@@ -263,17 +272,23 @@ reads pull live from those.
     immediately if `not self.available`; otherwise builds
     `org.freedesktop.DBus.Properties.PropertiesChanged` with args
     `(interface, {changed}, [invalidated])` — the `changed` values typed per §Public
-    API (int64 `x`, `QVariantMap` for the nested `Metadata` `a{sv}`, object-path `o`)
+    API (`s`/`b`/`d` scalars pin fine; a changed `Metadata` value uses the
+    `_metadata_argument` `QDBusArgument`, `QDBusVariant`-wrapped; there is no top-level
+    `x` in any `PropertiesChanged` set — `mpris:length` lives inside `Metadata`)
     — and hands it to a distinct low-level send step (the session-bus `send`), which
     tests spy to verify the guard (TC-20-09) independently of the handler->chokepoint
     wiring (TC-20-10, which patches the chokepoint).
-  - `_emit_seeked(position_us: int)` — returns if not available; else sends the
-    `Seeked` D-Bus signal. Mechanism parallels `PropertiesChanged`: build it with
-    `QDBusMessage.createSignal("/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player",
-    "Seeked")`, append the int64 `position_us`, and hand it to the same low-level send
-    step (so the `available` guard and the test spy cover it identically). (The player
-    adaptor also declares `Seeked = pyqtSignal('qlonglong')` for introspection; the
-    explicit `createSignal` send is what actually reaches the bus.)
+  - `_emit_seeked(position_us: int)` — returns if not available; else emits the player
+    adaptor's `Seeked = pyqtSignal('qlonglong')`. The player adaptor sets
+    `setAutoRelaySignals(True)`, so Qt relays that emission onto the bus **as `x`** —
+    this is why `Seeked` uses the pyqtSignal path, not the `createSignal`+append-int
+    path `PropertiesChanged` uses: a plain Python int appended to a hand-built
+    `QDBusMessage` would marshal value-dependently (`i`/int32 under ~35.8 min), whereas
+    the `'qlonglong'`-typed pyqtSignal is pinned to `x`. (`PropertiesChanged` has no
+    top-level `x` — its `mpris:length` sits *inside* the `Metadata` `a{sv}`, typed by
+    `_metadata_argument` — so its `createSignal` path is safe.) The test seam is the
+    adaptor's `Seeked` pyqtSignal itself (`QSignalSpy`-observable): the guard fires it
+    zero times when unavailable, once when available.
 - Owns the **cover-art temp file** (refresh connected unconditionally, independent of
   the bus gate): on `current_changed`, if the new track has `cover_data`, writes it to
   a temp file (via `tempfile`, suffixed by the `cover_mime`-decoded image type) and
@@ -286,12 +301,15 @@ reads pull live from those.
   - `player.state_changed` -> `PlaybackStatus`;
   - `controller.current_changed` -> refresh art, then `Metadata`, `CanGoNext`,
     `CanGoPrevious`, `CanPlay`, `CanPause`, `CanSeek`;
-  - `player.duration_changed` -> `Metadata` (its `mpris:length`) + `CanSeek`.
-    **Load-bearing:** `QMediaPlayer` reports duration *asynchronously, after*
-    `current_changed` (at track-change time `player.duration()` is still 0), so without
-    this handler `mpris:length` stays 0 and `CanSeek` stays false until some unrelated
-    change — Plasma's seek bar would never enable. This handler re-emits once the real
-    duration arrives.
+  - `player.duration_changed` -> `CanSeek` only (NOT `Metadata`). `mpris:length` is
+    computed from `track.duration_seconds` (mutagen-populated at scan time,
+    `track.py`), so it is already correct in the `Metadata` emitted on `current_changed`
+    — it does **not** depend on the async `player.duration()`. **Load-bearing for
+    `CanSeek`:** `CanSeek` reads `player.duration() > 0`, and `QMediaPlayer` reports
+    duration *asynchronously, after* `current_changed` (at track-change time
+    `player.duration()` is still 0), so without this handler `CanSeek` stays false until
+    some unrelated change and Plasma's seek bar never enables. This handler re-emits
+    `CanSeek` once the real decoded duration arrives.
   - `controller.queue_changed` -> `CanGoNext` / `CanGoPrevious`;
   - `player.volume_changed` -> `Volume`;
   - `controller.shuffle_changed` -> `Shuffle`;
@@ -457,12 +475,13 @@ bus; it is skipped by default (mirrors the audio-integration gating in
   `"Playing"/"Paused"/"Stopped"/"Stopped"`.
 - **TC-20-02** — `loop_status` maps `OFF/ONE/ALL` to `"None"/"Track"/"Playlist"`, and
   `repeat_mode` inverts each (and maps an unknown string to `OFF`).
-- **TC-20-03** — `track_metadata(track, art)` produces `mpris:trackid` as a
-  `QDBusObjectPath` (assert the type, not just non-empty), `mpris:length` equal to
-  `round(duration_seconds * 1e6)` microseconds, `xesam:title` (str), `xesam:artist` as
-  a list `[artist]`, `xesam:album` (str), and `mpris:artUrl` only when `art` is
-  non-None; `track_metadata(None, None)` is an **empty map `{}`** (no keys — the
-  no-current-track convention, not a NoTrack sentinel). The D-Bus *wire* types (`x`
+- **TC-20-03** — `track_metadata(track, art, track_no)` produces `mpris:trackid` as a
+  `QDBusObjectPath` whose path is `/org/mpris/MediaPlayer2/albumbuilder/track/<track_no>`
+  (assert the type **and** the `track_no`-derived path — e.g. `track_no=7` -> `.../track/7`),
+  `mpris:length` equal to `round(duration_seconds * 1e6)` microseconds, `xesam:title`
+  (str), `xesam:artist` as a list `[artist]`, `xesam:album` (str), and `mpris:artUrl`
+  only when `art` is non-None; `track_metadata(None, None, track_no)` is an **empty map
+  `{}`** (no keys — the no-current-track convention, not a NoTrack sentinel). The D-Bus *wire* types (`x`
   for length, `o` for trackid, `as` for artist) — the load-bearing pin the plain-int/
   bare-list traps would silently violate — are asserted by the `AB_INTEGRATION_DBUS`
   wire-signature test (introspection / demarshal against the real bus), since a
@@ -512,7 +531,7 @@ bus; it is skipped by default (mirrors the audio-integration gating in
 - **TC-20-10** — Chokepoint wiring (no live bus): with `_emit_properties_changed`
   patched to a recorder, `state_changed` invokes it for `PlaybackStatus`,
   `current_changed` for `Metadata` + the Can* keys, `duration_changed` for
-  `Metadata` + `CanSeek`, `queue_changed` for `CanGoNext` / `CanGoPrevious`,
+  `CanSeek`, `queue_changed` for `CanGoNext` / `CanGoPrevious`,
   `volume_changed` for `Volume`, `shuffle_changed` for `Shuffle`, `repeat_changed` for
   `LoopStatus` — assert each of these **seven** calls `_emit_properties_changed` with
   the right interface + changed-keys. Separately, with `_emit_seeked` **also** patched
