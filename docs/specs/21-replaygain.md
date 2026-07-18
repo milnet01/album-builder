@@ -1,0 +1,308 @@
+# 21 - ReplayGain volume normalization (opt-in loudness levelling)
+
+**Status:** Draft - authoring (Phase F of the music-player epic) - **Last updated:** 2026-07-18 - **Depends on:** 00, 01, 06, 10, 15, 18, 19 - **Blocks:** none
+
+The A-G phase letters are defined in the **Fully-featured music player mode** epic
+bullet under `ROADMAP.md` heading `## Future / deferred`. This spec promotes the one
+feasible/cheap piece of the Phase F audio-effects spike
+(`docs/research/2026-07-18-phase-f-audio-effects-spike.md`): tag-driven volume
+normalization. EQ and gapless/crossfade stay deferred (they retire `QMediaPlayer`);
+this feature is **read-only tag consumption + output-volume scaling**, no DSP.
+
+To be implemented across a new `src/album_builder/services/replaygain.py` (the pure
+`gain_factor` mapping helper + a `ReplayGainService` orchestrator), read-only additions
+to `src/album_builder/domain/track.py` (two gain fields parsed at scan time), a
+composite-volume refactor of `src/album_builder/services/player.py` (a replaygain
+factor multiplied into the output level, decoupled from the user volume), a
+`replaygain` block in `src/album_builder/persistence/settings.py`, and a
+**Playback -> Volume Levelling** menu in `src/album_builder/ui/main_window.py`
+(mirroring the Spec 19 `View -> Theme` live-toggle pattern). Tests in `tests/domain/`,
+`tests/persistence/`, `tests/services/`, and `tests/ui/`.
+
+**Sections:** [Purpose](#purpose) - [Concepts](#concepts) - [Public API](#public-api) -
+[Behavior rules](#behavior-rules) - [UI surface](#ui-surface) - [Inputs](#inputs) -
+[Outputs](#outputs) - [Errors & edge cases](#errors--edge-cases) -
+[Cross-spec amendments](#cross-spec-amendments) - [Test contract](#test-contract) -
+[Out of scope](#out-of-scope)
+
+## Purpose
+
+Play a mixed library at an even loudness. Albums are mastered at wildly different
+levels; without normalization the user rides the volume slider between tracks.
+**ReplayGain** is the standard fix: a scanner writes a per-track (and per-album)
+`+/- N dB` loudness offset into the file's tags; a player reads that offset and scales
+its output so every track lands near the same perceived loudness.
+
+Album Builder already has everything it needs to *read and apply* those tags:
+`mutagen` (an existing dependency) parses them, and `QAudioOutput.setVolume` already
+takes a linear 0.0-1.0 scalar. So this is a cheap, opt-in feature - **no DSP, no new
+dependency, no change to the single playback pipeline** (Spec 15). It is **off by
+default** (like alignment, Spec 07): a fresh install behaves exactly as today.
+
+**Reading only.** Album Builder does not *scan* or *write* ReplayGain tags - that is
+what external tools (`rsgain`, `r128gain`) are for. Files with no ReplayGain tags fall
+back to today's behavior (no offset; the track plays at the user's set volume).
+
+## Concepts
+
+- **ReplayGain tags** - a loudness offset in decibels, stored in the file. Two values:
+  `REPLAYGAIN_TRACK_GAIN` (level this one track to the reference) and
+  `REPLAYGAIN_ALBUM_GAIN` (level the whole album by one offset, preserving the
+  album's internal quiet-to-loud dynamics). This spec reads the ID3 forms: `TXXX`
+  frames (`TXXX:REPLAYGAIN_TRACK_GAIN` / `_ALBUM_GAIN`, value like `"-6.48 dB"`) and,
+  as a fallback, the `RVA2` frame's `.gain`. **The `TXXX` description is
+  case-sensitive in mutagen's key** (a file may carry `TXXX:replaygain_track_gain`
+  *or* `TXXX:REPLAYGAIN_TRACK_GAIN`), so the reader iterates the `TXXX` frames and
+  matches the description **case-insensitively** rather than indexing one fixed key.
+- **Gain factor (dB -> linear)** - a `+/- N dB` offset becomes a linear multiplier
+  `10 ** (dB / 20)`. `-6 dB` -> ~0.5 (quieter), `+3 dB` -> ~1.41 (louder), `0 dB` ->
+  `1.0`. This factor scales the output level.
+- **Composite output volume** - the applied output level is
+  `clamp(user_volume/100 * gain_factor, 0.0, 1.0)`. The **user volume stays the source
+  of truth**: `Player.volume()` still returns the user's 0-100 (the slider, the Spec 18
+  `volume_changed` broadcast, and the persisted `audio.volume` are unchanged). The gain
+  factor is an *internal* multiplier on the actual `QAudioOutput` level, transparent to
+  the user-facing volume. Clamping the composite to `<= 1.0` in-app means a positive
+  (boost) gain at a high user volume is capped at full scale - never sent above 1.0 -
+  so there is no digital clipping; attenuation (the common case for loud masters) is
+  always fully applied.
+- **Levelling reference (mode)** - the one companion setting worth exposing (this is an
+  *album* tool): `album` uses `REPLAYGAIN_ALBUM_GAIN` (keeps an album's soft interludes
+  soft relative to its peaks); `track` uses `REPLAYGAIN_TRACK_GAIN` (every track equal-
+  loud, best for shuffled singles). Each falls back to the other value when its own is
+  absent, and to `1.0` (no offset) when the file has neither.
+- **Capability degrade** - this is not environment-gated like MPRIS; it is purely
+  additive and always present. When disabled, or when a track has no tags, the factor
+  is `1.0` and playback is byte-for-byte today's behavior.
+
+## Public API
+
+### `persistence/settings.py` - a `replaygain` block
+
+- `@dataclass(frozen=True) ReplayGainSettings(enabled: bool = False, mode: str = "album")`.
+- `read_replaygain() -> ReplayGainSettings` - reads the `replaygain` block; defaults
+  when absent/malformed. Bool guard on `enabled` (rejects `0`/`1` sneaking in via
+  hand-edit); whitelist guard on `mode` via `ALLOWED_REPLAYGAIN_MODES = frozenset({"album", "track"})`
+  (an unknown value falls back to `"album"`). Mirrors `read_alignment` / `read_ui`.
+- `write_replaygain(rg: ReplayGainSettings) -> None` - writes `{"enabled", "mode"}`
+  under the `replaygain` key, preserving other top-level keys, through the shared
+  `_write_settings` (stamps `schema_version`). Mirrors `write_alignment`.
+
+### `domain/track.py` - two read-only gain fields
+
+- `Track` gains `replaygain_track_gain: float | None` and
+  `replaygain_album_gain: float | None` (decibels; `None` when the tag is absent).
+  Populated in `from_path` from the already-opened `id3` object; `_missing` sets both
+  `None`.
+- A module helper `_read_replaygain(id3: ID3 | None) -> tuple[float | None, float | None]`
+  returns `(track_gain, album_gain)`:
+  - Iterate `id3.keys()` for `TXXX` frames whose description (the part after
+    `TXXX:`) equals `replaygain_track_gain` / `replaygain_album_gain`
+    **case-insensitively**; parse the leading float of the value (`"-6.48 dB"` ->
+    `-6.48`, via `float(text.split()[0])`). A value that does not parse is skipped
+    (treated as absent), not raised.
+  - If a `TXXX` gain is absent, fall back to the `RVA2` frame's `.gain` (mutagen exposes
+    it as a float) for the matching channel; `RVA2` carries a single master gain, used
+    for whichever of track/album the `TXXX` form did not supply.
+  - Returns `(None, None)` when `id3` is `None` or neither form is present. **ID3
+    only** in this phase - Vorbis-comment (FLAC/OGG/Opus) and MP4 freeform ReplayGain
+    are out of scope (a non-mp3 file simply reads `None`, so it plays unlevelled; see
+    §Out of scope). This keeps the reader a few lines over the existing `id3` object
+    rather than branching per container.
+
+### `services/replaygain.py` - `gain_factor` (pure) + `ReplayGainService`
+
+- `gain_factor(track: Track | None, mode: str) -> float` - pure, unit-tested without
+  Qt:
+  - `None` track -> `1.0`.
+  - Pick the dB by mode: `album` -> `album_gain` else `track_gain`; `track` ->
+    `track_gain` else `album_gain`. If both are `None` -> `1.0`.
+  - Return `10 ** (db / 20)`.
+- `ReplayGainService(QObject)` - `ReplayGainService(player, controller, settings, parent=None)`
+  where `settings` is a `ReplayGainSettings`. Owns the live `enabled` + `mode` state,
+  subscribes to `PlaybackController.current_changed`, and pushes the computed factor to
+  the `Player`. It is the single place that turns "settings + current track" into a
+  `Player.set_replaygain_factor` call.
+  - `set_enabled(on: bool) -> None` - update state, `write_replaygain(...)`, re-apply
+    for the current track.
+  - `set_mode(mode: str) -> None` - update state, `write_replaygain(...)`, re-apply.
+  - `enabled() -> bool` / `mode() -> str` - queries (for the menu to reflect state).
+  - `_reapply(track=None) -> None` (the `current_changed` slot and the setter helper):
+    `factor = gain_factor(track_or_current, self._mode) if self._enabled else 1.0`,
+    then `self._player.set_replaygain_factor(factor)`.
+
+### `services/player.py` - composite-volume refactor (one internal change)
+
+`Player`'s volume path is refactored so the **user volume** and the **applied output
+level** are distinct - the ReplayGain factor multiplies into the latter only:
+
+- New field `_user_volume: int` (0-100, the source of truth) and `_replaygain_factor:
+  float = 1.0`. `_user_volume` is initialised to the `QAudioOutput` default (`100`) so
+  the first `set_volume(audio.volume)` at construction applies.
+- `set_volume(vol)` - clamp to `[0,100]`; the Spec 18 INV-18-1 change-guard now compares
+  against `_user_volume` (not a read-back of the output level, which the factor would
+  distort); on a real change, set `_user_volume`, call `_apply_output_volume()`
+  (applies to `_output` **before** emitting - INV-18-1 preserved), then emit
+  `volume_changed(v)`.
+- `set_replaygain_factor(factor)` - change-guarded; store `_replaygain_factor` and call
+  `_apply_output_volume()`. **Emits no `volume_changed`** - the user volume did not
+  change; only the internal output scaling did (the slider must not jump).
+- `_apply_output_volume()` - `self._output.setVolume(max(0.0, min(1.0, self._user_volume / 100.0 * self._replaygain_factor)))`.
+- `volume()` - returns `self._user_volume` (was: `round(self._output.volume() * 100)`).
+  This is the load-bearing decoupling: with the factor folded into the output level, a
+  read-back would no longer equal the user's set volume.
+- `set_muted` / `muted()` are unchanged (mute is a separate `_output` flag).
+
+### `ui/main_window.py` - a Playback -> Volume Levelling menu
+
+Mirrors the Spec 19 `View -> Theme` menu: a new top-level **Playback** menu with a
+checkable **Volume Levelling (ReplayGain)** action (toggles `ReplayGainService.set_enabled`)
+and a **Levelling reference** submenu of two exclusive radio actions **Album** / **Track**
+(each calls `set_mode`). Both reflect the persisted state at build time (the checkable
+action's `setChecked(rg.enabled)`, the radio group's current from `rg.mode`). The menu
+is the only new in-window UI.
+
+## Behavior rules
+
+### Off by default, transparent when off
+
+A fresh install has `replaygain.enabled = False`: `gain_factor` is never consulted, the
+factor stays `1.0`, and the output level is exactly `user_volume/100` - identical to
+pre-Spec-21 playback. Enabling it takes effect on the **next track load** (and
+immediately for the current track, via the setter's re-apply).
+
+### One factor per loaded track
+
+`ReplayGainService` recomputes the factor on every `current_changed` (the controller's
+loaded-track change) - so each track carries its own offset - and re-applies when the
+user toggles the setting or flips the mode. The factor is *not* recomputed on seek,
+pause, or position change; only on a track change or a setting change.
+
+### User volume is independent
+
+Changing the user volume (slider, media key, MPRIS `Volume`) recomputes the composite
+against the current factor but never changes the factor. Reading the volume anywhere
+(`Player.volume()`, the Spec 18 `volume_changed` payload, the persisted `audio.volume`,
+the MPRIS `Volume` property) always returns the user's 0-100 - the ReplayGain scaling is
+invisible to every volume consumer. In particular the **MPRIS `Volume`** (Spec 20)
+reflects the user level, unaffected by levelling.
+
+### No clipping
+
+The composite is clamped to `<= 1.0` in `_apply_output_volume`, so a boost (positive
+gain) at a high user volume caps at full scale rather than overdriving the output.
+Attenuation is always fully applied. Peak-tag-based limiting (using
+`REPLAYGAIN_*_PEAK` to *reduce* gain so the true peak stays below full scale) is a
+refinement left out of v1 - clamping the output scalar already guarantees no >1.0 level
+reaches the device.
+
+## UI surface
+
+- **Playback menu** (new, top-level, after View): `[x] Volume Levelling (ReplayGain)`
+  (checkable) - separator - `Levelling reference >` submenu with `(*) Album` / `( ) Track`
+  (exclusive radio). Plain-text labels (screen-reader announced by Qt). No other in-window
+  change; no toolbar, no status indicator.
+- **Accessibility** - the actions carry text labels; the checkable/radio state is Qt-
+  native accessible. No color-only signalling.
+
+## Inputs
+
+- `replaygain` settings block at startup (`read_replaygain`).
+- Per-track ReplayGain dB read at library-scan time (`Track.from_path`).
+- `PlaybackController.current_changed` (Spec 15) - the loaded-track trigger for a
+  re-apply.
+- Menu triggers (toggle, mode radio).
+
+## Outputs
+
+- `Player.set_replaygain_factor` calls (the audible result: a scaled `QAudioOutput`
+  level).
+- `write_replaygain(...)` persistence on a toggle / mode change.
+- No new signal: `ReplayGainService` is a sink + command-forwarder. `Player` gains no
+  new signal (the factor change is deliberately silent).
+
+## Errors & edge cases
+
+| Condition | Behavior |
+|---|---|
+| `replaygain` block absent / malformed | `read_replaygain` returns defaults (`enabled=False`, `mode="album"`). |
+| `mode` a hand-edited unknown value | Falls back to `"album"` (whitelist guard). |
+| Track has no ReplayGain tags | `_read_replaygain` returns `(None, None)`; `gain_factor` -> `1.0`; plays at user volume. |
+| A `TXXX` gain value that does not parse (e.g. `"loud"`) | That tag is treated as absent (skipped, not raised); the other value / `RVA2` / `1.0` is used. |
+| Only `TRACK_GAIN` present, mode `album` (or vice versa) | Falls back to the present value (symmetric fallback). |
+| Non-mp3 file (FLAC/OGG/Opus/MP4) with ReplayGain | Reads `None` in this phase (ID3-only); plays unlevelled. Documented follow-up. |
+| Levelling enabled while a track is playing | The setter re-applies immediately for the current track; the composite output level updates without changing the slider. |
+| Boost gain at user volume 100 | Composite clamps to `1.0` (no overdrive). |
+| Levelling toggled off | Factor returns to `1.0` on the next re-apply (immediate for the current track); output level returns to `user_volume/100`. |
+
+## Cross-spec amendments
+
+- **Spec 06 (`06-audio-playback.md`)** - the volume section gains the composite-output
+  note: `Player` now stores the user volume as the source of truth (`volume()` returns
+  it) and multiplies an internal ReplayGain factor into the `QAudioOutput` level via
+  `set_replaygain_factor` (no `volume_changed` on a factor change). The `audio.volume`
+  persistence and the Spec 18 `volume_changed` semantics are unchanged (both are the
+  user volume).
+- **Spec 10 (`10-persistence.md`)** - add the `replaygain` block (`enabled: bool`,
+  `mode: "album"|"track"`) to the `settings.json` schema, alongside `audio` /
+  `alignment` / `ui`.
+- **Spec 00 (`00-app-overview.md`)** - add the Spec 21 row to the spec index.
+- No change to Specs 15/18/20 contracts (this consumes `current_changed` and composes
+  with the existing volume path; the MPRIS `Volume` still reads the user level).
+
+## Test contract
+
+Tests reference their TC ID via a `# Spec: TC-21-NN` marker. All are bus-free and
+audio-pipeline-free (the composite is asserted on `_output.volume()`, not on audible
+playback).
+
+- **TC-21-01** - `read_replaygain`: absent/malformed block -> `ReplayGainSettings(False,
+  "album")`; a non-bool `enabled` -> `False`; an unknown `mode` -> `"album"`; a valid
+  `{"enabled": true, "mode": "track"}` round-trips.
+- **TC-21-02** - `write_replaygain` writes the block, preserves a pre-existing
+  top-level key (e.g. `audio`), and stamps `schema_version`; a `read_replaygain` after
+  the write returns the written values.
+- **TC-21-03** - `Track.from_path` on a file tagged
+  `TXXX:REPLAYGAIN_TRACK_GAIN="-6.48 dB"` + `TXXX:REPLAYGAIN_ALBUM_GAIN="-8.30 dB"`
+  reads `replaygain_track_gain == -6.48` and `replaygain_album_gain == -8.30`; a file
+  with the **lowercase** desc `replaygain_track_gain` is read the same (case-insensitive
+  match); a file with no ReplayGain tags reads `None`/`None`; a file whose only gain is
+  an `RVA2` frame reads that gain as the track value.
+- **TC-21-04** - `gain_factor`: `None` track -> `1.0`; `album` mode picks the album
+  gain (`gain_factor(track(album=-6.0), "album") == pytest.approx(10 ** (-6/20))`);
+  falls back to track gain when album is `None`; `track` mode picks the track gain and
+  falls back to album; both `None` -> `1.0`.
+- **TC-21-05** - `Player` composite: after `set_volume(80)` and
+  `set_replaygain_factor(0.5)`, `_output.volume() == pytest.approx(0.4)` while
+  `volume() == 80`; `set_volume(60)` then re-reads `_output.volume() ==
+  pytest.approx(0.3)` (factor still applied); `set_replaygain_factor(1.0)` restores
+  `_output.volume() == pytest.approx(0.6)`; a boost `set_replaygain_factor(2.0)` at
+  volume 80 clamps `_output.volume() == pytest.approx(1.0)`; `set_replaygain_factor`
+  emits **no** `volume_changed` (spy the signal); `set_volume` still emits it once on a
+  real change (INV-18-1 preserved).
+- **TC-21-06** - `ReplayGainService`: with `enabled=False`, a `current_changed(track)`
+  leaves the factor `1.0` (spy `player.set_replaygain_factor`); with `enabled=True`,
+  `current_changed(track_with_album_gain)` applies `gain_factor(track, mode)`;
+  `set_enabled(True)` / `set_mode("track")` each re-apply for the current track **and**
+  call `write_replaygain` (spy persistence); `set_mode` to an in-whitelist value updates
+  `mode()`.
+- **TC-21-07** - `MainWindow` Playback menu: the checkable **Volume Levelling** action
+  exists and reflects the persisted `enabled` at startup; triggering it calls
+  `ReplayGainService.set_enabled` with the new checked state; the **Album** / **Track**
+  radio group reflects the persisted `mode` and triggering **Track** calls
+  `set_mode("track")`.
+
+## Out of scope
+
+- **Scanning / writing ReplayGain tags** - external tools (`rsgain`, `r128gain`) own
+  that; Album Builder only *reads* pre-existing tags.
+- **Non-ID3 ReplayGain** - Vorbis-comment (FLAC/OGG/Opus) and MP4 freeform gain tags -
+  a follow-up; this phase reads ID3 (`TXXX` + `RVA2`) only.
+- **Peak-based clip limiting** - using `REPLAYGAIN_*_PEAK` to pre-attenuate; the
+  in-app composite clamp already prevents an over-1.0 output level.
+- **Pre-amp / target-loudness offset** - a global dB trim on top of the tag gain; not a
+  relevant knob for a curation app (would be over-engineering).
+- **Equalizer, gapless, crossfade** - the other Phase F items; deferred (they retire
+  `QMediaPlayer`; see the spike memo).
+- **A modal settings/preferences dialog** - the app has none; this follows the Spec 19
+  live-menu-toggle pattern instead.
