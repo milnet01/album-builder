@@ -56,10 +56,12 @@ desktop), so the app is unchanged on any environment that lacks them.
   no shadow state); property *writes* and method calls forward to the same setters
   the in-app transport uses. **Change broadcast** to D-Bus is an explicit
   `org.freedesktop.DBus.Properties.PropertiesChanged` signal the service emits when a
-  wired app-signal fires (`Player.state_changed` (Spec 06); `PlaybackController.current_changed`
-  + `queue_changed` (Spec 15, the latter driving the Can* flags); `Player.volume_changed`
-  + `PlaybackController.shuffle_changed` + `repeat_changed` (Spec 18)) — Qt does not
-  auto-emit it for a Python `pyqtProperty`.
+  wired app-signal fires (`Player.state_changed` + `duration_changed` (Spec 06);
+  `PlaybackController.current_changed` + `queue_changed` (Spec 15, the latter driving
+  the Can* flags); `Player.volume_changed` + `PlaybackController.shuffle_changed` +
+  `repeat_changed` (Spec 18) — seven sources; `Player.seeked` separately drives the
+  `Seeked` signal, not `PropertiesChanged`) — Qt does not auto-emit it for a Python
+  `pyqtProperty`.
 - **Pure mapping helpers** — the value translations between the app's domain and the
   MPRIS wire types are module-level pure functions, unit-tested directly without a
   bus: `playback_status(PlayerState) -> str`, `loop_status(RepeatMode) -> str` and
@@ -115,8 +117,9 @@ def seek(self, seconds: float) -> None:
   track index/id, e.g. `/org/mpris/MediaPlayer2/albumbuilder/track/<n>`; MPRIS requires
   a valid object path, **never** an empty string. On a track: adds `mpris:length`
   (duration in **microseconds**, int64-pinned — see the type-pin note below),
-  `xesam:title` (str), `xesam:artist` (a **`QStringList`** `[str]`, per the `as`
-  signature — a bare string is a conformance bug), `xesam:album` (str), and
+  `xesam:title` (str), `xesam:artist` (a list `[str]` in the dict — the property getter
+  emits it as `as` via the `QDBusArgument` carrier; a bare string is a conformance
+  bug), `xesam:album` (str), and
   `mpris:artUrl` (str) **iff** `art_url` is not None. On `None` track: an **empty map
   `{}`** — the MPRIS "no current track" convention when `HasTrackList=False` (the
   `/org/mpris/MediaPlayer2/TrackList/NoTrack` path is a *TrackList*-interface concept
@@ -135,14 +138,22 @@ def seek(self, seconds: float) -> None:
     `pyqtProperty('QVariantMap')` for `Metadata` (`a{sv}`);
     `pyqtProperty('QStringList')` for `SupportedUriSchemes` / `SupportedMimeTypes`
     (`as`); `QDBusObjectPath` for `o`; `str`/`bool`/`float` for `s`/`b`/`d`.
-  - **Metadata `a{sv}` values** — `mpris:length` (an `x`) must NOT be a plain Python
-    `int` and NOT `QVariant(qlonglong)` (which is *not valid PyQt6*: `qlonglong` isn't
-    importable, and `QVariant(<int>)` is itself value-dependent — it reproduces the
-    int32 overflow). Pin it via an explicitly-typed carrier — a `QDBusArgument` written
-    with `QMetaType.Type.LongLong`, or an equivalent int64-typed wrap — verified at
-    implementation by the `AB_INTEGRATION_DBUS` wire-signature test. `mpris:trackid` is
-    a `QDBusObjectPath` (`o`); `xesam:artist` must carry as `as` (a `QStringList`, not a
-    bare `list` that could become `av`).
+  - **Metadata `a{sv}` values — build the whole map as one `QDBusArgument`.** A nested
+    value inside an `a{sv}` has no property to declare its type, so the per-value pins
+    that work at the property level do NOT work here: a plain `int` marshals
+    value-dependently (int32 overflow), a plain `list[str]` can marshal as `av` not
+    `as`, and `QStringList` is **not a constructible value** in PyQt6 6.11 (no
+    importable `QtCore.QStringList` / `QtDBus.QStringList`). `QVariant(qlonglong)` is
+    likewise not a valid int64 pin (`qlonglong` isn't importable; `QVariant(<int>)` is
+    value-dependent). Split the concern: the pure `track_metadata` helper returns a
+    **plain Python dict** (the logical content — unit-tested by TC-20-03), and the
+    **`Metadata` property getter** converts that dict into a **single `QDBusArgument`**
+    built `a{sv}` with each value at its intended signature: `mpris:length` added
+    as `QMetaType.Type.LongLong` (`x`), `xesam:artist` written via
+    `beginArray(QMetaType.Type.QString.value)` (`as`), `mpris:trackid` as a
+    `QDBusObjectPath` (`o`), the rest as strings. A plain `dict` mixing
+    `QDBusObjectPath` + int + list is fragile and must not be shipped. The wire
+    signatures are verified at implementation by the `AB_INTEGRATION_DBUS` test.
   - **Signals / slots carrying `x`** — `Seeked = pyqtSignal('qlonglong')`;
     `Seek(offset)` is `@pyqtSlot('qlonglong')`; `SetPosition` is
     `@pyqtSlot(QDBusObjectPath, 'qlonglong')`. A `pyqtSignal(int)` / `@pyqtSlot(int)`
@@ -189,9 +200,10 @@ state.
   - `SetPosition(track_id: 'o', position: 'x')` -> ignore unless `track_id` equals the
     current track's synthetic trackid (the MPRIS race-guard — a stale client request
     against a track that already changed must be dropped) **and** `0 <= position <=
-    length` (MPRIS requires a no-op, not a clamp, for an out-of-range position — so
-    the adaptor range-checks against `player.duration()` **before** calling
-    `player.seek(position/1e6)`, rather than relying on `Player.seek`'s clamp).
+    length` (MPRIS requires a no-op, not a clamp, for an out-of-range position). Mind
+    the units: `position` is microseconds and `player.duration()` is seconds, so the
+    guard is `0 <= position <= player.duration() * 1_000_000` **before** calling
+    `player.seek(position/1e6)`, rather than relying on `Player.seek`'s clamp.
   - `OpenUri(uri: 's')` -> **no-op** (the app plays only its own library; opening
     arbitrary URIs is out of scope). `SupportedUriSchemes` still lists `file` for
     honesty about what the app *could* accept, but Phase G does not wire OpenUri to a
@@ -241,8 +253,13 @@ state.
     — and hands it to a distinct low-level send step (the session-bus `send`), which
     tests spy to verify the guard (TC-20-09) independently of the handler->chokepoint
     wiring (TC-20-10, which patches the chokepoint).
-  - `_emit_seeked(position_us: int)` — returns if not available; else emits the
-    adaptor's `Seeked` D-Bus signal.
+  - `_emit_seeked(position_us: int)` — returns if not available; else sends the
+    `Seeked` D-Bus signal. Mechanism parallels `PropertiesChanged`: build it with
+    `QDBusMessage.createSignal("/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player",
+    "Seeked")`, append the int64 `position_us`, and hand it to the same low-level send
+    step (so the `available` guard and the test spy cover it identically). (The player
+    adaptor also declares `Seeked = pyqtSignal('qlonglong')` for introspection; the
+    explicit `createSignal` send is what actually reaches the bus.)
 - Owns the **cover-art temp file** (refresh connected unconditionally, independent of
   the bus gate): on `current_changed`, if the new track has `cover_data`, writes it to
   a temp file (via `tempfile`, suffixed by the `cover_mime`-decoded image type) and
@@ -280,16 +297,20 @@ state.
 - `activated` on `Trigger` (left-click) -> toggle the window (show + raise if hidden
   or minimised; hide if visible and active). `Context` (right-click) shows the menu
   (Qt default).
-- Uses the app icon passed in by `MainWindow` (`self.windowIcon()`, which `app.py`
-  sets via `setWindowIcon` from `resolve_app_icon`); falls back to a themed icon name
+- Uses the app icon passed in by `MainWindow` (`self.windowIcon()`; `app.py` sets it
+  application-wide via `QApplication.setWindowIcon` from `resolve_app_icon`, and
+  `QWidget.windowIcon()` falls back to that app icon); falls back to a themed icon name
   if the passed icon is null.
 
 ### `ui/main_window.py` — construction + teardown
 
 - After `_player` / `_controller` exist, construct
-  `self._mpris = MprisService(self._player, self._controller, self)` and
-  `self._tray = TrayIcon(self._player, self._controller, self, self.windowIcon())`.
-  Both are parented to `MainWindow` for lifetime; both self-guard on capability.
+  `self._mpris = MprisService(self._player, self._controller, self, parent=self)` and
+  `self._tray = TrayIcon(self._player, self._controller, self, self.windowIcon(), parent=self)`
+  — `window` is `self` (the functional window reference for Raise/Show) and `parent`
+  is `self` (the Qt parent), so the objects live and die with `MainWindow`
+  (the constructor's `super().__init__(parent)` makes the lifetime claim literal; tests
+  may pass `parent=None` with a fake `window`). Both self-guard on capability.
 - `closeEvent` unregisters the MPRIS service (drops the bus name so a relaunch is
   clean) and removes the cover-art temp file; the tray icon is hidden. These are
   additive to the existing `closeEvent` (which already saves state).
@@ -354,9 +375,10 @@ table is unchanged; the OS owns the hardware keys once an MPRIS service is prese
 - MPRIS method calls and property writes from any D-Bus client (Plasma applet, lock
   screen, `playerctl`, hardware media keys routed by the desktop).
 - Tray-menu triggers and the tray `activated` left-click.
-- App-side broadcasts consumed to emit `PropertiesChanged`: `Player.state_changed` /
-  `volume_changed` / `seeked`; `PlaybackController.current_changed` / `queue_changed` /
-  `shuffle_changed` / `repeat_changed`.
+- App-side broadcasts consumed to emit `PropertiesChanged` (seven): `Player.state_changed` /
+  `duration_changed` / `volume_changed`; `PlaybackController.current_changed` /
+  `queue_changed` / `shuffle_changed` / `repeat_changed`. Separately, `Player.seeked`
+  drives the `Seeked` D-Bus signal (not `PropertiesChanged`).
 
 ## Outputs
 
@@ -388,10 +410,13 @@ table is unchanged; the OS owns the hardware keys once an MPRIS service is prese
   emitted at the end of `seek()`. Add it to §Outputs (the signal list) and note it is
   the discontinuous-jump pulse (distinct from the continuous `position_changed`);
   its sole consumer in Phase G is the MPRIS `Seeked` relay. No behavior change to
-  `seek()` itself beyond the trailing emit. **While editing that list, also fold in
-  `volume_changed` / `muted_changed`** — Spec 18 (Phase E) added those two `Player`
-  signals but never amended Spec 06's §Outputs, so the list is already one increment
-  stale; add all three in the same edit so §Outputs matches the class.
+  `seek()` itself beyond the trailing emit. `Player` also gains a
+  `_set_duration_for_test(seconds)` seam (test-only, paralleling `_set_state_for_test`)
+  so TC-20-04's upper-clamp branch is testable without poking the private field.
+  **While editing §Outputs, also fold in `volume_changed` / `muted_changed`** — Spec 18
+  (Phase E) added those two `Player` signals but never amended Spec 06's §Outputs, so
+  the list is already one increment stale; add all three in the same edit so §Outputs
+  matches the class.
 - **Spec 00 (`00-app-overview.md`)** — add the Spec 20 row to the spec index;
   note MPRIS2 media-key handling in the keyboard-shortcuts context (the OS owns the
   hardware keys; the in-app table is unchanged).
@@ -433,7 +458,10 @@ bus; it is skipped by default (mirrors the audio-integration gating in
   `player.position()` read-back, which lags asynchronously). The pulse is
   unconditional on a `seek()` call, including a no-op re-seek to the same value (a
   harmless over-emit relative to MPRIS, which the service tolerates because `seek()` is
-  only called on discrete user gestures, never continuously).
+  only called on discrete user gestures, never continuously). Exercising the *upper*
+  clamp (`seconds > dur-1`) needs `_duration_seconds > 0`; since `Player` exposes no
+  public duration setter, add a `_set_duration_for_test` seam (paralleling the existing
+  `_set_state_for_test`) rather than poking the private field.
 - **TC-20-05** — The player adaptor's `PlaybackStatus` / `LoopStatus` / `Shuffle` /
   `Volume` / `Position` / `Metadata` / `Rate` / `MinimumRate` / `MaximumRate` getters
   return the mapped values for a fake player+controller in a known state (e.g. PLAYING,
@@ -477,8 +505,11 @@ bus; it is skipped by default (mirrors the audio-integration gating in
   prior temp file and drops `mpris:artUrl`; `current_changed(None)` removes it too.
 - **TC-20-12** — `TrayIcon` with tray available builds a 6-action menu
   (Play/Pause, Next, Previous, separator, Show/Hide, Quit); the Play/Pause action
-  label flips on `state_changed`; triggering Next calls `controller.next()`; with tray
-  **unavailable**, `available=False` and no menu/icon is built (no crash).
+  label flips on `state_changed`. Each action's trigger calls the right command
+  (spied on fakes): Play/Pause -> `player.toggle`, Next -> `controller.next`,
+  Previous -> `controller.previous`, Quit -> `QApplication.quit`, Show/Hide toggles the
+  window's visibility. With tray **unavailable**, `available=False` and no menu/icon is
+  built (no crash).
 - **TC-20-13** — Tray `activated(Trigger)` on a hidden window shows + raises it; on a
   visible/active window hides it.
 - **TC-20-14** — `MainWindow` constructs `_mpris` and `_tray` (both present as
