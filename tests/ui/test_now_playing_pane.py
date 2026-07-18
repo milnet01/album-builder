@@ -43,46 +43,46 @@ def pane(qtbot):
 
 def test_no_track_shows_placeholder(pane) -> None:
     p = pane
-    assert p.title_label.text() == ""
-    assert p.placeholder_label.isVisible()
+    assert p.card.title_label.text() == ""
+    assert p.card.placeholder_label.isVisible()
 
 
 def test_set_track_shows_metadata(pane, tmp_path: Path) -> None:
     p = pane
     p.set_track(_make_track(tmp_path))
-    assert p.title_label.text() == "Walking The Line"
-    assert p.artist_label.text() == "18 Down"
-    assert p.album_label.text() == "Memoirs of a Sinner"
-    assert "A. Smith" in p.composer_label.text()
-    assert p.comment_label.text() == "rough mix"
-    assert not p.placeholder_label.isVisible()
+    assert p.card.title_label.text() == "Walking The Line"
+    assert p.card.artist_label.text() == "18 Down"
+    assert p.card.album_label.text() == "Memoirs of a Sinner"
+    assert "A. Smith" in p.card.composer_label.text()
+    assert p.card.comment_label.text() == "rough mix"
+    assert not p.card.placeholder_label.isVisible()
 
 
 def test_set_track_none_clears(pane, tmp_path: Path) -> None:
     p = pane
     p.set_track(_make_track(tmp_path))
     p.set_track(None)
-    assert p.title_label.text() == ""
-    assert p.album_label.text() == ""
-    assert p.placeholder_label.isVisible()
+    assert p.card.title_label.text() == ""
+    assert p.card.album_label.text() == ""
+    assert p.card.placeholder_label.isVisible()
 
 
 def test_set_track_with_no_composer_clears_label(pane, tmp_path: Path) -> None:
     p = pane
     p.set_track(_make_track(tmp_path, composer=""))
-    assert p.composer_label.text() == ""
+    assert p.card.composer_label.text() == ""
 
 
 def test_set_track_with_no_comment_clears_label(pane, tmp_path: Path) -> None:
     p = pane
     p.set_track(_make_track(tmp_path, comment=""))
-    assert p.comment_label.text() == ""
+    assert p.card.comment_label.text() == ""
 
 
 def test_set_track_with_no_cover_shows_placeholder_text(pane, tmp_path: Path) -> None:
     p = pane
     p.set_track(_make_track(tmp_path, cover_data=None))
-    assert p.cover_label.text() == "(no cover)"
+    assert p.card.cover_label.text() == "(no cover)"
 
 
 def test_lyrics_panel_present(pane) -> None:
@@ -103,7 +103,7 @@ def test_invalid_cover_data_shows_unavailable_text(pane, tmp_path: Path) -> None
     """Bytes that don't decode as a known image format must not crash."""
     p = pane
     p.set_track(_make_track(tmp_path, cover_data=b"\x00\x01not-an-image"))
-    assert p.cover_label.text() == "(cover unavailable)"
+    assert p.card.cover_label.text() == "(cover unavailable)"
 
 
 # Indie-review L7-M5: NowPlayingPane.set_track(None) must clear the

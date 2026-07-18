@@ -247,9 +247,13 @@ Commands:
 - `set_repeat(mode: RepeatMode) -> None` — delegate to the queue. Changes neither
   the source, the play order, nor any Phase B observable; emits **no** signal
   (the transport that surfaces repeat mode is Phase C).
+  **Superseded by Spec 18 (Phase E):** `set_repeat` now emits `repeat_changed(mode)`
+  (still no `queue_changed` / `current_changed`), and `set_shuffle` now emits
+  `shuffle_changed(enabled)` in addition to its existing `queue_changed`.
 
-Signals (two; both follow the project's `pyqtSignal(object)` single-payload
-idiom):
+Signals (four as of Spec 18 — originally two here; both original signals follow
+the project's `pyqtSignal(object)` single-payload idiom, as do the Spec 18
+additions `shuffle_changed` / `repeat_changed`):
 
 - `queue_changed = pyqtSignal(object)` — Type: `tuple[Track, ...]`, the new
   `play_order()` snapshot; the Up Next list rebuilds from it. Two emit triggers:
@@ -488,6 +492,9 @@ the new slot. The current *track* is unchanged, so `set_shuffle` emits no
 controller, because the highlight is pulled, not diffed. `set_repeat` changes
 neither source, order, nor current track, and nothing visible in Phase B depends
 on repeat mode (its transport is Phase C), so it emits no signal.
+**Superseded by Spec 18 (Phase E):** `set_repeat` now emits `repeat_changed(mode)`
+and `set_shuffle` additionally emits `shuffle_changed(enabled)` (still no
+`current_changed`), so two transport bars stay mode-coherent.
 
 ## UI surface
 
@@ -521,6 +528,9 @@ on repeat mode (its transport is Phase C), so it emits no signal.
   Up Next *highlight* is pulled via `current_position()` after either signal; the
   library play-glyph is driven by `Player.state_changed` (Spec 06 TC-06-19), not
   by either controller signal.
+- **Spec 18 (Phase E) adds** `PlaybackController.shuffle_changed(bool)` /
+  `repeat_changed(RepeatMode)` outputs, consumed by every `TransportBar` to keep
+  two mode-button clusters coherent.
 - A persisted last-played entry in `state.json` on `current_changed` (reusing
   the existing Spec 10 write the old preview path performed; debounced as
   before). No new on-disk schema in Phase B — the queue itself is not persisted
@@ -695,6 +705,11 @@ assert on a "playing" state without real async decode uses the Spec 06
 - **TC-15-33** — `set_repeat(ALL)` (and each other mode) changes neither
   `player.source()` nor `play_order()` and emits **no** signal (`queue_changed` and
   `current_changed` both silent), while `repeat_mode()` round-trips the set value.
+  **Superseded by Spec 18 TC-18-04 (Phase E):** `set_repeat` now emits
+  `repeat_changed(mode)`. The narrower claim above still holds — it never spied
+  `repeat_changed`, only `queue_changed` / `current_changed`, both still silent —
+  so the test survives (renamed `test_set_repeat_emits_no_queue_or_current_signal`);
+  the "emits no signal" wording is superseded, not the assertion.
 - **TC-15-34** — `play_next(X)` onto an **empty** stopped controller mirrors
   `enqueue`-on-empty: `current_track() == X`, `current_position() == 0`, player
   `STOPPED` with no source loaded, `queue_changed` fired, **no** `current_changed`.

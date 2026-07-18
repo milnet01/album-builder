@@ -122,6 +122,15 @@ class TransportBar(QWidget):
         player.duration_changed.connect(self._on_duration_changed)
         player.state_changed.connect(self._on_state_changed)
         player.buffering_changed.connect(self._on_buffering_changed)
+        # Spec 18: the four previously-imperative states (volume/mute/shuffle/
+        # repeat) become signal-driven, so operating either of two TransportBars
+        # keeps the other in lockstep. setChecked / _sync_repeat_glyph fire
+        # `toggled`, not the wired `clicked`, so these updates never re-invoke a
+        # setter; the volume read-back is guarded against fighting a local drag.
+        player.volume_changed.connect(self._on_volume_changed)
+        player.muted_changed.connect(lambda _m: self._sync_mute_glyph())
+        controller.shuffle_changed.connect(self.btn_shuffle.setChecked)
+        controller.repeat_changed.connect(self._sync_repeat_glyph)
         # Sync the mute glyph to whatever was restored from settings.
         self._sync_mute_glyph()
         # Seed the repeat button from the controller's current mode.
@@ -143,12 +152,12 @@ class TransportBar(QWidget):
         self._controller.set_shuffle(self.btn_shuffle.isChecked())
 
     def _cycle_repeat(self) -> None:
-        # Read the controller's live mode, step the explicit cycle, and let
-        # _sync_repeat_glyph set the authoritative checked state (overriding the
-        # checkable button's native auto-toggle that fired before this slot).
+        # Read the controller's live mode, step the explicit cycle. The glyph is
+        # driven by the returning repeat_changed broadcast (Spec 18), which runs
+        # _sync_repeat_glyph on every bar - overriding this button's native
+        # auto-toggle - before set_repeat returns.
         nxt = _NEXT_REPEAT[self._controller.repeat_mode()]
         self._controller.set_repeat(nxt)
-        self._sync_repeat_glyph(nxt)
 
     def _sync_repeat_glyph(self, mode: RepeatMode) -> None:
         self.btn_repeat.setChecked(mode is not RepeatMode.OFF)
@@ -163,8 +172,16 @@ class TransportBar(QWidget):
             self.btn_repeat.setAccessibleName("Repeat off")
 
     def _on_mute_clicked(self) -> None:
+        # The glyph is driven by Player.muted_changed (Spec 18), for both bars
+        # at once; no imperative self-patch here.
         self._player.set_muted(not self._player.muted())
-        self._sync_mute_glyph()
+
+    def _on_volume_changed(self, v: int) -> None:
+        # Spec 18 read-back: mirror the player's volume onto our slider unless
+        # THIS bar is mid-drag (don't fight the user's gesture; the other bar
+        # follows live). The echo into set_volume settles via its guard.
+        if not self.volume_slider.isSliderDown():
+            self.volume_slider.setValue(v)
 
     def _on_scrub_released(self) -> None:
         self._player.seek(float(self.scrubber.value()))

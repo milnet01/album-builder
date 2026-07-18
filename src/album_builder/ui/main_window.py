@@ -58,6 +58,7 @@ from album_builder.services.usage_index import UsageIndex
 from album_builder.ui.album_order_pane import AlbumOrderPane
 from album_builder.ui.library_pane import LibraryPane
 from album_builder.ui.now_playing_pane import NowPlayingPane
+from album_builder.ui.player_pane import PlayerPane
 from album_builder.ui.playlists_pane import PlaylistsPane
 from album_builder.ui.queue_pane import QueuePane
 from album_builder.ui.theme import THEMES, Glyphs, palette_for, qt_stylesheet
@@ -232,19 +233,26 @@ class MainWindow(QMainWindow):
         curation_layout.addWidget(self.top_bar)
         curation_layout.addWidget(self.splitter, stretch=1)
         self.tabs.addTab(curation, "Album Builder")
-        # Spec 17 (Phase D): the Player tab stacks the saved-playlists surface
-        # above the live Up Next queue (same container pattern the curation tab
-        # uses for TopBar + splitter).
+        # Spec 18 (Phase E): the Player tab is a dedicated listening surface.
+        # PlayerPane composes the now-playing card + full transport (left) with
+        # synced lyrics over an Up Next / Playlists tab group (right). It reuses
+        # the same playlists_pane / queue_pane instances (reparented into it), so
+        # all their MainWindow wiring below stays valid.
         self.playlists_pane = PlaylistsPane()
         self.queue_pane = QueuePane()
-        player_tab = QWidget()
-        player_layout = QVBoxLayout(player_tab)
-        player_layout.setContentsMargins(0, 0, 0, 0)
-        player_layout.setSpacing(10)
-        player_layout.addWidget(self.playlists_pane, stretch=1)
-        player_layout.addWidget(self.queue_pane, stretch=1)
-        self.tabs.addTab(player_tab, "Player")
+        self._player_pane = PlayerPane(
+            self._player, self._controller, self.queue_pane, self.playlists_pane
+        )
+        self.tabs.addTab(self._player_pane, "Player")
         outer.addWidget(self.tabs, stretch=1)
+
+        # Spec 18 now-playing surfaces: the curation pane and the Player pane
+        # both render the current track + lyrics. MainWindow fans updates to
+        # every surface in one list, so a new surface is added here, not threaded
+        # through each slot. Each surface exposes set_track(Track | None) and a
+        # lyrics_panel; set_track(None) self-clears its own lyrics (symmetric).
+        self._surfaces = (self.now_playing_pane, self._player_pane)
+        self._lyrics_panels = tuple(s.lyrics_panel for s in self._surfaces)
 
         # Toast overlays the bottom of the central widget. Position is
         # updated on resize so it always sits above the bottom edge.
@@ -314,13 +322,12 @@ class MainWindow(QMainWindow):
         self.playlists_pane.remove_track_requested.connect(self._playlist_store.remove_track)
         self.playlists_pane.play_requested.connect(self._on_play_playlist)
         self.library_pane.add_to_playlist_requested.connect(self._on_add_to_playlist)
-        # Lyrics: tracker → panel (current-line index); panel → service (Align-now)
-        self._tracker.current_line_changed.connect(
-            self.now_playing_pane.lyrics_panel.set_current_line
-        )
-        self.now_playing_pane.lyrics_panel.align_now_requested.connect(
-            self._on_align_now_clicked
-        )
+        # Lyrics: tracker → each panel (current-line index); each panel → service
+        # (Align-now). Spec 18 fans both to every now-playing surface's panel;
+        # the align handler acts on the loaded track, not the sending panel.
+        for _panel in self._lyrics_panels:
+            self._tracker.current_line_changed.connect(_panel.set_current_line)
+            _panel.align_now_requested.connect(self._on_align_now_clicked)
         # Spec 06 TC-06-19: per-row PLAY/PAUSE glyph mirrors player state.
         # The two panes are agnostic of the Player; main_window pushes the
         # (active-path, playing) tuple on every state_changed.
@@ -339,7 +346,7 @@ class MainWindow(QMainWindow):
             )
             if track is not None:
                 self._player.set_source(track.path)
-                self.now_playing_pane.set_track(track)
+                self._set_track_all(track)
                 # Spec 07 cache-hit at startup: if the LRC is fresh, show
                 # the lyrics paused at zero alongside the track.
                 self._sync_lyrics_for_track(track)
@@ -405,8 +412,10 @@ class MainWindow(QMainWindow):
     def _apply_theme(self, theme_id: str, *, persist: bool) -> None:
         palette = palette_for(theme_id)
         self.setStyleSheet(qt_stylesheet(palette))
-        # Refresh the two imperative-styled widgets (the rest follow the QSS swap).
-        self.now_playing_pane.lyrics_panel.set_palette(palette)
+        # Refresh the imperative-styled widgets (the rest follow the QSS swap).
+        # Spec 18: both now-playing surfaces' lyrics panels, not just curation's.
+        for panel in self._lyrics_panels:
+            panel.set_palette(palette)
         self.library_pane.set_palette(palette)
         self._current_theme = theme_id
         action = self._theme_actions.get(theme_id)
@@ -780,10 +789,9 @@ class MainWindow(QMainWindow):
     def _toggle_mute(self) -> None:
         if self._key_in_text_field():
             return
+        # Spec 18: set_muted emits muted_changed, which drives _sync_mute_glyph
+        # on every TransportBar; no imperative per-bar re-sync needed.
         self._player.set_muted(not self._player.muted())
-        # Sync transport-bar glyph if the now-playing pane has surfaced one.
-        if hasattr(self.now_playing_pane, "transport"):
-            self.now_playing_pane.transport._sync_mute_glyph()
 
     def _show_help(self) -> None:
         QMessageBox.information(
@@ -798,6 +806,20 @@ class MainWindow(QMainWindow):
             "M — Mute / unmute\n\n"
             "Transport shortcuts are suppressed while typing in a text field.",
         )
+
+    # ---- Spec 18: fan-out to both now-playing surfaces ----------------
+
+    def _set_track_all(self, track: Track | None) -> None:
+        for s in self._surfaces:
+            s.set_track(track)
+
+    def _set_lyrics_all(self, lyrics) -> None:
+        for p in self._lyrics_panels:
+            p.set_lyrics(lyrics)
+
+    def _set_lyrics_status_all(self, status, percent=None) -> None:
+        for p in self._lyrics_panels:
+            p.set_status(status, percent=percent)
 
     def _on_player_state_changed_for_rows(self, state) -> None:
         """Spec 06 TC-06-19: push (active-source, is-playing) into both
@@ -834,7 +856,9 @@ class MainWindow(QMainWindow):
             # that has vanished from the library since the album was saved.
             self._toast.show_message(f"Track not in library: {path}")
             return
-        self.now_playing_pane.set_track(track)
+        # Spec 18: fan the previewed track to both surfaces so the Player-tab
+        # card/lyrics mirror the preview instead of going stale.
+        self._set_track_all(track)
         self._sync_lyrics_for_track(track)
 
     def _on_preview_play(self, path: Path) -> None:
@@ -859,12 +883,14 @@ class MainWindow(QMainWindow):
         signal-driven so auto-advance updates them too. The library play-glyph
         is NOT updated here; it rides Player.state_changed (TC-06-19)."""
         if track is None:
-            # Queue cleared (play_tracks([]) on a non-empty queue). Clear the
-            # now-playing surface; nothing is loaded.
-            self.now_playing_pane.set_track(None)
+            # Queue cleared (play_tracks([]) on a non-empty queue). Spec 18:
+            # _set_track_all(None) blanks both cards AND both lyrics panels
+            # (each surface's set_track(None) self-clears its own panel), so no
+            # separate _set_lyrics_all(None) is needed; clear the tracker too.
+            self._set_track_all(None)
             self._tracker.set_lyrics(None)
         else:
-            self.now_playing_pane.set_track(track)
+            self._set_track_all(track)
             self._sync_lyrics_for_track(track)
             self._state.last_played_track_path = track.path
             self._state_save_timer.start()
@@ -887,21 +913,23 @@ class MainWindow(QMainWindow):
         before any new Lyrics arrive, so a residual current-line index
         from the previous track can't render against the new track.
         """
-        panel = self.now_playing_pane.lyrics_panel
+        # Spec 18: only the panel writes fan out to both surfaces' lyrics
+        # panels; every other line (tracker reset, read_lrc, parse-fail
+        # fallthrough, auto-align gate) is unchanged.
         self._tracker.set_lyrics(None)
-        panel.set_lyrics(None)
+        self._set_lyrics_all(None)
         status = compute_status(track)
         if status == AlignmentStatus.READY:
             lyrics = read_lrc(track.path)
             if lyrics is not None:
-                panel.set_lyrics(lyrics)
+                self._set_lyrics_all(lyrics)
                 self._tracker.set_lyrics(lyrics)
-                panel.set_status(AlignmentStatus.READY)
+                self._set_lyrics_status_all(AlignmentStatus.READY)
                 return
             # The freshness check passed but the parse just failed — read_lrc
             # already moved the file to .bak; fall through to NOT_YET_ALIGNED.
             status = AlignmentStatus.NOT_YET_ALIGNED
-        panel.set_status(status)
+        self._set_lyrics_status_all(status)
         if status == AlignmentStatus.NOT_YET_ALIGNED:
             # L8-M5: auto_align_on_play is gated on the
             # alignment.auto_align_on_play setting (default off, Spec 07
@@ -952,21 +980,19 @@ class MainWindow(QMainWindow):
         active = self._state.last_played_track_path
         if active is None or path != active:
             return
-        self.now_playing_pane.lyrics_panel.set_status(status)
+        self._set_lyrics_status_all(status)
 
     def _on_alignment_progress(self, path: Path, percent: int) -> None:
         active = self._state.last_played_track_path
         if active is None or path != active:
             return
-        self.now_playing_pane.lyrics_panel.set_status(
-            AlignmentStatus.ALIGNING, percent=percent
-        )
+        self._set_lyrics_status_all(AlignmentStatus.ALIGNING, percent=percent)
 
     def _on_lyrics_ready(self, path: Path, lyrics) -> None:
         active = self._state.last_played_track_path
         if active is None or path != active:
             return
-        self.now_playing_pane.lyrics_panel.set_lyrics(lyrics)
+        self._set_lyrics_all(lyrics)
         self._tracker.set_lyrics(lyrics)
 
     def _on_alignment_error(self, _path: Path, msg: str) -> None:

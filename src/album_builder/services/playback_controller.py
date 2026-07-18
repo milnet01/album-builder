@@ -30,6 +30,10 @@ from album_builder.services.player import Player, PlayerState
 class PlaybackController(QObject):
     queue_changed = pyqtSignal(object)    # Type: tuple[Track, ...] (play order)
     current_changed = pyqtSignal(object)  # Type: Track | None (loaded track)
+    # Spec 18: broadcast mode changes so a second TransportBar's shuffle/repeat
+    # buttons stay coherent. pyqtSignal(object) matching the idiom above.
+    shuffle_changed = pyqtSignal(object)  # Type: bool
+    repeat_changed = pyqtSignal(object)   # Type: RepeatMode
 
     def __init__(self, player: Player, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -127,11 +131,19 @@ class PlaybackController(QObject):
             self.play_tracks([track])
 
     def set_shuffle(self, enabled: bool) -> None:
+        # Spec 18: emit shuffle_changed unconditionally (in addition to the
+        # existing queue_changed) so even a redundant call re-broadcasts the
+        # state and keeps every bar's checked visual coherent (TC-18-03). The
+        # setChecked subscriber fires `toggled`, not `clicked`, so no echo.
         self._queue.set_shuffle(enabled)
         self.queue_changed.emit(self._queue.play_order())
+        self.shuffle_changed.emit(enabled)
 
     def set_repeat(self, mode: RepeatMode) -> None:
+        # Spec 18: previously emitted nothing; now broadcasts repeat_changed
+        # (still no queue_changed / current_changed - TC-18-04).
         self._queue.set_repeat(mode)
+        self.repeat_changed.emit(mode)
 
     # ---- Internals ---------------------------------------------------
 

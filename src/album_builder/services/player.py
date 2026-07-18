@@ -50,6 +50,10 @@ class Player(QObject):
     # consumers needing to distinguish user-stop from end-of-media
     # subscribe here.
     ended = pyqtSignal()
+    # Spec 18: the state owner announces its own volume/mute change so a
+    # second TransportBar stays coherent (two live surfaces on one Player).
+    volume_changed = pyqtSignal(int)         # Type: clamped 0-100 percent
+    muted_changed = pyqtSignal(bool)         # Type: new mute state
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -151,14 +155,28 @@ class Player(QObject):
         self._state = state
 
     def set_volume(self, vol: int) -> None:
+        # Spec 18 INV-18-1: apply to _output BEFORE emitting. The two volume
+        # sliders echo back into set_volume; the guard's early-return relies on
+        # self.volume() already reflecting v on the re-entrant call, else the
+        # guard misses and re-emits (infinite loop). Emit on real change only.
         v = max(0, min(100, int(vol)))
+        if v == self.volume():
+            return
         self._output.setVolume(v / 100.0)
+        self.volume_changed.emit(v)
 
     def volume(self) -> int:
         return round(self._output.volume() * 100)
 
     def set_muted(self, m: bool) -> None:
-        self._output.setMuted(bool(m))
+        # Change-guarded for idempotency only: the subscriber (_sync_mute_glyph)
+        # re-reads muted() and never re-invokes set_muted, so there is no echo
+        # to break; apply before emit for consistency with set_volume.
+        m = bool(m)
+        if m == self.muted():
+            return
+        self._output.setMuted(m)
+        self.muted_changed.emit(m)
 
     def muted(self) -> bool:
         return self._output.isMuted()

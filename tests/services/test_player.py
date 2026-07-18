@@ -82,6 +82,37 @@ def test_set_muted_round_trip() -> None:
     assert p.muted() is False
 
 
+# Spec: TC-18-01
+def test_set_volume_emits_on_change_and_is_idempotent() -> None:
+    p = Player()
+    # QAudioOutput defaults to 100; move off the clamp targets first so a
+    # clamp-to-100 / clamp-to-0 registers as a real change that emits.
+    p.set_volume(50)
+    seen: list[int] = []
+    p.volume_changed.connect(seen.append)
+    p.set_volume(57)
+    assert p.volume() == 57          # round-trip: a regression surfaces here,
+    assert seen == [57]              # not as an echo-loop hang.
+    p.set_volume(57)                 # idempotent: current value emits nothing.
+    assert seen == [57]
+    p.set_volume(150)                # clamps to 100 (from 57, a real change).
+    p.set_volume(-5)                 # clamps to 0.
+    assert seen == [57, 100, 0]
+
+
+# Spec: TC-18-02
+def test_set_muted_emits_on_change_only() -> None:
+    p = Player()
+    seen: list[bool] = []
+    p.muted_changed.connect(seen.append)
+    p.set_muted(True)
+    assert seen == [True]
+    p.set_muted(True)                # no change -> no emit.
+    assert seen == [True]
+    p.set_muted(False)
+    assert seen == [True, False]
+
+
 # Spec: TC-06-07
 def test_codec_dialog_shown_flag_is_one_shot() -> None:
     p = Player()

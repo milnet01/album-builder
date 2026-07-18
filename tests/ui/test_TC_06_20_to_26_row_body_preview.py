@@ -83,8 +83,8 @@ def test_row_body_click_when_stopped_populates_now_playing(main_window, qtbot, m
     # Now-playing pane shows the row's metadata.
     src_row = proxy.mapToSource(view_idx).row()
     expected = win.library_pane._model.track_at(src_row)
-    assert win.now_playing_pane.title_label.text() == expected.title, (
-        f"TC-06-20: now-playing title is {win.now_playing_pane.title_label.text()!r}; "
+    assert win.now_playing_pane.card.title_label.text() == expected.title, (
+        f"TC-06-20: now-playing title is {win.now_playing_pane.card.title_label.text()!r}; "
         f"expected {expected.title!r}"
     )
 
@@ -146,7 +146,7 @@ def test_row_body_click_when_playing_is_noop(main_window, qtbot, monkeypatch) ->
     win._on_preview_play(tracks[0].path)
     qtbot.wait(50)
     win._player._set_state_for_test(PlayerState.PLAYING)
-    assert win.now_playing_pane.title_label.text() == tracks[0].title
+    assert win.now_playing_pane.card.title_label.text() == tracks[0].title
 
     # Click row-body of a DIFFERENT row.
     title_col = _col("title")
@@ -161,7 +161,7 @@ def test_row_body_click_when_playing_is_noop(main_window, qtbot, monkeypatch) ->
     win.library_pane._on_table_clicked(view_idx)
 
     # Now-playing still shows tracks[0]; player still on tracks[0].
-    assert win.now_playing_pane.title_label.text() == tracks[0].title, (
+    assert win.now_playing_pane.card.title_label.text() == tracks[0].title, (
         "TC-06-21: row-body click while PLAYING must not change now-playing"
     )
     assert win._player.source() == tracks[0].path
@@ -186,7 +186,7 @@ def test_row_body_click_when_paused_is_noop(main_window, qtbot, monkeypatch) -> 
     )
     win.library_pane._on_table_clicked(proxy.index(other, title_col))
 
-    assert win.now_playing_pane.title_label.text() == tracks[0].title
+    assert win.now_playing_pane.card.title_label.text() == tracks[0].title
 
 
 # ---------- TC-06-22 (album-order pane) ----------------------------------
@@ -284,7 +284,7 @@ def test_album_order_row_body_click_when_stopped_previews(
     # Drive a row-body click via the album-order pane's signal.
     win.album_order_pane.row_body_clicked.emit(tracks[1].path)
 
-    assert win.now_playing_pane.title_label.text() == tracks[1].title
+    assert win.now_playing_pane.card.title_label.text() == tracks[1].title
 
 
 # ---------- TC-06-23 -----------------------------------------------------
@@ -320,13 +320,13 @@ def test_late_stopped_state_change_does_not_clobber_preview(main_window, qtbot) 
             == tracks[1].path
     )
     win.library_pane._on_table_clicked(proxy.index(target_row, title_col))
-    assert win.now_playing_pane.title_label.text() == tracks[1].title
+    assert win.now_playing_pane.card.title_label.text() == tracks[1].title
 
     # Synthetically re-emit state_changed(STOPPED).
     win._player.state_changed.emit(PlayerState.STOPPED)
     qtbot.wait(20)
 
-    assert win.now_playing_pane.title_label.text() == tracks[1].title, (
+    assert win.now_playing_pane.card.title_label.text() == tracks[1].title, (
         "TC-06-24: late state_changed(STOPPED) must not clobber the preview"
     )
 
@@ -336,7 +336,7 @@ def test_late_stopped_state_change_does_not_clobber_preview(main_window, qtbot) 
 # Spec: TC-06-25 — keyboard arrow navigation does NOT trigger preview.
 def test_keyboard_arrow_navigation_does_not_preview(main_window, qtbot) -> None:
     win = main_window
-    initial_title = win.now_playing_pane.title_label.text()
+    initial_title = win.now_playing_pane.card.title_label.text()
     initial_source = win._player.source()
 
     # Focus the table; QTableView selection-change via keyboard is the path
@@ -348,7 +348,7 @@ def test_keyboard_arrow_navigation_does_not_preview(main_window, qtbot) -> None:
         qtbot.keyClick(table, Qt.Key.Key_Down)
     qtbot.wait(20)
 
-    assert win.now_playing_pane.title_label.text() == initial_title, (
+    assert win.now_playing_pane.card.title_label.text() == initial_title, (
         "TC-06-25: arrow-key row navigation must not change now-playing"
     )
     assert win._player.source() == initial_source
@@ -384,7 +384,7 @@ def test_row_body_click_when_error_is_noop(main_window, qtbot) -> None:
     win._on_preview_play(tracks[0].path)
     qtbot.wait(50)
     win._player._set_state_for_test(PlayerState.ERROR)
-    initial_title = win.now_playing_pane.title_label.text()
+    initial_title = win.now_playing_pane.card.title_label.text()
 
     title_col = _col("title")
     proxy = win.library_pane._proxy
@@ -395,7 +395,7 @@ def test_row_body_click_when_error_is_noop(main_window, qtbot) -> None:
     )
     win.library_pane._on_table_clicked(proxy.index(other, title_col))
 
-    assert win.now_playing_pane.title_label.text() == initial_title, (
+    assert win.now_playing_pane.card.title_label.text() == initial_title, (
         "TC-06-21: row-body click while ERROR must not change now-playing"
     )
 
@@ -420,7 +420,7 @@ def test_row_body_cursor_arrow_for_paused_and_error(main_window, qtbot) -> None:
 # is wired to a separate slot that only handles _play / _toggle).
 def test_enter_on_row_body_does_not_preview(main_window, qtbot) -> None:
     win = main_window
-    initial_title = win.now_playing_pane.title_label.text()
+    initial_title = win.now_playing_pane.card.title_label.text()
 
     title_col = _col("title")
     proxy = win.library_pane._proxy
@@ -428,7 +428,7 @@ def test_enter_on_row_body_does_not_preview(main_window, qtbot) -> None:
     win.library_pane._on_table_activated(proxy.index(0, title_col))
     qtbot.wait(20)
 
-    assert win.now_playing_pane.title_label.text() == initial_title, (
+    assert win.now_playing_pane.card.title_label.text() == initial_title, (
         "TC-06-25: Enter on a row-body cell must not trigger preview"
     )
 

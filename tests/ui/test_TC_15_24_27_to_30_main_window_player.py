@@ -34,7 +34,7 @@ def test_play_all_drives_controller_end_to_end(main_window) -> None:
     # Player loaded the first track (observable source).
     assert main_window._player.source() == first.path
     # now-playing pane title updated via current_changed.
-    assert main_window.now_playing_pane.title_label.text() == first.title
+    assert main_window.now_playing_pane.card.title_label.text() == first.title
     # Up Next list rebuilt and highlight pulled to slot 0.
     assert main_window.queue_pane.list.count() == len(view_tracks)
     assert main_window.queue_pane.list.currentRow() == 0
@@ -48,7 +48,7 @@ def test_auto_advance_updates_now_playing_and_highlight(main_window) -> None:
     # The natural end-of-media pulse advances the queue.
     main_window._player.ended.emit()
     assert main_window._player.source() == second.path
-    assert main_window.now_playing_pane.title_label.text() == second.title
+    assert main_window.now_playing_pane.card.title_label.text() == second.title
     assert main_window.queue_pane.list.currentRow() == 1
 
 

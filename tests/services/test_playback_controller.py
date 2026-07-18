@@ -326,8 +326,13 @@ def test_set_shuffle_keeps_playing_no_current_changed(ctl) -> None:
     assert c.current_track() == B
 
 
-# Spec: TC-15-33
-def test_set_repeat_emits_nothing(ctl) -> None:
+# Spec: TC-15-33 (superseded by TC-18-04; kept as a narrower regression guard).
+# Phase E (Spec 18) added repeat_changed, so "emits nothing" is no longer
+# literally true - but this test only spies current_changed / queue_changed
+# (never repeat_changed), so its assertion still holds: set_repeat touches
+# neither the source nor those two signals. Renamed from
+# test_set_repeat_emits_nothing to match what it actually checks.
+def test_set_repeat_emits_no_queue_or_current_signal(ctl) -> None:
     c, player = ctl
     c.play_tracks([A, B, C])
     cur = Spy(c.current_changed)
@@ -337,6 +342,50 @@ def test_set_repeat_emits_nothing(ctl) -> None:
     assert c.repeat_mode() == RepeatMode.ALL
     assert cur.count == 0
     assert que.count == 0
+    assert len(player.set_source_calls) == n_src
+
+
+# Spec: TC-18-03
+def test_set_shuffle_broadcasts_shuffle_changed_and_queue_changed(ctl) -> None:
+    c, _player = ctl
+    c.play_tracks([A, B, C])
+    sh = Spy(c.shuffle_changed)
+    que = Spy(c.queue_changed)
+    c.set_shuffle(True)
+    assert sh.args == [True]
+    assert que.count == 1
+    c.set_shuffle(False)
+    assert sh.args == [True, False]
+    assert que.count == 2
+
+
+# Spec: TC-18-03
+def test_redundant_set_shuffle_still_broadcasts(ctl) -> None:
+    # A fresh controller is already unshuffled; PlayQueue.set_shuffle(False)
+    # no-ops at the domain layer, but the controller re-broadcasts both signals
+    # unconditionally so two shuffle buttons stay coherent.
+    c, _player = ctl
+    c.play_tracks([A, B, C])
+    sh = Spy(c.shuffle_changed)
+    que = Spy(c.queue_changed)
+    c.set_shuffle(False)
+    assert sh.args == [False]
+    assert que.count == 1
+
+
+# Spec: TC-18-04  (supersedes TC-15-33's "emits nothing")
+def test_set_repeat_broadcasts_repeat_changed_only(ctl) -> None:
+    c, player = ctl
+    c.play_tracks([A, B, C])
+    rep = Spy(c.repeat_changed)
+    cur = Spy(c.current_changed)
+    que = Spy(c.queue_changed)
+    n_src = len(player.set_source_calls)
+    for mode in (RepeatMode.ALL, RepeatMode.ONE, RepeatMode.OFF):
+        c.set_repeat(mode)
+    assert rep.args == [RepeatMode.ALL, RepeatMode.ONE, RepeatMode.OFF]
+    assert cur.count == 0             # no current_changed
+    assert que.count == 0             # no queue_changed
     assert len(player.set_source_calls) == n_src
 
 

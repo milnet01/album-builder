@@ -104,7 +104,7 @@ def test_preview_play_loads_track_into_player(main_window, qtbot) -> None:
 def test_preview_play_updates_now_playing_pane(main_window, qtbot) -> None:
     tracks = list(main_window._library_watcher.library().tracks)
     main_window._on_preview_play(tracks[0].path)
-    assert main_window.now_playing_pane.title_label.text() == tracks[0].title
+    assert main_window.now_playing_pane.card.title_label.text() == tracks[0].title
 
 
 def test_preview_play_writes_last_played_to_state(main_window, qtbot) -> None:
@@ -183,7 +183,7 @@ def test_state_last_played_restored_on_construct(
     # Restored paused at zero, NOT auto-playing.
     from album_builder.services.player import PlayerState
     assert win._player.state() == PlayerState.STOPPED
-    assert win.now_playing_pane.title_label.text() == track.title
+    assert win.now_playing_pane.card.title_label.text() == track.title
 
 
 def test_state_last_played_missing_track_does_nothing(
@@ -199,7 +199,7 @@ def test_state_last_played_missing_track_does_nothing(
     qtbot.addWidget(win)
     assert win._player.source() is None
     # No track loaded means metadata labels are blank.
-    assert win.now_playing_pane.title_label.text() == ""
+    assert win.now_playing_pane.card.title_label.text() == ""
 
 
 # ----- Spec 07 lyrics integration ---------------------------------------

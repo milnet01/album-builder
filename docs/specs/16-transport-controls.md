@@ -90,7 +90,10 @@ see §Gapless investigation (spike).
   `PlaybackController` command: previous (`controller.previous`), next
   (`controller.next`), shuffle (`controller.set_shuffle`), repeat
   (`controller.set_repeat`). These are the only additions.
-- **Sole-driver buttons (no new signal).** The transport is the only UI that
+- **Sole-driver buttons (no new signal).**
+  **[Label + clauses superseded by Spec 18 (Phase E): the shuffle/repeat signals
+  now exist and every `TransportBar` subscribes; the buttons are signal-driven, not
+  sole-driver. Retained below for history.]** The transport is the only UI that
   changes shuffle or repeat mode, so each mode button is authoritative for its own
   visual: it reads the controller's current mode to compute the next one, calls the
   controller, and updates its own glyph / checked state in the same handler. The
@@ -106,6 +109,10 @@ see §Gapless investigation (spike).
   surface that changes these modes, the buttons must instead subscribe to a
   controller mode-changed signal — out of scope now (YAGNI), flagged here so that
   phase revisits it.
+  **Fulfilled by Spec 18 (Phase E):** that second surface now exists (the Player-tab
+  `PlayerPane` with its own `TransportBar`); `PlaybackController` emits
+  `shuffle_changed` / `repeat_changed` and every `TransportBar` subscribes, so the
+  mode buttons are signal-driven, keeping the two bars coherent.
 - **Repeat cycle** — the repeat button walks `OFF -> ALL -> ONE -> OFF` on
   successive clicks (the common player convention), mapping to
   `RepeatMode.OFF / ALL / ONE` (Spec 14). `OFF` and `ALL` show the repeat-all glyph;
@@ -197,6 +204,10 @@ The three unchanged reflect-player subscriptions (`position_changed`,
 No subscription to `controller.queue_changed` / `current_changed` is added — the
 transport does not react to queue/current changes (the now-playing pane and Up
 Next list already own those, Spec 15); the mode buttons are self-updating.
+**Superseded by Spec 18 (Phase E):** `TransportBar` now adds four subscriptions —
+`player.volume_changed` / `muted_changed` and `controller.shuffle_changed` /
+`repeat_changed` — so the mode/volume/mute buttons are signal-driven, not
+self-updating. (Still no `queue_changed` / `current_changed` subscription.)
 
 Private helpers:
 
@@ -285,6 +296,9 @@ the assignment order is the contract.)
   `set_repeat` changes no source, order, or signal); `_sync_repeat_glyph(next_mode)`
   updates the button. Repeat mode has no audible effect until the current track
   ends (auto-advance consults it, Spec 15 TC-15-08/09), which is expected.
+  **Superseded by Spec 18 (Phase E):** `set_repeat` now emits `repeat_changed`, and
+  `_cycle_repeat` no longer calls `_sync_repeat_glyph` itself — the returning
+  `repeat_changed` broadcast drives the glyph on every bar.
 
 ### Existing player-level controls (unchanged)
 
@@ -294,6 +308,12 @@ volume (`volume_slider -> player.set_volume`), and seek (`scrubber.sliderRelease
 seek-on-release and don't-fight-the-drag rules (whose `L7-H3` tag is a
 `transport_bar.py` code comment, not a Spec 06 anchor) and the mute-glyph restore. This
 phase adds buttons around them; it does not alter them.
+**Superseded by Spec 18 (Phase E):** the mute/volume *write*-wiring
+(`btn_mute -> set_muted`, `volume_slider -> set_volume`) is unchanged, but Phase E
+alters the transport-side handling — `_on_mute_clicked` drops its imperative
+`_sync_mute_glyph()` (the glyph is now driven by `muted_changed`) and the bar gains a
+`volume_changed` read-back subscription. The "does not alter them" / mute-glyph
+restore claim is superseded to that extent.
 
 ## UI surface
 
@@ -327,6 +347,9 @@ unchanged):
   (`shuffle_enabled()`, `repeat_mode()`) to seed the mode buttons.
 - The unchanged Spec 06 `Player` signal inputs (`position_changed`,
   `duration_changed`, `state_changed`, `buffering_changed`).
+- **Spec 18 (Phase E) adds** the broadcast signal inputs `player.volume_changed` /
+  `muted_changed` and `controller.shuffle_changed` / `repeat_changed`, to which
+  `TransportBar` subscribes to stay coherent with a second bar.
 
 ## Outputs
 
@@ -335,6 +358,9 @@ unchanged):
   the controller's existing Spec 15 signals (`current_changed`, `queue_changed`),
   which the now-playing pane and Up Next list already consume. The transport emits
   no new signal of its own.
+  **Spec 18 (Phase E) adds** `shuffle_changed` / `repeat_changed` as the new
+  mode-broadcast outputs the shuffle/repeat result also flows through (consumed by
+  every `TransportBar`); `TransportBar` itself still emits no signal of its own.
 - Button visual state: `btn_shuffle` checked mirrors shuffle-on; `btn_repeat`
   glyph/checked/accessible-name mirror the repeat mode.
 
@@ -345,7 +371,7 @@ unchanged):
 | `prev` / `next` clicked on an **empty** queue | `controller.previous()` loads nothing (true no-op); `controller.next()` issues a benign `player.stop()` (unobservable on an already-stopped player). An empty queue always implies a null player source in Phase B (the only queue-clear path, `play_tracks([])`, nulls it), so `player.source()` stays `None`; no exception, no observable state change. |
 | `next` at end of queue under repeat `OFF` | `controller.next()` stops the player and leaves the current entry (Spec 15 TC-15-11); no `current_changed`. The play/pause glyph flips to play via the existing `Player.state_changed` path. |
 | Shuffle toggled mid-playback | Current track keeps playing (no `set_source`); `play_order()` reshapes and the Up Next list rebuilds (Spec 15 TC-15-17). The shuffle button reflects the new checked state; no now-playing / glyph change. |
-| Repeat cycled mid-playback | No audible change until the current track ends; the button glyph/checked/accessible-name update immediately. `set_repeat` emits no signal (a `PlaybackController` property covered by Spec 15 TC-15-33; there is deliberately no TC-16 case re-asserting it). |
+| Repeat cycled mid-playback | No audible change until the current track ends; the button glyph/checked/accessible-name update immediately. `set_repeat` emits no signal (a `PlaybackController` property covered by Spec 15 TC-15-33; there is deliberately no TC-16 case re-asserting it). **Superseded by Spec 18 (Phase E):** `set_repeat` now emits `repeat_changed`, which drives the glyph; see Spec 18 TC-18-04 / TC-18-08. |
 | Construction with a controller already shuffled / repeating | Buttons seed from `shuffle_enabled()` / `repeat_mode()` and show the active state without emitting any `clicked` (so no spurious `set_shuffle` / `set_repeat` fires). |
 | Rapid repeat clicks | Each click advances one step in `OFF -> ALL -> ONE -> OFF`; the button always reads the controller's current mode to compute the next, so N clicks land on the mode N steps along, with no drift between button visual and controller state. |
 | `play`/`pause`/`mute`/`volume`/`seek` after the signature change | Unchanged Spec 06 behavior; the added controller reference does not alter them (regression-guarded by the retained Spec 06 transport tests, updated only to pass a controller to the constructor). |

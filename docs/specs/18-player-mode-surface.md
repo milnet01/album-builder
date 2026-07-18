@@ -1,6 +1,6 @@
 # 18 — Player-mode surface (ui)
 
-**Status:** Reviewed - ready to implement (Phase E of the music-player epic) · **Last updated:** 2026-07-04 · **Depends on:** 00, 01, 06, 07, 11, 14, 15, 16, 17 (references Spec 10 persistence but does not extend it) · **Blocks:** music-player Phases F-G
+**Status:** Implemented (Phase E of the music-player epic) · **Last updated:** 2026-07-18 · **Depends on:** 00, 01, 06, 07, 11, 14, 15, 16, 17 (references Spec 10 persistence but does not extend it) · **Blocks:** music-player Phases F-G
 
 > **Cold-eyes loop log (2026-07-04):** 5 loops, 3 independent reviewers per loop
 > (services-signals / UI-composition / cross-spec+tests lenses), all briefed cold (no
