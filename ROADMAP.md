@@ -1153,6 +1153,13 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   - **Phase MP-7 — Audiophile engine (BIG — blocked on retiring `QMediaPlayer`).** Graphic equalizer + presets, gapless playback, crossfade, ReplayGain pre-amp, and optional visualizer/spectrum. All of these require replacing QtMultimedia's `QMediaPlayer` with a raw `QAudioSink` / GStreamer / miniaudio pipeline (per the 2026-07-18 Phase F audio-effects spike) — its own multi-phase, higher-risk sub-epic. (WinAmp EQ + visualizer; audiophile players' gapless/crossfade.)
   - **Phase MP-8 — Extras (survey; pick as desired).** Sleep timer, playback speed / pitch, A-B repeat, "play next" / queue history, drag-and-drop files or folders to enqueue (distinct from the library-add drop in MP-2), expanded global keyboard shortcuts, context-menu "go to album / artist", and optional Last.fm scrobbling. **Out of scope (carry-forward from the A-G epic):** streaming / Spotify integration, CD ripping, bulk tag editing, Discord presence.
 
+- 📋 **Polish & hardening (usability / performance / security).** (Suggestion sweep 2026-07-25; sequenced flexibly - small, high-value items surfaced while reviewing the app.)
+  - **Usability - first-run onboarding.** A clear "point me at your music folder" welcome on first launch instead of an empty window.
+  - **Usability - undo for destructive actions.** Undo (or confirm-with-restore) for deleting an album or removing tracks (verify the current safety net first).
+  - **Performance - library-scan tag cache.** Cache parsed ID3 tags keyed by path + modified-time so restarts don't re-read every file's tags; a big win for large `Tracks/` libraries (verify current startup-scan behavior first).
+  - **Performance - cover-art thumbnail cache.** Cache decoded/resized cover images instead of re-decoding them per use.
+  - **Security - HTML report output escaping.** Confirm the Jinja2 report templates auto-escape track metadata + lyrics - the full report and the shared artist-view variant are distributable artifacts, so a track tagged with HTML / `<script>` must not inject. Harden if not already escaped. (Being checked by the /security-review + /audit run started 2026-07-25.)
+
 ---
 
 *Last reviewed: 2026-05-18 — v0.6.1 (WhisperX UX + artist-view report + post-feature debt sweep) shipped. Seven feature/fix commits since v0.6.0 + a /debt-sweep follow-up amending Specs 07/09/10 and closing a real correctness bug in `atomic_pair.py` (artist-variant half-pair was invisible to the load-time scan). 562 passing tests (+13 from the sweep); ruff clean. ROADMAP fully `✅`-flipped — only `🔭 Future / deferred` features remain.*
