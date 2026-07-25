@@ -1,26 +1,23 @@
 # 22 - Portability groundwork (cross-platform export, config path, folder-open)
 
-**Status:** Draft (cold-eyes pending) - **Last updated:** 2026-07-25 - **Depends on:** 00, 08, 09, 10, 12 - **References (does not extend):** 06 - **Blocks:** the Flatpak / Windows / OBS packaging phases (future specs)
+**Status:** Draft (cold-eyes in progress) - **Last updated:** 2026-07-25 - **Depends on:** 00, 08, 09, 10 - **References (does not extend):** 06, 12 - **Blocks:** the Flatpak / Windows / OBS packaging phases (future specs)
 
-> **Cold-eyes loop log:** _pending - this draft has not yet been through `/cold-eyes`._
+> **Cold-eyes loop log:** _in progress. Loop 1 (2026-07-25, 3 cold reviewers - internal / code-accuracy / cross-spec) surfaced 15 verified findings, all fixed here. The largest: the draft's export fallback collided with Spec 08's deferred hardlink->copy-with-consent design. **Product decision (user, 2026-07-25): "just remember the links like WinAmp" - no copies.** So this phase **supersedes** Spec 08's copy-with-consent fallback (TC-08-10a/10b, never implemented) with a simpler **symlink-or-playlist-only** export, which also lets it drop the copy dialog, the per-filesystem cache, and the link-strategy-agnostic entry predicate the interim draft had added. Other Loop-1 fixes retained: folder-open wrapped so nothing escapes (INV-22-4); relative-`XDG_CONFIG_HOME` guard preserved so an existing test passes; no-Qt-boundary rationale corrected (persistence already imports Qt via `debounce.py`); dependency recorded as a floor (not a §4 Ledger cap); Spec 09/10 amendment spots enumerated. Loop 2 pending._
 
 This is **Phase Dist-1** of the "Distribution & cross-platform packaging" epic
 (`ROADMAP.md` heading `## Future / deferred`). The epic turns Album Builder from a
 source-only, Linux-only checkout into downloadable builds (Flatpak/Flathub, Windows,
-OBS). Those packaging phases each get their own spec; **this phase touches only the
+OBS). Those packaging phases each get their own spec; **this phase touches only
 application code** so the same codebase runs unchanged on Linux and correctly on
-Windows. It makes three POSIX-only chokepoints portable - export link creation,
-the config-directory resolver, and the "open this folder" helper - with **zero
-behavior change on Linux** (the CI + dev platform). No packaging config, no bundler,
-no installer lands here.
+Windows. It makes three POSIX-only chokepoints portable - export link creation, the
+config-directory resolver, and the "open this folder" helper - with **zero behavior
+change on Linux** (the CI + dev platform). No packaging config, no bundler, no
+installer lands here.
 
-To be implemented across: `src/album_builder/services/export.py` (a link-or-copy
-fallback chain + a link-strategy-agnostic "exported entry" predicate shared by the
-drift-detection and commit paths), `src/album_builder/services/album_store.py` (its
-`_symlink_count_matches` delegates to the shared predicate),
-`src/album_builder/persistence/settings.py` (`settings_dir` resolves via
-`platformdirs` instead of a hand-rolled `XDG_CONFIG_HOME` read), and
-`src/album_builder/ui/main_window.py` (`_open_in_file_manager` uses
+To be implemented across: `src/album_builder/services/export.py` (symlink entries where
+the filesystem supports them, else a playlist-only export), `src/album_builder/persistence/settings.py`
+(`settings_dir` resolves via `platformdirs`, preserving the relative-`XDG_CONFIG_HOME`
+guard), and `src/album_builder/ui/main_window.py` (`_open_in_file_manager` uses
 `QDesktopServices.openUrl`). One new dependency: `platformdirs`. Tests in
 `tests/services/`, `tests/persistence/`, and `tests/ui/`.
 
@@ -38,182 +35,195 @@ on Windows (a shipping target of the epic):
 1. **Album export builds the numbered track folder out of symlinks** (`os.symlink` via
    `Path.symlink_to`, Spec 08). Windows only permits symlinks with Developer Mode or
    admin rights, and non-symlink filesystems (FAT/exFAT, some network mounts) reject
-   them everywhere. The Spec 08 header comment already earmarks a "hardlink/copy
-   fallback chain ... deferred to v0.6+". This phase implements it.
+   them everywhere.
 2. **The config directory is resolved by hand-reading `XDG_CONFIG_HOME`**
    (`settings.py:settings_dir`). That env var does not exist on Windows/macOS, so the
    app would write `settings.json` to the wrong place.
 3. **"Open the reports folder" shells `xdg-open`** (`main_window.py:_open_in_file_manager`),
    a Linux-only binary.
 
-Making these three portable is the prerequisite for the Windows and Flatpak phases and
-is good hygiene regardless. **The bar is: Linux behavior is byte-for-byte unchanged**
-(same on-disk symlink export, same config path, same folder-open), and the code simply
-stops assuming POSIX where a cross-platform primitive exists.
+**The canonical album artifact is already portable.** Every export writes
+`playlist.m3u8` - an M3U list of the tracks' absolute source paths (Spec 08 §Outputs).
+That playlist is the "remembered links" a player uses to play the album in place; it
+needs no symlinks and works on any OS. The **numbered symlink folder** is an *additional*
+convenience: a browsable, correctly-ordered, human-named view of the album on
+symlink-capable filesystems. In-app playback never reads it (the Player plays
+`Track.path` from `Tracks/` directly), so it is purely a file-manager nicety.
 
-**Not a rewrite.** Each change is at a single existing chokepoint. The export pipeline,
-the atomic-write layer, and the drift-detection invariant keep their shape; only the
-"how is one entry linked" and "how is an entry counted" steps generalize.
+**Design decision (user, 2026-07-25):** on filesystems that cannot create symlinks, do
+**not** fall back to hardlinks or byte-copies - just emit the `playlist.m3u8` (the
+remembered-path list) and skip the numbered entries. This is the WinAmp model: the
+playlist *is* the album. It supersedes Spec 08's deferred copy-with-consent fallback
+(TC-08-10a/10b) and keeps the phase free of a consent dialog, a duplicate-audio path, and
+a capability cache.
+
+**The bar is: Linux behavior is unchanged** - symlink-capable filesystems (every Linux
+dev/CI target) still get the full numbered symlink folder, byte-identical to today.
+
+**Not a rewrite.** Each change is at a single existing chokepoint; the export pipeline,
+the atomic-write layer, and the drift-detection invariant keep their shape.
 
 ## Concepts
 
-- **Link strategy (symlink -> hardlink -> copy)** - the export stages one entry per
-  track pointing at the source file in `Tracks/`. This phase replaces the bare
-  `symlink_to` with a fallback chain: try a **symlink** first (the Linux result, and
-  Windows-with-privilege); on `OSError`, try a **hardlink** (`os.link`, works only when
-  staging and source share a filesystem); on `OSError`, fall back to a **copy**
-  (`shutil.copy2`, always works, at the cost of duplicating the bytes). First success
-  wins; the strategy actually used is returned so the caller can record it. On Linux the
-  first attempt always succeeds, so the on-disk result (a symlink) is identical to today.
-- **Exported entry (link-strategy-agnostic)** - today the drift-detection invariant and
-  the commit's stale-cleanup identify "our" entries by `Path.is_symlink()`. Once an entry
-  can also be a hardlink or a copy, `is_symlink()` under-counts and every album on a
-  non-symlink filesystem would look permanently stale (endless regeneration). So this
-  phase defines an **exported entry** as a directory child that is **not** one of the
-  reserved app-managed names and is a file or symlink - counted the same whether it is a
-  symlink, hardlink, or copy. The reserved set is the app's own metadata:
-  `EXPORTED_RESERVED_NAMES = frozenset({PLAYLIST_FILENAME, EXPORT_LOG_FILENAME, STAGING_DIRNAME, "album.json", ".approved", "reports"})`
-  (the same "pre-existing real files ... are preserved" set `_commit_export` already
-  documents). `reports` is a directory and is excluded both by the reserved set and by
-  the file/symlink test.
+- **Symlink-or-playlist export** - the export stages one symlink per track pointing at the
+  source file in `Tracks/`. This phase makes that step conditional on filesystem support:
+  - **Symlink-capable filesystem** (Linux ext4/btrfs/xfs, NTFS-with-privilege): create the
+    numbered symlinks exactly as today.
+  - **Not symlink-capable** (FAT/exFAT, Windows without Developer Mode): skip the numbered
+    entries; write only `playlist.m3u8` (always written regardless) + the album's other
+    artifacts (`album.json`, `reports/`, `.approved`). One warning is logged
+    (`"symlinks unavailable on this filesystem; playlist-only export"`).
+  No hardlinks, no copies, no consent dialog, no per-filesystem cache.
+- **Symlink-capability probe** - `_supports_symlinks(dir: Path) -> bool` attempts to create
+  and immediately unlink a uniquely-named throwaway symlink inside `dir`, returning `False`
+  on `OSError`. It is a couple of syscalls, no persistence. Called at export time (to decide
+  whether to make numbered entries) and at drift-check time (below). On Linux it always
+  returns `True`, so nothing changes.
+- **Drift detection stays symlink-count-based, capability-aware** - Spec 08's freshness
+  invariant compares `count(is_symlink() entries) == count(non-missing tracks)`. Because a
+  playlist-only export creates **zero** symlinks by design, the *expected* count must adapt:
+  `expected = count(non-missing tracks) if _supports_symlinks(folder) else 0`. On a
+  no-symlink filesystem, `0 == 0` reads fresh (no perpetual `needs_regen`); on Linux the
+  invariant is unchanged. Entries are only ever symlinks, so the existing `is_symlink()`
+  counting is retained - no link-strategy-agnostic predicate is needed.
 - **Config directory via `platformdirs`** - `settings_dir` resolves the per-user config
   directory through `platformdirs.user_config_dir("album-builder", appauthor=False)`
-  instead of reading `XDG_CONFIG_HOME` by hand. `platformdirs` is a small, pure-Python,
-  Qt-free library (so it does not violate the persistence layer's no-Qt boundary - Qt's
-  own `QStandardPaths` would). On **Linux** it honors `XDG_CONFIG_HOME` and returns
-  `<XDG_CONFIG_HOME or ~/.config>/album-builder` - the **same path as today**, so
-  existing installs need no migration and the ~18 tests that isolate via a monkeypatched
-  `XDG_CONFIG_HOME` keep working unchanged. On **Windows** it returns
+  instead of reading `XDG_CONFIG_HOME` by hand. Rationale: it **keeps `settings.py`
+  Qt-free** (as it is today) - a pure-data path function should not import Qt's
+  `QStandardPaths` (other persistence modules such as `debounce.py` *do* import Qt, so this
+  is a per-module preference, not a layer-wide rule) - and `platformdirs` is a small,
+  pure-Python, well-maintained dependency. On **Linux** it honors `XDG_CONFIG_HOME` and
+  returns `<XDG_CONFIG_HOME or ~/.config>/album-builder`; on **Windows**
   `%LOCALAPPDATA%\album-builder`; on **macOS** `~/Library/Application Support/album-builder`.
+  **Relative-`XDG_CONFIG_HOME` guard preserved:** the freedesktop spec mandates an absolute
+  `XDG_CONFIG_HOME` and a relative one must be ignored (hardened by
+  `test_relative_xdg_config_home_falls_back_to_home_config`); `platformdirs` would honor a
+  relative value, so `settings_dir` keeps an explicit guard (relative ->
+  `~/.config/album-builder`) **before** delegating. With that guard the Linux path is
+  identical to today for every case (absolute / unset / empty / relative), so existing
+  installs need no migration and the ~18 tests isolating via a monkeypatched (absolute
+  `tmp_path`) `XDG_CONFIG_HOME` keep passing unchanged.
 - **Folder-open via `QDesktopServices`** - `_open_in_file_manager` calls
   `QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))` (PyQt6 `QtGui`/`QtCore`),
-  which dispatches to `xdg-open` on Linux, `ShellExecute` on Windows, and `open` on
-  macOS. This is a UI-layer change (Qt is allowed there), keeping the existing
-  best-effort, never-raises, silent-on-failure contract.
-- **Atomic promote already portable** - the export commit promotes staged entries with
-  `os.replace` (`export.py:_commit_export`). Because the staging dir (`.export.new/`) is
-  a **sibling inside the album folder**, source and destination are always on the same
-  volume, where `os.replace` is atomic on Windows as well as POSIX. **No change needed** -
-  noted here so the reader does not mistake it for a gap.
+  which dispatches to `xdg-open` on Linux, `ShellExecute` on Windows, `open` on macOS,
+  wrapped so nothing escapes (INV-22-4).
+- **Atomic promote already portable** - `_commit_export` promotes staged entries with
+  `os.replace`; the staging dir (`.export.new/`) is a **sibling inside the album folder**,
+  so source and destination are same-volume, where `os.replace` is atomic on Windows too.
+  No change needed - noted so it is not mistaken for a gap.
 
 **Invariants (citeable):**
-- **INV-22-1** - export freshness (`is_export_fresh`, `_symlink_count_matches`) and the
-  commit's stale-cleanup enumerate **exported entries** (non-reserved file/symlink
-  children), never `is_symlink()` specifically, so drift and cleanup are correct for a
-  symlink, hardlink, or copy export.
+- **INV-22-1** - on a symlink-capable filesystem the export is byte-identical to pre-Spec-22
+  (numbered symlinks + `playlist.m3u8`); on a non-symlink filesystem the export is
+  `playlist.m3u8` + album artifacts with **no** numbered entries, **no** hardlink/copy, and
+  **no** dialog.
 - **INV-22-2** - on Linux, `settings_dir()` resolves to the identical path it does
-  pre-Spec-22 (honoring `XDG_CONFIG_HOME` when absolute, else `~/.config`, then
-  `/album-builder`). No settings migration; no test-fixture change.
-- **INV-22-3** - the export link strategy is symlink-then-hardlink-then-copy, first
-  success wins; Linux always lands on symlink (on-disk result unchanged). The staged
-  entry's disk-read sanity check (Spec 08) applies to whichever strategy was used.
+  pre-Spec-22 for every case (absolute `XDG_CONFIG_HOME` honored; relative/empty/unset ->
+  `~/.config`; then `/album-builder`), because the relative-XDG guard precedes the
+  `platformdirs` delegation. No settings migration; no test-fixture change.
+- **INV-22-3** - the export drift-detection invariant's *expected* symlink count is
+  `count(non-missing tracks)` on a symlink-capable filesystem and `0` on one that is not
+  (via `_supports_symlinks(folder)`), so a playlist-only album never reads as perpetually
+  stale.
 - **INV-22-4** - `_open_in_file_manager` never lets an exception escape and is silent on
   failure, on every platform (a missing/failed handler logs a warning at most).
 
 ## Public API
 
-### `services/export.py` - link strategy + shared predicate
+### `services/export.py` - symlink-or-playlist export
 
-- `EXPORTED_RESERVED_NAMES: frozenset[str]` - the app-managed names the drift/commit
-  logic must skip (see Concepts). Built from the existing module constants
-  (`PLAYLIST_FILENAME`, `EXPORT_LOG_FILENAME`, `STAGING_DIRNAME`) plus the literal
-  `"album.json"`, `".approved"`, `"reports"`.
-- `is_exported_entry(p: Path) -> bool` - `p.name not in EXPORTED_RESERVED_NAMES and
-  (p.is_symlink() or p.is_file())`. Public (album_store imports it). A broken symlink
-  still counts (`is_symlink()` is True even when the target is gone) - preserving the
-  current `is_symlink()`-based semantics exactly on Linux.
-- `_stage_entry(link: Path, target: Path) -> str` - create `link` pointing at `target`
-  via the fallback chain; return the strategy used (`"symlink"` / `"hardlink"` /
-  `"copy"`). Replaces the bare `link.symlink_to(track_path)` in `_build_staging`
-  (export.py:268):
-  - `try: link.symlink_to(target); return "symlink"` - `except OSError: pass`.
-  - `try: os.link(target, link); return "hardlink"` - `except OSError: pass`.
-  - `shutil.copy2(target, link); return "copy"` (a final `OSError` here propagates - a
-    copy that cannot be made is a genuine export failure, handled by the existing
-    `regenerate_album_exports` error path).
-  `_build_staging` records a warning (into the existing `log_warnings` list) when the
-  strategy is not `"symlink"`, e.g. `f"{link.name}: used {strategy} (symlink
-  unavailable)"`, so the `.export-log` shows a copy/hardlink fallback happened. The
-  existing disk-read sanity check (open the staged entry, read 64 bytes) runs unchanged
-  after `_stage_entry` for all three strategies.
-- **Drift + commit call-site updates** (behavior-preserving on Linux):
-  - `is_export_fresh` (export.py:218) - `actual = sum(1 for p in folder.iterdir() if
-    is_exported_entry(p))`.
-  - `_commit_export` (export.py:313) - `existing = {p.name: p for p in folder.iterdir()
-    if is_exported_entry(p)}` (the snapshot of entries to potentially unlink).
+- `_supports_symlinks(dir: Path) -> bool` - probe: create + unlink a uniquely-named
+  throwaway symlink inside `dir`; return `False` on `OSError`. No persistence.
+- `_build_staging(...)` (export.py:227) - before the per-track loop, compute
+  `can_symlink = _supports_symlinks(staging)` (staging shares the album folder's
+  filesystem). In the loop, create the numbered symlink only when `can_symlink`; otherwise
+  skip the entry (the M3U still lists the track). When `not can_symlink`, append one
+  `log_warnings` entry (`"symlinks unavailable on this filesystem; playlist-only export"`)
+  rather than one-per-track. The `playlist.m3u8` render + write is unchanged (always
+  happens). The existing disk-read sanity check runs only for entries actually created
+  (i.e. symlinks) - unchanged from today for the symlink case.
+- `is_export_fresh(album, folder, library)` (export.py:199) - the expected count adapts:
+  `expected = count(non-missing tracks) if _supports_symlinks(folder) else 0`; `actual =
+  count(p for p in folder.iterdir() if p.is_symlink())` (unchanged). The `_commit_export`
+  snapshot/unlink logic (export.py:290+) is unchanged - it already operates on
+  `is_symlink()` entries, and a playlist-only export simply has none to snapshot.
 
-### `services/album_store.py` - delegate the count
+### `services/album_store.py` - drift-check parity
 
-- `_symlink_count_matches` (album_store.py:36-47) - its `actual = sum(1 for p in
-  folder.iterdir() if p.is_symlink())` becomes `... if is_exported_entry(p))`, importing
-  `is_exported_entry` from `export`. The function name may stay (a rename is optional and
-  out of this phase's lane); its docstring is updated to say "exported-entry count", not
-  "symlink count".
+- `_symlink_count_matches` (album_store.py:36-47) - apply the same capability-aware expected
+  count as `is_export_fresh` (expected `0` when `not _supports_symlinks(folder)`), importing
+  `_supports_symlinks` from `export`, so a playlist-only album is not perpetually flagged
+  `needs_regen`. Counting of `actual` (via `is_symlink()`) is unchanged.
 
 ### `persistence/settings.py` - cross-platform `settings_dir`
 
-- `settings_dir() -> Path` - returns
-  `Path(platformdirs.user_config_dir("album-builder", appauthor=False))`. The docstring
-  is rewritten to state the per-platform resolution and that Linux honors
-  `XDG_CONFIG_HOME` (via `platformdirs`) exactly as before. `settings_path()` is
-  unchanged (still `settings_dir() / "settings.json"`). The module-level `import os` may
-  become unused (the direct `os.environ` read is gone) - remove it iff no other use
-  remains (§11 orphan cleanup).
-- `platformdirs` is added to `requirements.txt` (floor only, no cap, per the
-  dependency-currency standard) and logged in
-  `docs/standards/dependency-currency.md`'s ledger as a new runtime dep.
+- `settings_dir() -> Path`:
+  ```
+  xdg = os.environ.get("XDG_CONFIG_HOME")
+  if xdg and not Path(xdg).is_absolute():
+      # freedesktop: a relative XDG_CONFIG_HOME must be ignored (hardened by
+      # test_relative_xdg_config_home...). platformdirs would honor it, so guard first.
+      return Path.home() / ".config" / "album-builder"
+  return Path(platformdirs.user_config_dir("album-builder", appauthor=False))
+  ```
+  Docstring rewritten to state the per-platform resolution (Linux honors an absolute
+  `XDG_CONFIG_HOME`, ignores a relative one via the guard; Windows/macOS via
+  `platformdirs`). `settings_path()` unchanged; `import os` and `from pathlib import Path`
+  both remain used.
+- `platformdirs` added to `requirements.txt` as `platformdirs>=<current-floor>` (floor only,
+  no cap, per the dependency-currency standard).
 
 ### `ui/main_window.py` - cross-platform folder-open
 
-- `_open_in_file_manager(self, folder: Path) -> None` - body becomes:
-  `if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder))): logger.warning("open
-  folder failed: %s", folder)`. `QDesktopServices` imports from `PyQt6.QtGui`, `QUrl`
-  from `PyQt6.QtCore` (both already-imported modules in this file's import block; add the
-  names). The `shutil.which("xdg-open")` guard and the `subprocess.Popen` call go away;
-  remove the `import subprocess` / `import shutil` iff orphaned after the change
-  (§11 - verify no other use in the file first).
+- `_open_in_file_manager(self, folder: Path) -> None`:
+  ```
+  try:
+      if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder))):
+          logger.warning("open folder failed: %s", folder)
+  except Exception as exc:  # never let a UI-open failure escape (INV-22-4)
+      logger.warning("open folder raised: %s", exc)
+  ```
+  `QDesktopServices` imports from `PyQt6.QtGui`, `QUrl` from `PyQt6.QtCore` (both
+  already-imported modules; add the names). The `shutil.which("xdg-open")` guard and the
+  `subprocess.Popen` call go away; remove `import subprocess` / `import shutil` iff orphaned
+  after the change (§11 - verify no other use in the file first).
 
 ## Behavior rules
 
 ### Linux is unchanged
 
-On Linux every export entry is a symlink (the first strategy succeeds), `settings_dir`
-resolves to the same `~/.config/album-builder` (or `$XDG_CONFIG_HOME/album-builder`), and
-folder-open dispatches to `xdg-open` through Qt. The full existing Spec 08 export suite
-and Spec 10 settings suite pass without modification - that is the regression bar
-(TC-22-06).
+On a symlink-capable filesystem every export entry is a symlink, `settings_dir` resolves
+to the same `~/.config/album-builder` (or `$XDG_CONFIG_HOME/album-builder`), and
+folder-open dispatches to `xdg-open` through Qt. The full existing Spec 08 export suite and
+Spec 10 settings suite pass without modification - that is the regression bar (TC-22-05).
 
-### Fallback only when needed
+### Playlist-only where symlinks are unavailable
 
-`_stage_entry` attempts the cheaper, pointer-based strategies first and only copies bytes
-when it must. A copy-based export is heavier on disk (the album folder duplicates the
-audio) but is always correct; the `.export-log` warning records that it happened so the
-behavior is diagnosable rather than silent.
-
-### Drift detection is link-agnostic
-
-Because freshness and stale-cleanup count exported entries (not symlinks), an album
-exported with copies on a FAT drive is still detected as fresh/stale correctly, and the
-"regenerate on next mutation" self-heal (Spec 08 / `AlbumStore.rescan`) keeps working.
+When `_supports_symlinks` is false, the export writes `playlist.m3u8` (the remembered-path
+list) and the album's other artifacts but no numbered entries; drift detection expects zero
+symlinks there, so the album is considered fresh. In-app playback is unaffected (it plays
+`Track.path`, never the export folder).
 
 ### Folder-open stays best-effort
 
-`QDesktopServices.openUrl` returning `False` (no registered handler) logs a warning and
-returns; it never raises, matching the pre-Spec-22 silent-failure contract (INV-22-4).
+`QDesktopServices.openUrl` returning `False` (no handler) logs a warning; a raise is caught
+and logged; it never propagates (INV-22-4).
 
 ## Inputs
 
-- The album folder contents at export time (`folder.iterdir()`), now classified by
-  `is_exported_entry` rather than `is_symlink`.
-- `Tracks/` source files (the link/copy targets) - unchanged.
-- The per-user config location from `platformdirs` (was: `XDG_CONFIG_HOME`).
+- The album folder's symlink capability (`_supports_symlinks`), at export time and
+  drift-check time.
+- The album folder contents (`folder.iterdir()`), counted by `is_symlink()` as today.
+- `Tracks/` source files (the symlink targets) - unchanged.
+- The per-user config location from `platformdirs` (was: `XDG_CONFIG_HOME`), with the
+  relative-XDG guard preserved.
 - A folder path to reveal (approve/reopen flows) - unchanged.
 
 ## Outputs
 
-- Staged export entries (symlink on Linux; hardlink/copy fallback elsewhere) + the
-  `playlist.m3u8`, promoted atomically as today.
-- `.export-log` entries that now note a non-symlink strategy when one was used.
+- Numbered symlinks (symlink-capable filesystems only) + `playlist.m3u8`, promoted
+  atomically as today.
+- `.export-log` note when a playlist-only export occurred.
 - `settings.json` at the platform-appropriate config path (Linux path unchanged).
 - A best-effort file-manager window on the target folder.
 
@@ -221,95 +231,114 @@ returns; it never raises, matching the pre-Spec-22 silent-failure contract (INV-
 
 | Condition | Behavior |
 |---|---|
-| Symlink unsupported (Windows without Developer Mode, FAT/exFAT) | `_stage_entry` catches the `OSError` and falls back to hardlink, then copy. |
-| Hardlink fails (staging and source on different filesystems) | Falls back to copy (`shutil.copy2`). |
-| Copy also fails (disk full, permission) | The final `OSError` propagates to `regenerate_album_exports`, surfaced as today's `ExportFailed` / warning - a genuine failure, not swallowed. |
-| Album folder holds a copy/hardlink export (no symlinks) | `is_exported_entry` counts them; `is_export_fresh` and stale-cleanup work (INV-22-1). |
-| A stale copy from a previous export | Snapshotted by `_commit_export` (via `is_exported_entry`) and unlinked when not in the new set - same as stale symlinks today. |
+| Symlink unsupported (Windows without Developer Mode, FAT/exFAT) | `_supports_symlinks` is false; export writes `playlist.m3u8` + artifacts, skips numbered entries, logs one warning. No hardlink, no copy, no dialog. |
+| Playlist-only album, drift check | `expected = 0` (no symlink capability); `actual = 0`; reads fresh, no perpetual `needs_regen` (INV-22-3). |
+| A leftover symlink on a now-symlink-capable filesystem | Counted by `is_symlink()` as today; the normal reorder/stale-cleanup path applies. |
 | Broken symlink in the folder | Still counted (`is_symlink()` True), preserving current Linux semantics. |
-| `XDG_CONFIG_HOME` set and absolute (Linux) | `platformdirs` returns `$XDG_CONFIG_HOME/album-builder` - identical to today (INV-22-2). |
+| `XDG_CONFIG_HOME` absolute (Linux) | `platformdirs` returns `$XDG_CONFIG_HOME/album-builder` - identical to today (INV-22-2). |
 | `XDG_CONFIG_HOME` unset/empty (Linux) | `~/.config/album-builder` - identical to today. |
-| `XDG_CONFIG_HOME` set but **relative** (Linux, spec-violating) | Accepted micro-change: `platformdirs` may honor it where the old hand-rolled guard ignored it. A relative `XDG_CONFIG_HOME` violates the freedesktop spec and does not occur in practice; documented, not guarded. |
-| `QDesktopServices.openUrl` returns `False` (no handler) | Logged, silent, no raise (INV-22-4). |
+| `XDG_CONFIG_HOME` set but **relative** (Linux) | Guard returns `~/.config/album-builder` (freedesktop mandate; existing test preserved) - identical to today (INV-22-2). |
+| `QDesktopServices.openUrl` returns `False` or raises (no handler) | Logged, silent, no propagation (INV-22-4). |
 
 ## Cross-spec amendments
 
-- **Spec 08 (`08-album-export.md`)** - the export is no longer symlink-only. (1) Update
-  the module-behavior description: entries are created by a **symlink -> hardlink -> copy**
-  fallback (`_stage_entry`), not a bare `symlink_to`. (2) The "filesystem doesn't support
-  symlinks" **Errors** row (previously "scoped out for v0.5.0 ... deferred to v0.6+") is
-  now **implemented** - update it to describe the fallback chain. (3) Reword the
-  drift-detection invariant from "live **symlink** count vs expected" to "live
-  **exported-entry** count vs expected" (the count is link-strategy-agnostic). (4) Update
-  the `export.py` header docstring's "deferred to v0.6+" note to "implemented in Spec 22".
-- **Spec 09 (`09-approval-report.md`)** - the approve flow's "xdg-open the reports folder"
-  step now goes through `QDesktopServices.openUrl` (cross-platform); behavior parity
-  (best-effort, silent on failure). Amend the step-6 wording.
-- **Spec 10 (`10-persistence.md`)** - `settings_dir` is now platform-resolved via
-  `platformdirs`: Linux path unchanged (XDG-honoring), Windows `%LOCALAPPDATA%\album-builder`,
-  macOS `~/Library/Application Support/album-builder`. The on-disk file format,
-  atomic-write strategy, and `settings.json` schema are **unchanged**. Note the config
-  path is now platform-specific in the persistence overview.
-- **Spec 12 (`12-packaging.md`)** - cross-reference: Spec 22 is the portability groundwork
-  (Phase Dist-1) that the Windows/Flatpak/OBS packaging phases build on; the bash
-  `install.sh`/`uninstall.sh` remain the Linux-from-source path and are superseded per
-  platform by the later packaging specs (not this one).
+- **Spec 08 (`08-album-export.md`)** - **supersede** the copy fallback with playlist-only:
+  1. **Rewrite the "filesystem doesn't support symlinks" Errors row (line 194-195)** from
+     the hardlink -> copy-with-consent + `fs-caps.json` design to: *"skip the numbered
+     entries and emit `playlist.m3u8` (the remembered-path list) only; no hardlink, copy,
+     consent dialog, or capability cache (Spec 22 §Design decision)."*
+  2. **Rewrite TC-08-10a / TC-08-10b** (currently the deferred hardlink/copy-consent
+     contracts, §Test contract lines 209/222/223) to the playlist-only contract: a
+     symlink-incapable filesystem yields `playlist.m3u8` + album artifacts, zero numbered
+     entries, one warn-log; the drift invariant expects zero symlinks there. Remove the
+     `fs-caps.json` / consent-dialog language.
+  3. **Amend the drift-detection invariant (line 167)** to note the expected symlink count
+     is `0` on a filesystem without symlink support (Spec 22 INV-22-3); the `is_symlink()`
+     counting itself is unchanged (no non-symlink entries are ever created).
+  4. **Update the `export.py` header docstring (lines 18-21)** whose "FAT32/vfat fallback ...
+     scoped out for v0.5.0 ... deferred to v0.6+" note is now resolved: Spec 22 makes the
+     non-symlink case playlist-only.
+  (TC-08-07/13/19 and the `_commit_export` snapshot stay `is_symlink()`-based and need **no**
+  change - entries remain symlink-only.)
+- **Spec 09 (`09-approval-report.md`)** - TC-09-18 (line 248) "`xdg-open <reports_folder>` is
+  invoked exactly once ... Failure of `xdg-open` ... is logged and silently ignored" ->
+  assert `QDesktopServices.openUrl` is invoked once (gated on
+  `settings.ui.open_report_folder_on_approve`) and a `False`/raising result is logged and
+  ignored. (The crash-recovery table's line-62 "symlink-count mismatch" phrasing stays
+  valid - drift still counts symlinks.)
+- **Spec 10 (`10-persistence.md`)** - (a) the "Files we own" table row for
+  `~/.config/album-builder/settings.json` (line 24) and the schema-section path (line 252)
+  are now platform-resolved (Linux unchanged/relative-guarded; Windows
+  `%LOCALAPPDATA%\album-builder`; macOS `~/Library/Application Support/album-builder`);
+  (b) the entries-row label "`01 - …`, `02 - …` symlinks" (line 20) becomes "symlinks
+  (symlink-capable filesystems; playlist-only otherwise, Spec 22)"; (c) TC-10-19 (line 318)
+  stays Linux-valid, Linux-guarded, unchanged. The on-disk file format, atomic-write
+  strategy, and `settings.json` schema are unchanged.
+- **`docs/standards/dependency-currency.md`** - `platformdirs` is added to `requirements.txt`
+  as a floor-only, uncapped dependency; it does **not** get a §4 Held-back-version Ledger
+  row (that section is for intentional caps only). If recorded anywhere, it belongs in the
+  §5 "Baseline verified green" snapshot on the next gate run.
 - **Spec 00 (`00-app-overview.md`)** - add the Spec 22 row to the spec index.
-- **`docs/standards/dependency-currency.md`** - add `platformdirs` to the runtime-dependency
-  ledger (new dep, floor-only, no cap; rationale: Qt-free cross-platform config-dir
-  resolution).
+- **Spec 12 (`12-packaging.md`)** - a *reference*, not a dependency: Spec 22 is the
+  groundwork the later packaging phases build on; no text change required here. See §Out of
+  scope for a pre-existing Spec 12 drift noted for a later sweep.
 - No change to Spec 06 (playback) - referenced only because the config path holds
   `audio.volume`; the value and format are untouched.
 
 ## Test contract
 
 Tests reference their TC ID via a `# Spec: TC-22-NN` marker. All are audio-free and
-bus-free; the export tests operate on real temp directories (as the Spec 08 suite does).
+bus-free; export tests use real temp directories. The no-symlink case is forced by
+monkeypatching `_supports_symlinks` (or `Path.symlink_to`) since the CI filesystem supports
+symlinks.
 
-- **TC-22-01** - `_stage_entry` on the (symlink-capable) test filesystem creates a
-  **symlink** and returns `"symlink"`; the staged entry reads the target's bytes
-  (`open(link, "rb").read()` equals the source) - proving Linux is unchanged.
-- **TC-22-02** - fallback ordering: monkeypatch `Path.symlink_to` to raise `OSError` ->
-  `_stage_entry` returns `"hardlink"` and the entry is a hardlink (same `st_ino` as the
-  target, or byte-equal); monkeypatch **both** `symlink_to` and `os.link` to raise ->
-  returns `"copy"` and the entry is an independent byte-equal copy. First-success-wins is
-  asserted by the return value at each stage.
-- **TC-22-03** - `is_exported_entry` / freshness with non-symlink entries: build an album
-  folder containing N **copies** (not symlinks) plus every reserved name (`album.json`,
-  `playlist.m3u8`, `.approved`, `.export-log`, a `reports/` dir); `is_export_fresh`
-  returns `True` when the copy count equals the expected non-missing track count, and the
-  reserved names are **not** counted as exported entries.
-- **TC-22-04** - `_commit_export` stale-cleanup is link-agnostic: seed the live folder
-  with a stale **copy** from a prior export; after a commit whose new set omits it, the
-  stale copy is removed (proving the snapshot uses `is_exported_entry`, not `is_symlink`).
-- **TC-22-05** - `settings_dir` on Linux: with a monkeypatched absolute `XDG_CONFIG_HOME`,
-  resolves to `<XDG_CONFIG_HOME>/album-builder` (byte-identical to the pre-Spec-22
-  result); with `XDG_CONFIG_HOME` unset, resolves under `~/.config/album-builder`
-  (INV-22-2). The test is Linux-guarded (asserts the Linux contract; the Windows/macOS
-  branches are `platformdirs`' contract, not re-tested here).
-- **TC-22-06** - regression: the full existing Spec 08 export round-trip on the test
-  filesystem still produces symlinks and the drift/commit invariants still hold (the
-  existing Spec 08 suite passing unmodified is the assertion; a thin explicit check that a
-  regenerated entry `is_symlink()` on the symlink-capable test FS anchors it to this TC).
+- **TC-22-01** - symlink-capable export unchanged: on the test filesystem,
+  `regenerate_album_exports` creates the numbered symlinks + `playlist.m3u8`; a regenerated
+  entry `is_symlink()`; the entry reads the target's bytes.
+- **TC-22-02** - playlist-only export: with `_supports_symlinks` forced `False`,
+  `regenerate_album_exports` writes `playlist.m3u8` (listing all non-missing tracks) and the
+  album artifacts, creates **zero** symlink entries, and appends exactly one
+  `"playlist-only"` warning to `log_warnings` (not one per track).
+- **TC-22-03** - capability-aware drift: with `_supports_symlinks` forced `False` and zero
+  numbered entries present, `is_export_fresh` returns `True` (expected `0` == actual `0`) and
+  `album_store._symlink_count_matches` returns `True` (no perpetual `needs_regen`, INV-22-3);
+  with `_supports_symlinks` `True` and a missing entry, both return `False` (Linux drift
+  unchanged).
+- **TC-22-04** - `_supports_symlinks` probe: returns `True` on the (symlink-capable) test FS
+  and leaves no throwaway symlink behind (the probe cleans up); returns `False` when
+  `Path.symlink_to` is monkeypatched to raise `OSError`.
+- **TC-22-05** - regression: the full existing Spec 08 export round-trip on the test
+  filesystem still produces symlinks and the drift/commit invariants still hold (the existing
+  Spec 08 suite passing unmodified is the assertion; a thin explicit `is_symlink()` check on a
+  regenerated entry anchors it here).
+- **TC-22-06** - `settings_dir` on Linux: **absolute** monkeypatched `XDG_CONFIG_HOME` ->
+  `<XDG_CONFIG_HOME>/album-builder` (byte-identical to pre-Spec-22); **unset/empty** ->
+  `~/.config/album-builder`; **relative** (`"relative/path"`) -> `~/.config/album-builder` via
+  the preserved guard (the existing `test_relative_xdg_config_home_falls_back_to_home_config`
+  passes unchanged) - INV-22-2. Linux-guarded.
 - **TC-22-07** - `_open_in_file_manager` calls `QDesktopServices.openUrl` with a
-  `QUrl.fromLocalFile(folder)` (monkeypatch `openUrl`, assert the received URL's local
-  file equals `folder`); an `openUrl` returning `False` (and one raising) does **not**
-  propagate out of the method and logs at most a warning (INV-22-4).
+  `QUrl.fromLocalFile(folder)` (monkeypatch `openUrl`, assert the received URL's local file
+  equals `folder`); an `openUrl` returning `False` **and** one raising each do **not**
+  propagate out of the method and log at most a warning (INV-22-4).
 
 ## Out of scope
 
 - **The actual packaging** - Flatpak manifest + Flathub submission (Phase Dist-2),
   PyInstaller Windows bundle (Phase Dist-3), OBS RPM/DEB (Phase Dist-4). Each is its own
   later spec; this phase ships no bundler, manifest, or installer.
-- **macOS as a shipping target** - the code becomes macOS-safe as a side effect of using
-  cross-platform primitives, but macOS is not a build/release target of the epic.
-- **Settings migration** - none is needed; the Linux config path is unchanged (INV-22-2),
-  and Windows/macOS are new platforms with no prior installs to migrate.
+- **Hardlink / copy export fallback** - explicitly out (the WinAmp-style playlist-only
+  design supersedes Spec 08's deferred copy-with-consent). If a future need arises to
+  materialize real files on a removable device, it is a separate feature.
+- **macOS as a shipping target** - the code becomes macOS-safe as a side effect, but macOS
+  is not a build/release target of the epic.
+- **Settings migration** - none needed; the Linux config path is unchanged (INV-22-2), and
+  Windows/macOS are new platforms with no prior installs.
 - **Windows code-signing / SmartScreen** - a Phase Dist-3 concern.
-- **The single-instance lock** (`app.py` `QSharedMemory` + POSIX SHM cleanup) - already
-  cross-platform (`QSharedMemory` works on Windows); the POSIX stale-segment cleanup is
-  best-effort and a harmless no-op elsewhere. No change here.
-- **The bash `install.sh` / `uninstall.sh`** - the Linux-from-source installer; retained
-  as-is and superseded per platform by the later packaging specs.
-- **Replacing `os.symlink` semantics on Linux** - Linux still exports symlinks; the
-  fallback only engages where symlinks are unavailable.
+- **The single-instance lock** (`app.py` `QSharedMemory`) - already cross-platform; the
+  POSIX stale-segment cleanup is a harmless no-op elsewhere. No change here.
+- **The bash `install.sh` / `uninstall.sh`** - the Linux-from-source installer; retained and
+  superseded per platform by the later packaging specs.
+- **Spec 12's capped `requirements.txt` block** - Spec 12 §Dependencies lists upper caps
+  (`PyQt6>=6.6,<7`, etc.) that contradict the dependency-currency "floors, no upper caps"
+  standard **and** are already stale vs the actual (floor-only) `requirements.txt`.
+  Pre-existing drift, out of this phase's lane; flagged for a later docs sweep.
