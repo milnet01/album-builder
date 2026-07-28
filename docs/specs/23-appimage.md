@@ -98,9 +98,10 @@ or by CI (§4.5 calls the identical script), that produces
 `dist/AlbumBuilder-<version>-x86_64.AppImage`.
 
 The script executes stages 1-6 **inside a digest-pinned `ubuntu:22.04` container**
-(`docker` or `podman run --user $(id -u):$(id -g)`; the repo bind-mounted
-read-only, plus a separate writable mount for `dist/` so the finished AppImage
-lands back in the repo owned by the invoking user, not root), so
+(`docker`/`podman run` **as root** - stage 4's `apt-get` requires it - with the
+repo bind-mounted read-only and a separate writable mount for `dist/`; the
+finished AppImage is `chown`ed to the invoking user's `HOST_UID`/`HOST_GID` as
+the last step so a local build never leaves a root-owned `dist/`), so
 the glibc floor and every bundled native library are the container's, not the
 build host's - a local run on openSUSE Tumbleweed and a CI run on any Ubuntu
 runner produce the same broadly-compatible artifact: identical glibc floor and
@@ -247,13 +248,14 @@ prints `__version__`, and that the printed value equals the `<version>` field in
 the produced filename - INV-23-3) and `--selftest` (asserts exit 0); extract the
 AppDir with `--appimage-extract` and assert over `squashfs-root`: no
 `pyproject.toml` and no `ALBUM_BUILDER_DEV_MODE` in `AppRun` (INV-23-4), no
-`torch`/`whisperx` directory (INV-23-5), all six §4.2 sonames in `usr/lib` plus
-`etc/fonts/fonts.conf` and a bundled font (INV-23-2 real-bundle check, which
-`--selftest` alone cannot guarantee), and `desktop-file-validate usr/share/applications/*.desktop`
-passes (INV-23-6 real-bundle check); on a tag push, upload the AppImage to the
-tag's GitHub Release (creating the Release if it does not exist yet). FUSE is
-available on the runner, so the AppImage runs directly for the
-`--version`/`--selftest` smoke steps. All of these are verification/upload steps,
+`torch`/`whisperx` directory (INV-23-5), and all six §4.2 sonames in `usr/lib`
+plus `etc/fonts/fonts.conf` and a bundled font (INV-23-2 real-bundle check, which
+`--selftest` alone cannot guarantee). These are coreutils-only checks - no `apt`,
+so INV-23-9 holds; INV-23-6's real-bundle `desktop-file-validate` runs inside the
+build script at stage 5, not here. On a tag push, upload the AppImage to the tag's
+GitHub Release (creating the Release if it does not exist yet). FUSE is available
+on the runner, so the AppImage runs directly for the `--version`/`--selftest`
+smoke steps. All of these are verification/upload steps,
 not build stages - the build itself stays entirely inside `build-appimage.sh`
 (INV-23-9).
 
@@ -313,19 +315,19 @@ requires it) - see §9.
 - **INV-23-6** - The bundled desktop entry is valid. *Test:* two layers -
   (a) TC-23-03 substitutes the `@@LAUNCHER@@` token in
   `packaging/album-builder.desktop.in` and runs `desktop-file-validate` on the
-  result (unit), AND (b) `appimage.yml` runs `desktop-file-validate` on the
-  `album-builder.desktop` inside the extracted `squashfs-root` (the real bundle,
-  so a broken stage-5 substitution is caught). *Breaks when:* the `.desktop`
-  template loses a required key (`Exec`, `Type`, `Name`) or the `@@LAUNCHER@@`
-  token is left unsubstituted.
+  result (unit), AND (b) `build-appimage.sh` stage 5 runs `desktop-file-validate`
+  on the generated `.desktop` inside the container (the real substitution; the
+  build fails if it is invalid). *Breaks when:* the `.desktop` template loses a
+  required key (`Exec`, `Type`, `Name`) or the `@@LAUNCHER@@` token is left
+  unsubstituted.
 - **INV-23-7** - The build runs in a pinned `ubuntu:22.04` container, which sets
   the AppImage's glibc floor independently of the CI runner image. *Test:* the
-  `docker`/`podman run` invocation line in `packaging/build-appimage.sh` names an
-  `ubuntu:22.04...` image (grep the run line, not any mention - a stray comment
-  must not satisfy it). That the artifact actually runs on an older-than-2.35
-  glibc host is NOT machine-checked in CI (no old-glibc runner) - see §11.
-  *Breaks when:* the run line's base image is bumped to a newer tag, silently
-  raising the floor.
+  `BASE_IMAGE` assignment in `packaging/build-appimage.sh` is
+  `ubuntu:22.04@sha256:...` and the container `run` invocation uses that variable
+  (`grep '^BASE_IMAGE=.*ubuntu:22.04' packaging/build-appimage.sh` - a code line,
+  not a comment). That the artifact actually runs on an older-than-2.35 glibc host
+  is NOT machine-checked in CI (no old-glibc runner) - see §11. *Breaks when:*
+  `BASE_IMAGE` is bumped to a newer tag, silently raising the floor.
 - **INV-23-8** - A version-tag push produces a Release asset. *Test:* the
   `appimage.yml` workflow triggers on `push: tags: ['v*']`, declares
   `permissions: contents: write`, and has an upload step that targets (and creates
@@ -347,10 +349,11 @@ requires it) - see §9.
   The app's own `pip` dependencies are deliberately NOT pinned here - they follow
   the project's floors-only dependency-currency policy (latest-resolving by design;
   `requirements.txt` carries floors, no caps), a separate documented trust posture,
-  not a gap in this one. *Test:* inspect the actual fetch/run lines in
-  `packaging/build-appimage.sh` (not mere name mentions) - the base-image run line
-  carries `@sha256:`, and each tool fetch names a version tag or verifies a
-  checksum; no line uses `:latest`, `HEAD`, a bare `ubuntu:22.04`, or a branch name.
+  not a gap in this one. *Test:* inspect the actual pin lines in
+  `packaging/build-appimage.sh` (the `BASE_IMAGE`/`PYTHON_APPIMAGE_*`/`APPIMAGETOOL_VERSION`
+  assignments and the tool `wget` URLs, not mere name mentions) - the `BASE_IMAGE`
+  assignment carries `@sha256:`, and each tool is fetched by a version tag or a
+  checksummed asset; no line uses `:latest`, `HEAD`, or a branch name.
   *Breaks when:* a tooling input is fetched by a moving reference, so a changed or
   compromised upstream silently enters an artifact users download and run
   unsandboxed - the supply-chain trust boundary this spec must state (spec-format
@@ -369,11 +372,12 @@ requires it) - see §9.
   and the stage-2 tool fetch all need internet; without it the build fails early
   and loudly, before producing an artifact. A build-time failure only - never a
   shipped-broken artifact.
-- **Root-owned `dist/` after a local build.** A default rootful `docker run` writes
-  container-root-owned files into the host `dist/`, which the developer then cannot
-  overwrite without `sudo`. Prevented by the `--user $(id -u):$(id -g)` mapping in
-  the run invocation (§4.1); a developer whose runtime ignores it (rare) removes
-  the stale artifact with `sudo` once.
+- **Root-owned `dist/` after a local build.** The container runs as root (stage
+  4's `apt-get` requires it), so a naive build would leave the output owned by
+  root and the developer could not overwrite it without `sudo`. Prevented by
+  `chown`ing the output artifact to the invoking user's `HOST_UID`/`HOST_GID` as
+  the final build step (§4.1); a `--user`-mapped run is not usable here because it
+  cannot `apt-get`.
 - **The build host has no Docker or Podman.** `build-appimage.sh` exits
   immediately with a clear prerequisite message - it cannot pin the build
   environment without a container runtime, and a native host build is rejected
@@ -419,9 +423,9 @@ carries a `# Spec: TC-NN-MM` contract anchor per CLAUDE.md).
 CI-only (exercised by `appimage.yml`, not pytest - a real AppImage build is too
 heavy for the unit suite): INV-23-1/2 against the **actual** built artifact,
 INV-23-3 by comparing the printed version to the produced filename, INV-23-6 by
-`desktop-file-validate` on the extracted bundle, and INV-23-4/5 against the
-extracted AppDir are dynamically exercised on every workflow run. INV-23-7/9/10
-are static/cold-reader checks (§11), not per-run. INV-23-8 is **not** exercised at
+`desktop-file-validate` inside the build script (stage 5), and INV-23-4/5 against
+the extracted AppDir are dynamically exercised on every workflow run (every run
+builds). INV-23-7/9/10 are static/cold-reader checks (§11), not per-run. INV-23-8 is **not** exercised at
 all by a normal run - it cannot exercise the
 tag->Release upload (it needs a real `v*` tag push), so it is verified
 *statically* (the workflow's trigger + upload step are inspected) and proven
@@ -496,8 +500,8 @@ only this catcher.
 | INV-23-3 | `appimage.yml` filename-vs-`--version` assertion + a static grep that stage 1 reads `version.py` (CI-only) |
 | INV-23-4 | `appimage.yml` `find ... pyproject.toml` + `! grep -q ALBUM_BUILDER_DEV_MODE AppRun` over the extracted AppDir - **CI-only** |
 | INV-23-5 | `appimage.yml` `find ... torch/whisperx` over the extracted AppDir - **CI-only** |
-| INV-23-6 | `test_TC_23_appimage.py::test_desktop_valid` (TC-23-03, unit) + `appimage.yml` `desktop-file-validate` over the extracted bundle's `.desktop` (CI-only, real substitution) |
-| INV-23-7 | `grep` the `docker`/`podman run` line in `build-appimage.sh` for `ubuntu:22.04` (static; a stray comment must not satisfy it); a real old-glibc run is manual, tracked by the Distribution epic |
+| INV-23-6 | `test_TC_23_appimage.py::test_desktop_valid` (TC-23-03, unit) + `build-appimage.sh` stage 5 `desktop-file-validate` on the generated `.desktop` (build fails if invalid) |
+| INV-23-7 | `grep '^BASE_IMAGE=.*ubuntu:22.04' build-appimage.sh` (static, a code line not a comment); a real old-glibc run is manual, tracked by the Distribution epic |
 | INV-23-8 | **nothing automated** - proven only by an actual tagged release; the workflow file is the static artifact a cold reader checks |
 | INV-23-9 | **nothing mechanical** - the parity is structural (like `ci.yml` -> `local-CI.sh`); a cold reader confirms `appimage.yml` only calls `build-appimage.sh` |
 | INV-23-10 | `grep` in `build-appimage.sh` that the base image carries an `@sha256:` digest and each tool a version tag (a cold reader, or a CI lint step once the script exists) |
