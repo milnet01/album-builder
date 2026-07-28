@@ -11,9 +11,9 @@ set -euo pipefail
 # --- Pinned build inputs (INV-23-10). Immutable refs, refreshed on the
 # dependency-currency sweep - never `latest`/`HEAD`/a branch. -------------------
 BASE_IMAGE="ubuntu:22.04@sha256:0d779ea97881505f5ef0039336ee85edba27519bdba968c284c86ee066a973c8"
-PYTHON_APPIMAGE_TAG="python3.12.7"                                   # niess/python-appimage release
-PYTHON_APPIMAGE_ASSET="python3.12.7-cp312-cp312-manylinux2014_x86_64.AppImage"
-APPIMAGETOOL_VERSION="1.9.0"                                         # AppImage/appimagetool release
+PYTHON_APPIMAGE_TAG="python3.13"                                     # niess/python-appimage (per-minor tag); 3.13 == CI's tested interpreter
+PYTHON_APPIMAGE_ASSET="python3.13.14-cp313-cp313-manylinux2014_x86_64.AppImage"
+APPIMAGETOOL_VERSION="1.9.1"                                         # AppImage/appimagetool latest stable
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
