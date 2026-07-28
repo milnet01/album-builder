@@ -17,11 +17,11 @@ Define the rules for writing data to disk so that:
 |---|---|---|---|
 | `Albums/<slug>/album.json` | one per album | spec below | every mutation, debounced |
 | `Albums/<slug>/playlist.m3u8` | derived from album.json | M3U (Spec 08) | every mutation |
-| `Albums/<slug>/01 - …`, `02 - …` symlinks | derived from album.json | n/a | every mutation |
+| `Albums/<slug>/01 - …`, `02 - …` symlinks (symlink-capable filesystems; playlist-only otherwise, Spec 22) | derived from album.json | n/a | every mutation |
 | `Albums/<slug>/.approved` | marker | empty file | on approve / unapprove |
 | `Albums/<slug>/reports/*.{pdf,html}` | one per approval | n/a | on approve |
 | `.album-builder/state.json` | one global | spec below | on selection change, geometry change, debounced |
-| `~/.config/album-builder/settings.json` | one global | spec below | on settings change |
+| `<config-dir>/album-builder/settings.json` (platform-resolved, Spec 22: Linux `<XDG_CONFIG_HOME or ~/.config>`, Windows `%LOCALAPPDATA%`, macOS `~/Library/Application Support`) | one global | spec below | on settings change |
 | `Tracks/<stem>.lrc` | one per aligned track | LRC (Spec 07) | on alignment completion |
 
 ## Atomic write protocol
@@ -249,7 +249,7 @@ Self-heal on load: any field of the wrong type → fall back to the default for 
 
 ## `settings.json` schema (v1) — canonical
 
-Spec 12 owns *what settings exist*; this spec owns the bytes. Lives at `~/.config/album-builder/settings.json` (XDG).
+Spec 12 owns *what settings exist*; this spec owns the bytes. Lives at `<config-dir>/album-builder/settings.json`, platform-resolved via `platformdirs` (Spec 22): Linux `<XDG_CONFIG_HOME or ~/.config>` (an absolute `XDG_CONFIG_HOME` honored, a relative one ignored per the freedesktop mandate), Windows `%LOCALAPPDATA%`, macOS `~/Library/Application Support`.
 
 ```json
 {
