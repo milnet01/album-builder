@@ -29,6 +29,15 @@ The repo ships a `.venv/` with all deps. Always use it:
 
 bandit / pyright / shellcheck / semgrep / gitleaks / trivy are installed (see `/audit`).
 
+### Distribution (Spec 23 / Phase Dist-2)
+
+`packaging/build-appimage.sh` builds the downloadable `AlbumBuilder-<version>-x86_64.AppImage`
+inside a digest-pinned `ubuntu:22.04` container (needs Docker or Podman), so a
+local build matches the CI release. `.github/workflows/appimage.yml` runs that
+same script on a `v*` tag + manual dispatch and attaches the AppImage to the
+GitHub Release. The build script is the single source of truth (the workflow only
+invokes it + smoke-tests + uploads) — mirrors the `ci.yml` -> `local-CI.sh` pattern.
+
 ## Architecture (4 layers, signals up + writes down)
 
 - **`domain/`** — pure Python, no Qt, no I/O. `Album` (mutable, `_require_draft` guards), `Library`/`Track` (frozen), `slug`, `lyrics`. Specs 01 / 02 / 04 / 05 / 07.

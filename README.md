@@ -17,6 +17,34 @@ State persists across launches; library refreshes live when `Tracks/` changes.
 See [`ROADMAP.md`](ROADMAP.md) for the full release log and `docs/plans/` for
 per-phase implementation details.
 
+## Download (AppImage) — no install
+
+The quickest way to run Album Builder on Linux: grab the single AppImage from the
+[latest release](https://github.com/milnet01/album-builder/releases/latest), make
+it executable, and run it — no Python, no `pip`, no `install.sh`:
+
+```bash
+chmod +x AlbumBuilder-*-x86_64.AppImage
+./AlbumBuilder-*-x86_64.AppImage
+```
+
+The file bundles the Python runtime, PyQt6 (Qt + FFmpeg audio), and WeasyPrint's
+PDF libraries. It runs on most Linux distributions from ~2022 onward (glibc 2.35+;
+it is built inside an Ubuntu 22.04 container). Notes:
+
+- Your system provides the graphics driver (`libGL`) — any normal desktop already
+  has it. If the window fails to start with a `Qt xcb` error, install your distro's
+  base X11 / GL client libraries.
+- If the file won't self-mount (no FUSE), run it as
+  `./AlbumBuilder-*-x86_64.AppImage --appimage-extract-and-run`.
+- On systems older than ~2022 (glibc below 2.35) it exits with a
+  `GLIBC_2.35 not found` message — those distros are below the supported floor.
+- **Lyric auto-alignment** (WhisperX + torch) is *not* in the AppImage — that
+  stack is hundreds of MB and stays an optional `pip` extra; use the source
+  install below if you want it.
+
+Prefer a system install with a K-Menu entry? Use `./install.sh` below.
+
 ## Install (openSUSE Tumbleweed + KDE Plasma)
 
 ```bash

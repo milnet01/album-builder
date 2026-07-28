@@ -48,6 +48,7 @@ Scope beyond `requirements*.txt`:
 | CI runner image | `.github/workflows/ci.yml` `runs-on:` | latest `ubuntu-<year>.04` GA image |
 | Python interpreter | `.github/workflows/ci.yml` `python-version:` + local `.venv` | latest stable that the code supports |
 | CI system libraries | `.github/workflows/ci.yml` apt step | distro's current package names (watch 24.04 `t64` renames) |
+| AppImage build tooling | `packaging/build-appimage.sh` (`BASE_IMAGE` digest, `PYTHON_APPIMAGE_*`, `APPIMAGETOOL_VERSION`) | re-point the `ubuntu:22.04@sha256:` digest to current + bump the pinned tool versions on the sweep. These are **trust-boundary pins** (Spec 23 INV-23-10), not breakage holdbacks: pinned so a changed upstream can't silently enter a shipped artifact, but still swept — the frozen base image ships OS libs into every AppImage, so a stale digest is real CVE exposure. |
 
 ## 3. The sweep (check, don't wait)
 

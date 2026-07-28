@@ -177,6 +177,7 @@ The asymmetry is intentional, not historical drift.
 | [20](./20-mpris-tray-integration.md) | MPRIS2 + tray | D-Bus MPRIS2 service (Plasma media controls, lock screen, hardware media keys) + system-tray control surface, driven by the same Player/PlaybackController; Phase G of the music-player epic (implemented) |
 | [21](./21-replaygain.md) | ReplayGain | Opt-in loudness normalization: read ID3 `TXXX` ReplayGain tags, scale the output volume by a track/album-gain factor (user volume unchanged), toggled via a Playback menu; Phase F of the music-player epic (implemented) |
 | [22](./22-distribution.md) | Portability groundwork | Cross-platform export (symlink-or-playlist), config path (`platformdirs`), folder-open (`QDesktopServices`); Phase Dist-1 of the distribution epic |
+| [23](./23-appimage.md) | AppImage | Single-file Linux download built inside a digest-pinned `ubuntu:22.04` container (`packaging/build-appimage.sh` + `appimage.yml`); Phase Dist-2 of the distribution epic |
 
 ## Cross-cutting non-functional requirements
 
