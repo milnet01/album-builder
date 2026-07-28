@@ -57,6 +57,15 @@ DEV_MODE_ENV = "ALBUM_BUILDER_DEV_MODE"
 
 
 def run() -> int:
+    # Headless entry points (Spec 23 INV-23-1/2), parsed before QApplication so
+    # they work with no display - the AppImage smoke tests rely on this.
+    argv = sys.argv[1:]
+    if "--version" in argv or "-V" in argv:
+        print(__version__)
+        return 0
+    if "--selftest" in argv:
+        return _selftest()
+
     app = QApplication(sys.argv)
     app.setApplicationName("Album Builder")
     app.setApplicationVersion(__version__)
@@ -91,6 +100,36 @@ def run() -> int:
         server.close()
         lock.detach()
     return rc
+
+
+def _selftest() -> int:
+    """Liveness probe for the bundled WeasyPrint native stack (Spec 23 INV-23-2).
+
+    Renders a trivial HTML to PDF using the same Pango/HarfBuzz/fontconfig
+    libraries report generation needs, but without an album - so a packaged
+    build can prove its native libraries load with no display and no data.
+    Returns 0 on a non-empty PDF, 1 on any failure. This is a probe, not report
+    generation: it deliberately does not touch `services/report.py`.
+    """
+    import tempfile
+
+    try:
+        from weasyprint import HTML
+    except Exception as exc:  # import-time native-library failure
+        print(f"selftest: WeasyPrint import failed: {exc}", file=sys.stderr)
+        return 1
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "selftest.pdf"
+            HTML(string="<p>Album Builder self-test</p>").write_pdf(str(out))
+            if out.exists() and out.stat().st_size > 0:
+                print("selftest: ok")
+                return 0
+        print("selftest: rendered an empty PDF", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"selftest: render failed: {exc}", file=sys.stderr)
+        return 1
 
 
 def resolve_app_icon(theme_name: str = ICON_NAME, dev_svg: Path | None = None) -> QIcon | None:
