@@ -187,10 +187,14 @@ def test_TC_10_25_both_variants_clean_counts_two_pairs(tmp_path):
 def test_TC_10_26_artist_only_on_disk_half_pair_is_repaired(tmp_path):
     reports = tmp_path / "reports"
     reports.mkdir()
-    # No full variant on disk at all. Artist variant: half-pair.
-    art_html, art_pdf, _, _ = _make_pair(
+    # No full variant on disk at all. Artist variant: a GENUINE half-pair -
+    # one final PLUS a leftover pdf.tmp (a crash between the two renames).
+    # Since Spec 24, a lone .html with NO tmp is instead a complete single-file
+    # report and is kept (see TC-24-02), so a real half-pair fixture must carry
+    # the pdf.tmp that an interrupted pair always leaves behind.
+    art_html, art_pdf, _, art_pdf_tmp = _make_pair(
         reports, "Album", "2026-04-30",
-        html_final=True, pdf_final=False,
+        html_final=True, pdf_final=False, pdf_tmp=True,
         artist_view=True,
     )
 
@@ -198,6 +202,7 @@ def test_TC_10_26_artist_only_on_disk_half_pair_is_repaired(tmp_path):
 
     assert not art_html.exists()
     assert not art_pdf.exists()
+    assert not art_pdf_tmp.exists()
     assert stats["pairs_repaired"] == 1
 
 

@@ -108,9 +108,11 @@ def scan_reports_dir(reports_dir: Path, *, sanitised_name: str) -> dict[str, int
 
     Idempotent: a clean directory (both finals, no tmps) is a no-op.
     Returns a small stats dict for telemetry / tests:
-      - `pairs_completed`: count of date stems where both finals exist.
-        Increments only when no leftover `.tmp` siblings exist for that
-        stem (a clean state).
+      - `pairs_completed`: count of date stems with a settled report -
+        either both finals present, or (Spec 24 INV-24-6) a lone `.html`
+        with no `.pdf` and no `.tmp` sibling: a complete single-file report,
+        which is what `render_report` writes when the PDF cannot be produced.
+        Increments only in a clean state (no leftover `.tmp` for that stem).
       - `pairs_repaired`: count where exactly one final was found and
         removed AND every related `.tmp` was successfully unlinked. A
         partial cleanup (one of the unlinks raised) does NOT count as
@@ -158,10 +160,22 @@ def scan_reports_dir(reports_dir: Path, *, sanitised_name: str) -> dict[str, int
                     )
                 continue
 
-            # Branch 3: half-pair (one final, the other absent). Delete the
-            # surviving final + every related tmp. Only count `pairs_repaired`
-            # when EVERY unlink succeeded - the spec contract is "delete both",
-            # so partial completion stays "needs another scan".
+            # Branch 2b (Spec 24 INV-24-6): a lone HTML final with no PDF and
+            # no `.tmp` sibling is a complete single-file report - the PDF-less
+            # state `render_report` writes when the PDF cannot be produced. An
+            # interrupted pair ALWAYS leaves a `pdf.tmp` (both tmps are written
+            # before either rename), so a lone HTML with no tmp cannot be a
+            # crash artifact. Keep it and count it completed. This MUST precede
+            # Branch 3, which would otherwise delete the lone HTML as a half-pair.
+            if has_html and not has_pdf and not tmps:
+                stats["pairs_completed"] += 1
+                continue
+
+            # Branch 3: half-pair (one final, the other absent, WITH a leftover
+            # tmp - or a lone PDF, which is never a valid single-file report).
+            # Delete the surviving final + every related tmp. Only count
+            # `pairs_repaired` when EVERY unlink succeeded - the spec contract is
+            # "delete both", so partial completion stays "needs another scan".
             if has_html != has_pdf:
                 unlinks: list[bool] = []
                 for p in (html_final, pdf_final):

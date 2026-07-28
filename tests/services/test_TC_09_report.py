@@ -440,17 +440,20 @@ def test_TC_09_30_artist_variant_recovery_independent_of_full(tmp_path):
     # Full pair: complete on disk.
     today = date(2026, 4, 30)
     full_html, full_pdf = render_report(album, library, reports_dir=reports, today=today)
-    # Artist pair: only the html exists (Phase-2 mid-crash; pdf rename never
-    # ran, no .tmp survived either — orphan-final-only is the worst case for
-    # cross-variant cascade detection).
+    # Artist pair: a GENUINE Phase-2 mid-crash - the html final PLUS the leftover
+    # pdf.tmp an interrupted pair always leaves (the pdf rename never ran). Since
+    # Spec 24, a lone artist html with NO tmp is instead a complete single-file
+    # report and is kept (TC-24-02), so the crash fixture must carry the pdf.tmp.
     (reports / "Memoirs - 2026-04-30 - artist.html").write_text("orphan")
+    (reports / "Memoirs - 2026-04-30 - artist.pdf.12345.abcdef01.tmp").write_bytes(b"%PDF-tmp")
 
     stats = scan_reports_dir(reports, sanitised_name="Memoirs")
 
     # Full pair: byte-identical, untouched.
     assert full_html.exists() and full_pdf.exists()
-    # Artist pair: orphan html removed.
+    # Artist pair: orphan html + its leftover tmp removed.
     assert not (reports / "Memoirs - 2026-04-30 - artist.html").exists()
+    assert not (reports / "Memoirs - 2026-04-30 - artist.pdf.12345.abcdef01.tmp").exists()
     # Stats: 1 complete (full) + 1 repaired (artist orphan).
     assert stats["pairs_completed"] == 1
     assert stats["pairs_repaired"] == 1

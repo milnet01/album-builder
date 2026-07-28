@@ -7,7 +7,8 @@ writes per Spec 10 — both `.tmp` files complete before either rename.
 
 Public API:
 - `render_report(album, library, *, reports_dir, today)` — drives the
-  full pipeline; returns `(html_path, pdf_path)`.
+  full pipeline; returns `(html_path, pdf_path)`, or `(html_path, None)`
+  when the PDF cannot be produced (Spec 24 §4.3b point-of-use fallback).
 - `version_string()` — render-time version source with `ImportError`
   fallback to `"unknown"`.
 """
@@ -25,7 +26,11 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from album_builder.persistence.atomic_io import _fsync_dir, _unique_tmp_path
+from album_builder.persistence.atomic_io import (
+    _fsync_dir,
+    _unique_tmp_path,
+    atomic_write_text,
+)
 from album_builder.services.export import sanitise_title
 
 logger = logging.getLogger(__name__)
@@ -270,7 +275,7 @@ def render_report(
     reports_dir: Path,
     today: date | None = None,
     artist_view: bool = False,
-) -> tuple[Path, Path]:
+) -> tuple[Path, Path | None]:
     """Spec 09 §canonical approve sequence step:render-* full pipeline.
 
     Steps:
@@ -281,6 +286,14 @@ def render_report(
     On any failure during step:render-tmp, the in-flight `.tmp` files are
     removed. After step:render-rename-html, the load-time atomic-pair
     scan handles half-pair recovery on next launch.
+
+    Spec 24 §4.3b point-of-use PDF fallback: if the PDF cannot be produced
+    (the WeasyPrint native stack fails to load, or this report fails to
+    render), the HTML is written alone via a single atomic write - no
+    `pdf.tmp` is created - and `(html_final, None)` is returned instead of
+    raising, so approve never crashes on a PDF problem. The whole pair
+    sequence is bypassed in that case; wherever the PDF renders, the two-file
+    atomic pair below is unchanged.
     """
     today = today or date.today()
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -291,7 +304,22 @@ def render_report(
     pdf_tmp = _unique_tmp_path(pdf_final)
 
     html_str = render_html(album, library, today=today, artist_view=artist_view)
-    pdf_bytes = render_pdf_from_html(html_str)
+    try:
+        pdf_bytes = render_pdf_from_html(html_str)
+    except Exception as exc:
+        # Spec 24 §4.3b point-of-use fallback. The native PDF stack may fail to
+        # load (a bundle missing WeasyPrint's DLLs) or this specific report may
+        # fail to render; either way write the HTML report alone rather than
+        # aborting approve. A single atomic write - no pdf.tmp is ever created,
+        # so the load-time scan reads the lone .html as a complete single-file
+        # report (atomic_pair.scan_reports_dir; Spec 24 INV-24-6), not a
+        # half-pair to delete.
+        logger.warning(
+            "render_report: PDF unavailable (%s), writing HTML-only report %s",
+            exc, html_final.name,
+        )
+        atomic_write_text(html_final, html_str)
+        return html_final, None
 
     # step:render-tmp - write BOTH tmps before any rename runs (Spec 10
     # §Atomic pair Phase 1). Each write goes through the standard
