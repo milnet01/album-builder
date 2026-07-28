@@ -291,6 +291,17 @@ created - the deliverable is a portable unzip-and-run folder (§8, a full instal
 is a follow-up). Windows "now playing" / MPRIS integration is explicitly not part
 of this phase (Spec 20 §out-of-scope already defers it).
 
+The exe is built **console-subsystem** (`console=True` +
+`hide_console="hide-early"` in `packaging/album-builder.spec`), *not* windowed.
+This is not cosmetic: a windowed (`console=False`) PyInstaller exe has no working
+stdout, so `--version`/`--selftest` raise `OSError` (EINVAL) instead of printing
+and the INV-24-1/3 smoke test reads nothing. `hide_console` dismisses the console
+window the bootloader owns *before* Python starts on a GUI double-click, so a
+normal launch shows no lingering console; a launch from an existing terminal
+reuses that terminal for the CLI flags. (Implementation fold-back - see the loop
+log; a windowed build plus an in-app `AttachConsole` stream-reattach shim was
+tried first and did not restore stdout under PowerShell output capture.)
+
 ## 5. Invariants
 
 - **INV-24-1** - The built `.exe` launches headlessly and reports the app version.
@@ -549,3 +560,4 @@ catcher, the same class Spec 23 carried (its INV-23-8/9/10).
 | 3 | 2026-07-28 | 1 cold (fallback + atomic-pair contract chain; the rest of the doc accepted clean - both lanes verified it coherent at loop 2 and it was unchanged since) | 0 | 0 | 0 | 0 | **Clean - converged.** The cold lane re-verified §4.3(c) against `atomic_pair.py`, both §12 amendments against §4.3(b/c), and the whole point-of-use `try`/`except` + single-file-write + presence-rule chain: one mechanism throughout, no residual `pdf.tmp` contradiction, §11 count intact (10 rows / 3 `nothing`). Loop-2 fixes held. |
 | impl | 2026-07-28 | implementation fold-back (Step 8, NOT a review loop) | - | - | - | - | **Contract corrected by building it.** Implementation proved INV-24-7's "existing Spec 09/10 tests pass unmodified" too strong: `render_report`'s success path IS unchanged, but two atomic-pair recovery tests (`test_TC_10_26_artist_only_on_disk_half_pair_is_repaired`, `test_TC_09_30_artist_variant_recovery_independent_of_full`) asserted a lone `.html` with no `.tmp` is *deleted* - the exact state §4.3(c) now *keeps* as a complete single-file report. Their fixtures were updated to carry the `pdf.tmp` a genuine interrupted pair always leaves (still testing crash-recovery); INV-24-7 + §7 corrected to scope "unmodified" to the render path. Full pytest suite green (exit 0). Re-gated at loop 4. |
 | 4 | 2026-07-28 | 1 cold (re-gate of the Step-8 fold-back amendment) | 0 | 0 | 0 | 2 | **Polish-converged.** The cold lane confirmed the amended INV-24-7 + §7 note match the real tests (both updated recovery tests now carry a `pdf.tmp`; the 3 new TC-24 tests exist and lock their contracts; the §4.3(c) keep-branch matches `atomic_pair.py` Branch 2b before Branch 3). **LOW:** §5 mislabelled both updated tests "Spec 10" (TC-09-30 is Spec 09) -> "one Spec 10, one Spec 09"; §11 cited placeholder test-function names -> corrected to the real `test_TC_24_0N_*` names. No substantive findings; the amendment is coherent with the shipped code. |
+| impl | 2026-07-28 | implementation fold-back (Step 8, NOT a review loop) | - | - | - | - | **CI proved the exe must be console-subsystem.** The spec was silent on `console` mode; a windowed (`console=False`) build was the natural first choice for a GUI app - but on the `windows-latest` runner `AlbumBuilder.exe --version` raised `OSError` (EINVAL) writing to a dead stdout and the INV-24-1/3 smoke test read null (runs `30370758272`, `30373367197`). An in-app ctypes `AttachConsole` + `msvcrt.open_osfhandle` stream-reattach shim was tried and did *not* restore stdout under PowerShell output capture (run `30373367197`). Fixed by building `console=True` + `hide_console="hide-early"` (`packaging/album-builder.spec`) - the PyInstaller 6 dual GUI/CLI idiom: real capturable stdout, console window dismissed before Python starts on a GUI launch. §4.6 gains the decision + rationale. Verified: Windows dispatch build green end-to-end - build + static checks + `--version`/`--selftest` smoke test all pass (run `30373943934`). Re-gated at loop 5. |
