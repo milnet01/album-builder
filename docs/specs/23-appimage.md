@@ -4,7 +4,8 @@
 **Kind:** implement.
 **Source:** ROADMAP "Distribution & cross-platform packaging" epic, Phase Dist-2 (user-request-2026-07-25, resequenced 2026-07-28).
 **Depends on:** 22 (portability groundwork - the read/write-path fallbacks this bundle relies on).
-**References (does not extend):** 00, 09, 12.
+**References (does not extend):** 00, 09.
+**Supersedes:** 12 (its AppImage *Out of scope (v1)* deferral only; Spec 12's venv-and-launcher source-install approach stands - see §12).
 **Blocked by:** 22 (shipped 2026-07-28).
 **Blocker for:** nothing (Dist-3 Windows / Dist-4 Flatpak are independent packaging phases).
 
@@ -231,7 +232,8 @@ Steps: checkout; run `packaging/build-appimage.sh` (Docker is preinstalled on
 GitHub runners, so the script's `ubuntu:22.04` build container runs directly - no
 separate `apt-get` step, that lives inside the container per §4.2); smoke-test
 the built file with `./dist/AlbumBuilder-*-x86_64.AppImage --version` (asserts it
-prints `__version__`) and `--selftest` (asserts exit 0); extract the AppDir with
+prints `__version__`, and that the printed value equals the `<version>` field in
+the produced filename - INV-23-3) and `--selftest` (asserts exit 0); extract the AppDir with
 `--appimage-extract` and assert `find squashfs-root` sees no `pyproject.toml`
 (INV-23-4) and no `torch`/`whisperx` directory (INV-23-5); on a tag push, upload
 the AppImage to the matching GitHub Release. FUSE is available on the runner, so
@@ -265,9 +267,9 @@ requires it) - see §9.
   reads a source other than `version.py`.
 - **INV-23-4** - No writable state targets the read-only mount, because the
   bundle contains no `pyproject.toml` at the location `_running_from_source_tree()`
-  probes (three levels up from the `album_builder` package - i.e. package dir ->
-  `site-packages` -> its parent, never a repo root inside the mount) and AppRun
-  sets no dev-mode env. *Test:* both halves - `find <extracted AppDir> -name
+  probes (`app.py` resolved then three `.parent` hops - package dir -> its parent
+  -> that parent; in a wheel install this lands above `site-packages`, never a
+  repo root inside the mount) and AppRun sets no dev-mode env. *Test:* both halves - `find <extracted AppDir> -name
   pyproject.toml` -> empty AND `grep -c ALBUM_BUILDER_DEV_MODE <AppDir>/AppRun`
   -> 0, so `app._running_from_source_tree()` returns False and no dev-mode
   override fires inside the mount; paths fall back to `~` per Spec 22.
@@ -303,27 +305,34 @@ requires it) - see §9.
   steps, and the upload. *Breaks when:* the workflow inlines any build stage
   instead of delegating to the script - the drift the single-source rule (§3)
   exists to prevent.
-- **INV-23-10** - Every build input is pinned to an immutable reference, not a
-  moving one: the base image as `ubuntu:22.04@sha256:...` (the `:22.04` tag kept
-  so INV-23-7's floor grep still resolves, the `@sha256` digest for the pin), and
+- **INV-23-10** - The build's own **tooling** is pinned to an immutable
+  reference: the base image as `ubuntu:22.04@sha256:...` (the `:22.04` tag kept so
+  INV-23-7's floor grep still resolves, the `@sha256` digest for the pin), and
   `python-appimage` / `appimagetool` each by a version tag or checksummed asset.
-  *Test:* `grep -E 'ubuntu:22.04@sha256:|python-appimage|appimagetool' packaging/build-appimage.sh`
-  shows the base carrying a digest and each tool a version tag - never `latest`,
-  `HEAD`, a bare `ubuntu:22.04`, or a branch name. *Breaks when:* any input is fetched by
-  a moving reference, so a changed or compromised upstream silently enters an
-  artifact users download and run unsandboxed - the supply-chain trust boundary
-  this spec must state (spec-format standard §5.5). (Byte-identical `apt` package
-  versions are deliberately NOT pinned - §9; the guarantee is a fixed glibc floor
-  and library set, not a bit-reproducible build.)
+  The app's own `pip` dependencies are deliberately NOT pinned here - they follow
+  the project's floors-only dependency-currency policy (latest-resolving by design;
+  `requirements.txt` carries floors, no caps), a separate documented trust posture,
+  not a gap in this one. *Test:* inspect the actual fetch/run lines in
+  `packaging/build-appimage.sh` (not mere name mentions) - the base-image run line
+  carries `@sha256:`, and each tool fetch names a version tag or verifies a
+  checksum; no line uses `:latest`, `HEAD`, a bare `ubuntu:22.04`, or a branch name.
+  *Breaks when:* a tooling input is fetched by a moving reference, so a changed or
+  compromised upstream silently enters an artifact users download and run
+  unsandboxed - the supply-chain trust boundary this spec must state (spec-format
+  standard §5.5). The base-image digest is refreshed on the dependency-currency
+  security cadence (§12), not frozen forever; byte-identical `apt` package versions
+  are not pinned (§9) - the guarantee is a fixed glibc floor and library set, not a
+  bit-reproducible build.
 
 ## 6. Failure modes
 
 - **A native library is missed in the §4.2 closure.** `--selftest` fails in CI
   (INV-23-2) and the release build stops before upload - the artifact never
   ships broken.
-- **No network inside the build container.** The stage-4 `apt-get` (§4.2) and the
-  stage-2 tool fetch (§4.1) need internet; without it the build fails early and
-  loudly, before producing an artifact. A build-time failure only - never a
+- **No network inside the build container.** The stage-4 `apt-get` (§4.2), the
+  stage-3 `pip install` (§4.1 - the largest download, the PyQt6/WeasyPrint wheels),
+  and the stage-2 tool fetch all need internet; without it the build fails early
+  and loudly, before producing an artifact. A build-time failure only - never a
   shipped-broken artifact.
 - **The build host has no Docker or Podman.** `build-appimage.sh` exits
   immediately with a clear prerequisite message - it cannot pin the build
@@ -364,10 +373,12 @@ Unit-testable in `tests/` (run in the normal suite):
 
 Each test is written to fail against pre-`--version`/`--selftest` `app.run()`
 (which would construct a `QApplication` and block/headlessly error) before the
-flags are added, per the project test convention.
+flags are added - the test-first practice the project's test files follow (each
+carries a `# Spec: TC-NN-MM` contract anchor per CLAUDE.md).
 
 CI-only (exercised by `appimage.yml`, not pytest - a real AppImage build is too
-heavy for the unit suite): INV-23-1/2 against the **actual** built artifact and
+heavy for the unit suite): INV-23-1/2 against the **actual** built artifact,
+INV-23-3 by comparing the printed version to the produced filename, and
 INV-23-4/5 against the extracted AppDir are dynamically exercised on every
 workflow run. INV-23-8 is **not** - a normal workflow run cannot exercise the
 tag->Release upload (it needs a real `v*` tag push), so it is verified
@@ -462,17 +473,26 @@ only this catcher.
 - **`CLAUDE.md`** - note the new `packaging/build-appimage.sh` and
   `.github/workflows/appimage.yml` under build/release.
 - **`docs/specs/00-app-overview.md`** - add Spec 23 to the spec index.
-- **No sibling-spec contract changes** - Dist-2 adds a package around Spec 22's
-  already-portable code; it does not alter Specs 08/09/10.
+- **`docs/specs/12-packaging.md`** - Spec 12 (Implemented) lists AppImage under
+  *Out of scope (v1)* ("Flatpak / AppImage add packaging complexity
+  disproportionate to a one-machine target"). Dist-2 supersedes that specific
+  deferral - the one-machine assumption no longer holds (the user now wants
+  downloadable distribution) - while leaving Spec 12's venv-and-launcher
+  source-install approach intact. Annotate Spec 12's AppImage out-of-scope line.
+- **No sibling-spec *contract* changes** - Dist-2 adds a package around Spec 22's
+  already-portable code; it does not alter the contracts of Specs 08/09/10/22. (It
+  does supersede one *scope* line in Spec 12 - above.)
 - **`docs/standards/dependency-currency.md`** - INV-23-10 introduces pinned
   build-time tooling (base-image digest, `python-appimage`, `appimagetool`) that
-  the standard's scope table does not yet cover, so a future currency sweep
-  (global rule 5c) could misread the deliberate pins as staleness. Add a
-  build-tooling category, or a one-line note that these pins are trust-boundary
-  pins, not breakage holdbacks.
+  the standard's scope table does not yet cover. Add a build-tooling category with
+  a **security-refresh trigger**: the base-image digest (and the tools) are
+  re-pointed to the current digest on the standard's security cadence - they are
+  trust-boundary pins, NOT permanent freezes exempt from the sweep. The frozen
+  image ships OS libraries into every artifact (§4.2), so CVE staleness is real;
+  global rule 5c's sweep must still see them.
 - **Related pre-existing staleness (NOT Dist-2 scope, flagged so it is not
   forgotten):** `README.md`'s "System dependencies" still lists GStreamer plugins
-  *and* WeasyPrint "Pango / Cairo / GDK-PixBuf" (README line 36), and
+  (README line 33) *and* WeasyPrint "Pango / Cairo / GDK-PixBuf" (line 36), and
   `src/album_builder/ui/main_window.py`'s codec-error dialog tells users to
   `zypper install gstreamer-plugins-*`. The PyQt6 wheel uses the FFmpeg backend
   and WeasyPrint 69 loads no Cairo/GDK-PixBuf (§3/§4.2), so this advice is
@@ -486,3 +506,4 @@ only this catcher.
 |------|------|-------|------|------|-----|-----|---------|
 | 1 | 2026-07-28 | 3 cold (internal-consistency / code-accuracy / cross-doc+arch) + §1e pre-pass | 1 | 2 | 3 | 3 | 9 verified (0 unverified) + 1 mechanical, all fixed. **CRIT:** the §4.3 AppRun `exec "$APPDIR/opt/python*/bin/python"` never launches (a glob does not expand in double quotes) -> loop resolver. **HIGH:** §7 listed INV-23-8 among CI-exercised checks, but a real `v*` tag is needed -> static-only wording; build-parity gap (an openSUSE-host build bakes the wrong glibc, so "local == release" was false) -> user chose a pinned `ubuntu:22.04` **build container**, rewiring §3/§4.1/4.2/4.5 + INV-23-7/9. **MED:** added the below-floor-glibc failure mode; reframed INV-23-7 to a static `grep` on the container tag; added supply-chain pin INV-23-10. **LOW:** wording precision (INV-23-4, §4.2) + flagged stale README/`main_window.py` GStreamer advice as a separate cleanup (surfaced, not in Dist-2 scope). Code-accuracy lane clean (all file/symbol/version claims confirmed). §1e: 3 What-checks-this cells blurred a catcher with a bold `nothing` -> single-form. |
 | 2 | 2026-07-28 | 3 cold (same partition) | 1 | 3 | 7 | 4 | All verified & fixed; code-accuracy lane clean again. **CRIT:** the loop-1 INV-23-10 edit had deleted the `## 6. Failure modes` heading (headings jumped §5->§7) - restored. **HIGH:** §4.5 never extracted the AppDir, so INV-23-4/5's claimed CI `find` checks did not exist -> added the extract+`find` steps; `appimagetool` is itself an AppImage needing `--appimage-extract-and-run` in a FUSE-less container -> §4.1 stage 6; pinning was uneven (base image a mutable tag, "identical artifact" overstated) -> INV-23-10 now pins the base by `@sha256` digest, §4.1 softened to "same broadly-compatible artifact", byte-repro deferred (§9). **MED:** INV-23-4 test checks both halves (pyproject + dev-mode env); INV-23-7/10 tests tightened against comment/branch-ref gaming; FONTCONFIG path tied to §4.2; test file moved to `tests/test_TC_23_appimage.py` (app.py is top-level, not `services/`); §12 ROADMAP + README (line 36 WeasyPrint) staleness completed. **LOW:** writable `dist/` mount spelled out; `§5.5` -> spec-format-standard qualifier; dependency-currency category note; no-network failure mode. |
+| 3 | 2026-07-28 | 2 cold (internal+shell / cross-doc+arch; code-accuracy skipped - its §2/§4.4 claims byte-unchanged and clean in loops 1-2) | 0 | 2 | 3 | 3 | 9 verified (+1 INFO), all fixed. Architecture confirmed coherent; findings are now refinements, not rewrites. **HIGH:** INV-23-3's filename half had no CI catcher (§4.5 only ran `--version`) -> added a filename-vs-`$VERSION` assertion + listed INV-23-3 in §7's CI-only set; INV-23-10 overclaimed "every build input pinned" while the `pip` deps are deliberately floors-only -> rescoped to build **tooling**, floors-only posture stated. **MED:** INV-23-10 grep was gameable (name-presence, not ref-inspection) -> test now inspects the fetch/run lines; base-image digest given a security-refresh trigger (not a permanent freeze, §12); reconciled Spec 12's AppImage *out-of-scope (v1)* line (now superseded - header + §12). **LOW:** §6 no-network names stage-3 `pip`; INV-23-4 hop-count off-by-one corrected against `app.py`; README citation split to lines 33/36. **INFO:** unsourced "project test convention" reworded to CLAUDE.md's contract-anchor practice. |
