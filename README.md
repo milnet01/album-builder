@@ -4,9 +4,10 @@ A small PyQt6 desktop app for curating albums from a folder of audio recordings,
 
 ## Status
 
-**v0.6.1 — WhisperX UX + artist-view report + post-feature debt sweep (shipped
-2026-05-18)** on top of **v0.6.0 — Phase 5: Track Usage Indicator (shipped
-2026-05-01)**. Phases 1-5 are feature-complete. The app scans `Tracks/`, curates albums via a per-row
+**v0.7.0 — Windows bundle: a downloadable, unzip-and-run `.exe` (Phase Dist-3;
+2026-07-28)** on top of **v0.6.1 — WhisperX UX + artist-view report + post-feature
+debt sweep (shipped 2026-05-18)** on top of **v0.6.0 — Phase 5: Track Usage
+Indicator (shipped 2026-05-01)**. Phases 1-5 are feature-complete. The app scans `Tracks/`, curates albums via a per-row
 toggle column + drag-reorder pane, syncs lyrics during preview-play (WhisperX
 + wav2vec2 forced alignment, opt-in), shows a cross-album usage badge so
 tracks already on approved albums are visible at a glance, and on approve

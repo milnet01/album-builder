@@ -1,0 +1,20 @@
+{
+  "version_source": "src/album_builder/version.py",
+  "version_pattern": "__version__ = \"([0-9]+\\.[0-9]+\\.[0-9]+)\"",
+  "files": [
+    {
+      "path": "src/album_builder/version.py",
+      "pattern": "__version__ = \"{OLD}\"",
+      "replace": "__version__ = \"{NEW}\""
+    },
+    {
+      "path": "pyproject.toml",
+      "pattern": "version = \"{OLD}\"",
+      "replace": "version = \"{NEW}\""
+    }
+  ],
+  "post_check": "test \"$(sed -n 's/^__version__ = \"\\(.*\\)\"/\\1/p' src/album_builder/version.py)\" = \"$(sed -n 's/^version = \"\\(.*\\)\"/\\1/p' pyproject.toml)\" && echo version-lockstep-ok",
+  "todos": [
+    "Update the README ## Status banner to lead with v{NEW} and its headline (dated {TODAY})"
+  ]
+}
