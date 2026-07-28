@@ -1,0 +1,71 @@
+name: Windows
+
+# Build the downloadable Windows bundle (Spec 24 / Phase Dist-3) on a version tag
+# or on demand. It does NOT run on every push - ci.yml stays fast. The whole build
+# lives in packaging/build-windows.ps1; this workflow only invokes that script,
+# smoke-tests the artifact, verifies the built folder, and uploads to the Release
+# (INV-24-9: no build stages of its own).
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # create/update the Release and upload the asset (INV-24-8)
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the Windows bundle
+        shell: pwsh
+        run: .\packaging\build-windows.ps1
+
+      - name: Verify the built folder (static)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $app = "dist\AlbumBuilder"
+          # INV-24-3 (source): stage 1 reads version.py, not pyproject.toml.
+          if (-not (Select-String -Path packaging\build-windows.ps1 -Pattern 'version\.py' -Quiet)) {
+            throw "build script does not read version.py"
+          }
+          # INV-24-4: no writable-state marker leaks into the bundle.
+          if (Get-ChildItem $app -Recurse -Filter pyproject.toml) { throw "pyproject.toml in bundle" }
+          # INV-24-5: the heavy ML stack is absent.
+          if (Get-ChildItem $app -Recurse -Directory | Where-Object { $_.Name -in @('torch','whisperx') }) {
+            throw "torch/whisperx in bundle"
+          }
+          # INV-24-2 (b): the WeasyPrint DLL closure is present (mask-proof half).
+          foreach ($dll in @('libgobject-2.0-0.dll','libpango-1.0-0.dll','libfontconfig-1.dll')) {
+            if (-not (Get-ChildItem $app -Recurse -Filter $dll)) { throw "missing bundled DLL: $dll" }
+          }
+
+      - name: Smoke-test the .exe (INV-24-1/2/3)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          # Scrub MSYS2's mingw64\bin from PATH so a green --selftest proves the
+          # BUNDLED DLLs load, not the build's system GTK (Spec 24 INV-24-2).
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notlike '*msys64*' }) -join ';'
+          $exe = "dist\AlbumBuilder\AlbumBuilder.exe"
+          $printed = (& $exe --version).Trim()
+          Write-Host "printed version: $printed"
+          $zip = Get-ChildItem dist -Filter 'AlbumBuilder-*-windows-x64.zip' | Select-Object -First 1
+          $fver = ($zip.Name -replace '^AlbumBuilder-(.*)-windows-x64\.zip$', '$1')
+          if ($printed -ne $fver) { throw "version mismatch: exe=$printed zip=$fver" }   # INV-24-3
+          & $exe --selftest                                                              # INV-24-2
+          if ($LASTEXITCODE -ne 0) { throw "--selftest failed ($LASTEXITCODE)" }
+
+      - name: Upload the zip to the Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/AlbumBuilder-*-windows-x64.zip
