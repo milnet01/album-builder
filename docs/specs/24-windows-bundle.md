@@ -130,7 +130,8 @@ machine (§3). Ordered stages:
    - adds the WeasyPrint DLL closure from the MSYS2 `mingw64/bin` directory as
      `binaries` (§4.2);
    - installs the runtime DLL-search hook (§4.3) as a `runtime_hooks` entry;
-   - sets the app icon (`--icon`, `packaging/album-builder.ico`) and name
+   - sets the app icon (the checked-in spec's `EXE(icon=...)`,
+     `packaging/album-builder.ico`) and name
      `AlbumBuilder`;
    - copies **only** the `album_builder` package - never the repo checkout - so no
      `pyproject.toml` lands where `_running_from_source_tree()` probes (INV-24-4).
@@ -175,10 +176,10 @@ directory itself; setting `WEASYPRINT_DLL_DIRECTORIES` would do nothing here.
 Outside a frozen bundle (`sys.frozen` unset) the hook is a no-op and WeasyPrint's
 own block runs, so a source install is unaffected.
 
-**(b) Point-of-use PDF fallback**, in `services/report.py::render_report`. Today it
-renders the PDF unconditionally (`render_pdf_from_html` at `report.py` line 294,
-before any file is written) and any failure raises out of `AlbumStore.approve`. The
-change wraps the PDF render at its point of use:
+**(b) Point-of-use PDF fallback**, in `services/report.py::render_report`. Before
+this change it rendered the PDF unconditionally (`render_pdf_from_html`, before any
+file is written) and any failure raised out of `AlbumStore.approve`. The change
+wraps the PDF render at its point of use:
 
 ```python
 html_str = render_html(album, library, today=today, artist_view=artist_view)
@@ -561,3 +562,4 @@ catcher, the same class Spec 23 carried (its INV-23-8/9/10).
 | impl | 2026-07-28 | implementation fold-back (Step 8, NOT a review loop) | - | - | - | - | **Contract corrected by building it.** Implementation proved INV-24-7's "existing Spec 09/10 tests pass unmodified" too strong: `render_report`'s success path IS unchanged, but two atomic-pair recovery tests (`test_TC_10_26_artist_only_on_disk_half_pair_is_repaired`, `test_TC_09_30_artist_variant_recovery_independent_of_full`) asserted a lone `.html` with no `.tmp` is *deleted* - the exact state §4.3(c) now *keeps* as a complete single-file report. Their fixtures were updated to carry the `pdf.tmp` a genuine interrupted pair always leaves (still testing crash-recovery); INV-24-7 + §7 corrected to scope "unmodified" to the render path. Full pytest suite green (exit 0). Re-gated at loop 4. |
 | 4 | 2026-07-28 | 1 cold (re-gate of the Step-8 fold-back amendment) | 0 | 0 | 0 | 2 | **Polish-converged.** The cold lane confirmed the amended INV-24-7 + §7 note match the real tests (both updated recovery tests now carry a `pdf.tmp`; the 3 new TC-24 tests exist and lock their contracts; the §4.3(c) keep-branch matches `atomic_pair.py` Branch 2b before Branch 3). **LOW:** §5 mislabelled both updated tests "Spec 10" (TC-09-30 is Spec 09) -> "one Spec 10, one Spec 09"; §11 cited placeholder test-function names -> corrected to the real `test_TC_24_0N_*` names. No substantive findings; the amendment is coherent with the shipped code. |
 | impl | 2026-07-28 | implementation fold-back (Step 8, NOT a review loop) | - | - | - | - | **CI proved the exe must be console-subsystem.** The spec was silent on `console` mode; a windowed (`console=False`) build was the natural first choice for a GUI app - but on the `windows-latest` runner `AlbumBuilder.exe --version` raised `OSError` (EINVAL) writing to a dead stdout and the INV-24-1/3 smoke test read null (runs `30370758272`, `30373367197`). An in-app ctypes `AttachConsole` + `msvcrt.open_osfhandle` stream-reattach shim was tried and did *not* restore stdout under PowerShell output capture (run `30373367197`). Fixed by building `console=True` + `hide_console="hide-early"` (`packaging/album-builder.spec`) - the PyInstaller 6 dual GUI/CLI idiom: real capturable stdout, console window dismissed before Python starts on a GUI launch. §4.6 gains the decision + rationale. Verified: Windows dispatch build green end-to-end - build + static checks + `--version`/`--selftest` smoke test all pass (run `30373943934`). Re-gated at loop 5. |
+| 5 | 2026-07-28 | 1 cold (re-gate of the console-subsystem fold-back amendment) | 0 | 0 | 0 | 2 | **Polish-converged.** The cold lane verified §4.6's amendment byte-for-byte against `packaging/album-builder.spec` (`console=True` + `hide_console="hide-early"` + `EXE(icon=...)`), confirmed no other section (§4.1 stage 4, §4.4 smoke-test, the INVs) assumes a windowed/`console=False` build, and re-verified the §4.3(a/b/c) chain against `pyi_rth_weasyprint_dlls.py` / `report.py` / `atomic_pair.py` still holds. **LOW x2 (both pre-existing, not from the amendment):** §4.3(b) cited a stale `report.py` line 294 for `render_pdf_from_html` (now def 257 / call 308) -> dropped the bare line number (per the never-cite-line-numbers rule) and past-tensed the "today it renders unconditionally" baseline; §4.1 stage 4 said the icon is set via `--icon` but the build drives the checked-in spec's `EXE(icon=...)` -> corrected. **INFO (code-side, surfaced not fixed):** the runtime hook swallows `os.add_dll_directory` failures with `except OSError: pass`. No substantive findings; amendment coherent with the shipped code. |
