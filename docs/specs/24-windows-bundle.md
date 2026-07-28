@@ -5,11 +5,11 @@
 **Source:** ROADMAP "Distribution & cross-platform packaging" epic, Phase Dist-3 (user-request-2026-07-25, resequenced 2026-07-28).
 **Depends on:** 22 (portability groundwork - the config-path + symlink-or-playlist fallbacks this bundle relies on).
 **References (does not extend):** 00, 23.
-**Amends:** 09 (adds the PDF-less report state to the approve sequence), 10 (adds a single-file report to the atomic-pair scan) - each in the PDF-engine-unavailable state only; the two-file pair is unchanged wherever the engine loads. See §12.
+**Amends:** 09 (adds the PDF-less report state to the approve sequence), 10 (adds a single-file report to the atomic-pair scan) - each only when the PDF render fails; the two-file pair is unchanged wherever the PDF renders. See §12.
 **Blocked by:** 22 (shipped 2026-07-28).
 **Blocker for:** nothing (Dist-4 Flatpak / Dist-5 OBS are independent packaging phases).
 
-> **Layman:** produces one download for Windows - `AlbumBuilder-<version>-windows-x64.zip` - that you unzip and double-click to run Album Builder, with no Python and no install. It carries the same printable-PDF engine as Linux; if that engine ever fails to load, the app still writes the report as a web page instead of crashing.
+> **Layman:** produces one download for Windows - `AlbumBuilder-<version>-windows-x64.zip` - that you unzip and double-click to run Album Builder, with no Python and no install. It carries the same printable-PDF engine as Linux; if that engine ever fails, the app still writes the report as a web page instead of crashing.
 
 ## 1. Goal
 
@@ -18,9 +18,9 @@ from the project's GitHub Releases, unzip it, and double-click `AlbumBuilder.exe
 with no system Python, no `pip install`, and no toolchain. The bundle carries the
 Python runtime, PyQt6 (Qt libraries + platform/multimedia plugins), and WeasyPrint's
 Windows native rendering stack, so both the HTML and the PDF report render exactly
-as on Linux. If the native PDF stack ever fails to load at runtime, report
-generation degrades to writing the HTML report alone rather than aborting the
-approve. Cutting a version tag builds the zip on a Windows CI runner and attaches
+as on Linux. If the PDF cannot be produced at runtime - the native stack fails to
+load, or a specific report fails to render - report generation degrades to writing
+the HTML report alone rather than aborting the approve. Cutting a version tag builds the zip on a Windows CI runner and attaches
 it to the matching GitHub Release. This is the project's first Windows artifact.
 
 ## 2. Problem
@@ -69,15 +69,16 @@ Linux-only. There is no artifact a Windows user can run:
   is an accepted limitation of the target, not a defect.
 - **PDF: bundle WeasyPrint for parity, with a graceful HTML-only fallback** (user,
   2026-07-28). The bundle aims for byte-identical report output to Linux (HTML +
-  PDF). If the bundled native stack fails to load at runtime, the app writes the
-  HTML report alone and continues, rather than raising. On a correctly-built bundle
-  the fallback never fires (INV-24-7). Rejected: switching the PDF engine (Qt
-  WebEngine / xhtml2pdf) - §8.
-- **The fallback is engine-driven, not OS-driven.** The probe is "can WeasyPrint
-  load and render?", not "are we on Windows?". A Linux source install missing the
-  GTK stack degrades identically. This is strictly simpler than branching on
-  platform and makes the fallback a general robustness improvement Windows merely
-  motivates.
+  PDF). If the PDF cannot be produced at runtime (the stack fails to load, or a
+  report fails to render), the app writes the HTML report alone and continues,
+  rather than raising. On a correctly-built bundle the fallback never fires
+  (INV-24-7). Rejected: switching the PDF engine (Qt WebEngine / xhtml2pdf) - §8.
+- **The fallback is point-of-use, not OS-driven.** `render_report` attempts the PDF
+  and, on ANY failure, writes the HTML alone - it does not branch on platform or
+  consult a cached "is the engine present?" probe. This catches both a native-stack
+  load failure and a single report that will not render, and a Linux source install
+  missing the GTK stack degrades identically. Simpler than a platform switch, and a
+  general robustness improvement Windows merely motivates.
 - **Verification: CI smoke-test PLUS a manual run on the user's own Windows PC**
   (user, 2026-07-28). The workflow runs `AlbumBuilder.exe --version`/`--selftest`
   on the runner before publishing; the user then downloads and runs the zip on a
@@ -157,44 +158,67 @@ hand-written list would be an unverified claim (§5.1). A bundled font
 WeasyPrint has a discoverable font at runtime, mirroring the AppImage's §4.2 font
 handling.
 
-### 4.3 Runtime DLL resolution + PDF capability probe and fallback
+### 4.3 Runtime DLL resolution + point-of-use PDF fallback
 
-Two runtime pieces, both in application code (the only app-code change in this
+Three runtime pieces, all in application code (the only app-code change in this
 phase):
 
 **(a) DLL search path.** A PyInstaller `runtime_hooks` script, run before any
-`album_builder` import, adds the bundle directory to the native DLL search path via
-`os.add_dll_directory(<bundle dir>)` and sets `WEASYPRINT_DLL_DIRECTORIES` so
-WeasyPrint's `ffi` loader finds the bundled DLLs (§4.2) rather than searching the
-system, which has none. Outside a frozen bundle
-(`sys.frozen` unset) the hook is a no-op, so a source install is unaffected.
+`album_builder` import, calls `os.add_dll_directory(<bundle dir>)` (Python 3.8+) so
+the bundled WeasyPrint DLLs (§4.2) are on the native search path. WeasyPrint's
+`ffi.dlopen` loads by soname with the `LOAD_LIBRARY_SEARCH_DEFAULT_DIRS` flag
+(verified in `weasyprint/text/ffi.py`, WeasyPrint 69.0), which searches exactly the
+directories added that way. WeasyPrint's **own** `add_dll_directory` /
+`WEASYPRINT_DLL_DIRECTORIES` block is guarded by `not hasattr(sys, 'frozen')` (same
+file), so it is **inert inside a PyInstaller bundle** - the hook must add the
+directory itself; setting `WEASYPRINT_DLL_DIRECTORIES` would do nothing here.
+Outside a frozen bundle (`sys.frozen` unset) the hook is a no-op and WeasyPrint's
+own block runs, so a source install is unaffected.
 
-**(b) PDF capability probe + fallback**, added to `services/report.py`:
+**(b) Point-of-use PDF fallback**, in `services/report.py::render_report`. Today it
+renders the PDF unconditionally (`render_pdf_from_html` at `report.py` line 294,
+before any file is written) and any failure raises out of `AlbumStore.approve`. The
+change wraps the PDF render at its point of use:
 
 ```python
-def pdf_engine_available() -> bool:
-    """Cached: can WeasyPrint import AND render? Drives the HTML-only fallback.
-    Mirrors app._selftest's probe (import + trivial write_pdf), memoised so the
-    cost is paid once per process."""
-    # try: from weasyprint import HTML; HTML(string="<p>x</p>").write_pdf()
-    # except Exception: return False  -> cached
+html_str = render_html(album, library, today=today, artist_view=artist_view)
+try:
+    pdf_bytes = render_pdf_from_html(html_str)
+except Exception:                      # native stack won't load, OR this report won't render
+    logger.warning("PDF unavailable; writing HTML-only report for %s", html_final.name)
+    atomic_write_text(html_final, html_str)   # single-file atomic write, no pdf.tmp
+    return html_final, None
+# ... unchanged: write html.tmp + pdf.tmp, os.replace both (the Spec 10 atomic pair) ...
+return html_final, pdf_final
 ```
 
-`render_report` (`services/report.py::render_report`) branches on it:
+- **PDF renders (the default; every correct bundle and every Linux install):**
+  unchanged - both `.html` and `.pdf` written as the Spec 10 atomic pair; returns
+  `(html_final, pdf_final)`.
+- **PDF render raises:** the HTML is written alone via a **single** atomic write
+  (`persistence/atomic_io.py::atomic_write_text`, no `pdf.tmp` ever created);
+  returns `(html_final, None)`.
 
-- **Engine available (the default; every correct bundle and every Linux install):**
-  unchanged - renders the PDF, writes both `.html` and `.pdf` `.tmp` files, renames
-  both (the Spec 10 atomic pair). Returns `(html_final, pdf_final)`.
-- **Engine unavailable:** render the HTML, write it via a **single** atomic write
-  (`atomic_write_text`, no `pdf.tmp` ever created), skip the PDF, log one warning.
-  Return `(html_final, None)`.
+A point-of-use catch covers both a native-stack **load** failure and a single report
+that will not **render**, so approve never crashes on a PDF problem (closing §2
+problem 3), with no separate cached probe to keep correct - the real render is
+self-verifying. The return type widens from `tuple[Path, Path]` to
+`tuple[Path, Path | None]`; the sole production caller (`AlbumStore.approve`,
+`album_store.py` lines 422-423) ignores the return, so this is source-compatible.
+`has_complete_report` (a smoke-check helper with no production caller) is left
+unchanged; the PDF-optional contract lives in `render_report` and the (c)
+`scan_reports_dir` rule, not in it.
 
-The return type widens from `tuple[Path, Path]` to `tuple[Path, Path | None]`; the
-sole production caller (`AlbumStore.approve`) ignores the return, so this is
-source-compatible.
-
-`has_complete_report` (`report.py::has_complete_report`) treats the PDF as optional
-when `pdf_engine_available()` is False: the HTML alone is a complete report.
+**(c) Atomic-pair scan.** `persistence/atomic_pair.py::scan_reports_dir` currently
+treats a lone `.html` (one final present, the other absent - `has_html != has_pdf`,
+Branch 3) as an interrupted pair and deletes it. A PDF-less report is exactly a lone
+`.html`, so without a change `AlbumStore.rescan` would wipe it on the next launch.
+The rule: a lone `.html` with **no** `.pdf` and **no** `pdf.tmp` sibling is a
+complete single-file report (an interrupted pair always leaves a `pdf.tmp`, since
+both tmps are written before either rename); it is kept and counted
+`pairs_completed`. This is a pure file-presence rule on **every** platform -
+`atomic_pair.py` is the pure persistence layer and does not consult engine state or
+platform.
 
 ### 4.4 Headless entry points - reused from Spec 23
 
@@ -210,9 +234,9 @@ phase adds **no** new flags:
   `--selftest` on the runner proves the DLLs are genuinely bundled, not borrowed
   (the Windows analogue of Spec 23's clean-container run).
 
-`report.py::pdf_engine_available` (§4.3) and `app._selftest` share the same
-import-and-render probe; `_selftest` stays independent of `services/report.py`
-(it needs no album), so the two are parallel probes, not one calling the other.
+`app._selftest` stays independent of `services/report.py` (it needs no album) - it
+is the build's load-probe, run in CI (§4.5). The runtime fallback (§4.3b) is a
+separate point-of-use catch; no shared probe function is introduced.
 
 ### 4.5 CI - `.github/workflows/windows.yml`
 
@@ -300,22 +324,23 @@ of this phase (Spec 20 §out-of-scope already defers it).
 - **INV-24-5** - The heavy ML stack is absent. *Test:* `dist\AlbumBuilder\` contains
   no `torch` or `whisperx` directory (CI check). *Breaks when:* `requirements.txt`
   gains `torch`/`whisperx`, or the build installs an extra that pulls them.
-- **INV-24-6** - When the PDF engine is unavailable, the report degrades to HTML
-  alone and stays stable across rescans. *Test:* unit - with `pdf_engine_available()`
-  forced False, `render_report` writes the `.html`, creates no `.pdf` and no
-  `pdf.tmp`, returns `(html, None)`, and does not raise; then
-  `scan_reports_dir` over that directory returns the stem in `pairs_completed`
-  (not `pairs_repaired`) and leaves the `.html` in place; and
-  `has_complete_report` returns True. *Breaks when:* `render_report` renders the
-  PDF unconditionally, or `scan_reports_dir` deletes the lone `.html` as a
-  half-pair (which would wipe the report on the next `AlbumStore.rescan`).
-- **INV-24-7** - PDF parity is the default: when the engine IS available (every
+- **INV-24-6** - When a PDF render fails, the report degrades to HTML alone and
+  stays stable across rescans. *Test:* unit - with `render_pdf_from_html`
+  monkeypatched to raise, `render_report` writes the `.html`, creates no `.pdf` and
+  no `pdf.tmp`, returns `(html, None)`, and does not raise; then `scan_reports_dir`
+  over that directory returns the stem in `pairs_completed` (not `pairs_repaired`)
+  and leaves the `.html` in place. *Breaks when:* `render_report` lets the PDF
+  exception propagate (crashing approve), or `scan_reports_dir` deletes the lone
+  `.html` as a half-pair (which would wipe the report on the next
+  `AlbumStore.rescan`).
+- **INV-24-7** - PDF parity is the default: when the PDF renders (every
   correctly-built bundle and every Linux install), `render_report` writes BOTH the
   `.html` and the `.pdf` as the Spec 10 atomic pair, exactly as before this phase.
-  *Test:* unit - with `pdf_engine_available()` True, `render_report` writes both
-  finals and returns `(html, pdf)` with `pdf` non-None; the existing Spec 09/10
-  report tests pass unmodified. *Breaks when:* the fallback path fires even though
-  the engine loaded (e.g. the probe is inverted or not memoised consistently).
+  *Test:* unit - with `render_pdf_from_html` returning normally, `render_report`
+  writes both finals and returns `(html, pdf)` with `pdf` non-None; the existing
+  Spec 09/10 report tests pass unmodified. *Breaks when:* the `try`/`except` swallows
+  a successful render or writes HTML-only unconditionally, so a good build loses its
+  PDF.
 - **INV-24-8** - A version-tag push produces a Release asset. *Test:* `windows.yml`
   triggers on `push: tags: ['v*']`, declares `permissions: contents: write`, and
   has an upload step that targets (and creates if absent) the tag's Release;
@@ -358,30 +383,31 @@ of this phase (Spec 20 §out-of-scope already defers it).
 - **No network on the runner.** The stage-2 `pip install` and stage-3 MSYS2 install
   need internet; without it the build fails early and loudly, before producing an
   artifact - never a shipped-broken zip.
-- **The PDF engine loads in CI but the fallback path has a bug.** INV-24-7's unit
-  test locks the engine-available path so the fallback cannot regress the normal
-  two-file report; INV-24-6 locks the degraded path. Both are exercised in the
-  normal pytest suite, independent of a real Windows build.
+- **A report fails to render even though the engine loaded.** The §4.3b point-of-use
+  catch writes the HTML alone rather than crashing approve - the same degraded path a
+  load failure takes. INV-24-7's unit test locks the render-succeeds path so the
+  fallback cannot regress the normal two-file report; INV-24-6 locks the degraded
+  path. Both run in the normal pytest suite, independent of a real Windows build.
 
 ## 7. Tests
 
 Unit-testable in `tests/` (run in the normal suite, no Windows build needed):
 
 - **TC-24-01** (`tests/services/test_TC_24_windows_bundle.py`) - `render_report`
-  with `pdf_engine_available()` monkeypatched False writes the `.html` only, creates
+  with `render_pdf_from_html` monkeypatched to raise writes the `.html` only, creates
   no `.pdf`/`pdf.tmp`, returns `(html, None)`, does not raise. Locks INV-24-6's
   render half.
 - **TC-24-02** (same file) - `scan_reports_dir` over a directory holding only the
-  `.html` (no `.pdf`, no `pdf.tmp`) returns the stem in `pairs_completed`, leaves the
-  `.html`, and `has_complete_report` returns True with the engine reported
-  unavailable. Locks INV-24-6's stability half (the anti-wipe contract).
-- **TC-24-03** (same file) - `render_report` with `pdf_engine_available()` True
-  writes both finals and returns `(html, pdf)` non-None; the existing Spec 09/10
-  atomic-pair report tests pass unmodified. Locks INV-24-7.
+  `.html` (no `.pdf`, no `pdf.tmp`) returns the stem in `pairs_completed` and leaves
+  the `.html` in place. Locks INV-24-6's stability half (the anti-wipe contract).
+- **TC-24-03** (same file) - `render_report` with `render_pdf_from_html` returning
+  normally (real WeasyPrint on Linux CI) writes both finals and returns `(html, pdf)`
+  non-None; the existing Spec 09/10 atomic-pair report tests pass unmodified. Locks
+  INV-24-7.
 
 Each fallback test is written to fail against pre-fix `render_report` (which renders
-the PDF unconditionally and raises when the engine is monkeypatched to fail) before
-the §4.3 branch is added - the test-first practice the project's test files follow
+the PDF unconditionally and so raises when `render_pdf_from_html` is monkeypatched to
+fail) before the §4.3b `try`/`except` is added - the test-first practice the project's test files follow
 (each carries a `# Spec: TC-NN-MM` contract anchor per CLAUDE.md).
 
 CI-only (exercised by `windows.yml`, not pytest - a real Windows build is too heavy
@@ -418,8 +444,8 @@ is the leg CI cannot cover (§3) and gates "shipped".
   trade a real Windows build for a fragile emulated one. Rejected - the runner build
   plus the user's manual test is the honest verification path (§3).
 - **OS-branch the fallback (`if sys.platform == "win32"`).** Rejected in favour of
-  the engine-driven probe (§3): a Linux install missing GTK should degrade too, and
-  the probe is simpler than a platform switch.
+  the point-of-use catch (§3): a Linux install missing GTK should degrade too, and a
+  `try`/`except` at the render site is simpler than a platform switch.
 
 ## 9. Out of scope
 
@@ -448,10 +474,10 @@ is the leg CI cannot cover (§3) and gates "shipped".
 - **New runtime state:** none. The bundle is read-only from the app's perspective;
   writable state (settings/albums/tracks) resolves to the Windows user profile via
   `platformdirs` (Spec 22), never into the bundle directory (INV-24-4).
-- **Code added:** one `pdf_engine_available()` probe + a branch in `render_report`,
-  a one-line optionality in `has_complete_report`, one new rule in
-  `scan_reports_dir`, and a PyInstaller runtime-hook script (§4.3). No new module,
-  no new class, no new runtime dependency.
+- **Code added:** a `try`/`except` around the PDF render in `render_report`, one
+  file-presence rule in `scan_reports_dir`, and a PyInstaller runtime-hook script
+  that calls `os.add_dll_directory` (§4.3). No new probe function, no new module, no
+  new class, no new runtime dependency.
 
 ## 11. What checks this
 
@@ -476,7 +502,7 @@ catcher, the same class Spec 23 carried (its INV-23-8/9/10).
 
 - **`ROADMAP.md`** - flip Phase Dist-3 to shipped when implemented; annotate the
   epic's Dist-3 bullet where §3 refines it (one-folder zip not one-file; the
-  engine-driven HTML fallback; MSYS2-sourced GTK; the windows-latest-only build with
+  point-of-use HTML fallback; MSYS2-sourced GTK; the windows-latest-only build with
   no local reproducibility).
 - **`README.md`** - add a Windows entry to the Download section: the zip link,
   unzip-and-run, the SmartScreen click-through, and the Windows 10 64-bit floor.
@@ -486,15 +512,16 @@ catcher, the same class Spec 23 carried (its INV-23-8/9/10).
 - **`docs/specs/00-app-overview.md`** - add Spec 24 to the spec index.
 - **`docs/specs/09-approval-report.md`** - **amend:** the canonical approve sequence
   currently writes an `(html, pdf)` pair unconditionally. Add that when the PDF
-  engine is unavailable (a bundle without the WeasyPrint native stack, or a source
-  install missing GTK) the report is the HTML alone and `step:render-rename-pdf` is
-  skipped; the two-file pair is unchanged wherever the engine loads. Reference
-  Spec 24 §4.3.
+  render fails (the WeasyPrint native stack will not load, or a specific report will
+  not render) the report is the HTML alone and `step:render-rename-pdf` is skipped;
+  the two-file pair is unchanged wherever the PDF renders. Reference Spec 24 §4.3.
 - **`docs/specs/10-persistence.md`** - **amend:** the atomic-pair scan currently
   treats a lone `.html` (one final, the other absent) as a half-pair to delete. Add
   that a lone `.html` with **no** `.pdf` sibling and **no** `pdf.tmp` is a complete
-  single-file report (the PDF-less state), distinct from an interrupted pair (which
-  always leaves a `pdf.tmp`). Reference Spec 24 §4.3 / INV-24-6.
+  single-file report on any platform (an interrupted pair always leaves a `pdf.tmp`,
+  since both tmps are written before either rename) - a pure file-presence rule,
+  since `atomic_pair.py` cannot consult engine state. Reference Spec 24 §4.3 /
+  INV-24-6.
 - **No other sibling-spec contract changes** - Spec 24 adds a Windows package around
   Spec 22's portable code and the Spec 23-added flags; it does not alter Specs
   08/22/23.
@@ -503,3 +530,4 @@ catcher, the same class Spec 23 carried (its INV-23-8/9/10).
 
 | Loop | Date | Lanes | CRIT | HIGH | MED | LOW | Outcome |
 |------|------|-------|------|------|-----|-----|---------|
+| 1 | 2026-07-28 | 3 cold (consistency/structure - doc-vs-code accuracy - architecture/currency) | 0 | 1 | 2 | 3 | 6 verified (0 unverified), all fixed. **HIGH:** §4.3 named `WEASYPRINT_DLL_DIRECTORIES` as the bundle's DLL mechanism, but WeasyPrint 69 guards its own `add_dll_directory`/env-var block with `not hasattr(sys, 'frozen')` (verified in `ffi.py`) - inert inside a PyInstaller bundle -> rewrote §4.3a to rely on the runtime hook's own `os.add_dll_directory` + WeasyPrint's `LOAD_LIBRARY_SEARCH_DEFAULT_DIRS` dlopen flag. **MED:** the cached `pdf_engine_available()` probe rendered only trivial HTML, so a real report failing after the probe passed still crashed approve (the exact failure §2.3 closes), and the probe's own logic was untested -> replaced the probe with a point-of-use `try`/`except` in `render_report` (covers load AND render failure; no probe to invert), updating INV-24-6/7, §4.4, §7, §10. **LOW:** "complete report" was defined two ways (§4.3 vs §12) -> made the `scan_reports_dir` rule pure file-presence on all platforms, left `has_complete_report` unchanged (no production caller), reframed the Spec 09/10 amendments as render-failure / presence-based. |
