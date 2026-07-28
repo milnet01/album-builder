@@ -96,13 +96,16 @@ A single POSIX shell script, run from the repo root by a developer (`./packaging
 or by CI (§4.5 calls the identical script), that produces
 `dist/AlbumBuilder-<version>-x86_64.AppImage`.
 
-The script executes stages 1-6 **inside a pinned `ubuntu:22.04` container**
-(`docker` or `podman run`, with the repo mounted read-only and `dist/` written
-back out), so the glibc floor and every bundled native library are the
-container's, not the build host's - a local run on openSUSE Tumbleweed and a CI
-run on any Ubuntu runner produce the identical artifact (§3). If neither Docker
-nor Podman is present the script exits with a clear prerequisite error (§6).
-Ordered stages (all inside the container):
+The script executes stages 1-6 **inside a digest-pinned `ubuntu:22.04` container**
+(`docker` or `podman run`; the repo bind-mounted read-only, plus a separate
+writable mount for `dist/` so the finished AppImage lands back in the repo), so
+the glibc floor and every bundled native library are the container's, not the
+build host's - a local run on openSUSE Tumbleweed and a CI run on any Ubuntu
+runner produce the same broadly-compatible artifact: identical glibc floor and
+library set (§3), though not necessarily bit-identical, since `apt` point-release
+versions are not pinned (§9). If neither Docker nor Podman is present the script
+exits with a clear prerequisite error (§6). Ordered stages (all inside the
+container):
 
 1. Read the version from the single runtime source, `album_builder.version.__version__`
    (see §4.4), into `$VERSION`.
@@ -121,6 +124,9 @@ Ordered stages (all inside the container):
 4. Bundle WeasyPrint's native library closure (§4.2) into `AppDir/usr/lib`.
 5. Install the AppRun launcher (§4.3), the `.desktop` file and icon (§4.6).
 6. Package with `appimagetool` to `dist/AlbumBuilder-<version>-x86_64.AppImage`.
+   `appimagetool` is itself distributed as an AppImage, and a plain container has
+   no `/dev/fuse`, so it is run with `--appimage-extract-and-run` (the same
+   extract-don't-mount pattern as stage 2's `python-appimage`).
 
 ### 4.2 WeasyPrint native library bundling
 
@@ -141,8 +147,10 @@ roadmap's "Cairo / GDK-PixBuf" entries are stale and are not bundled. Inside the
 `ubuntu:22.04` container (§4.1), the build `apt-get install`s the packages that
 provide these six, copies each
 `.so` plus its transitive ELF dependency closure (resolved with `ldd`) into
-`AppDir/usr/lib`, and bundles a font (`fonts-dejavu-core`) with a minimal
-fontconfig configuration so WeasyPrint has a discoverable font at runtime
+`AppDir/usr/lib`, and bundles a font (`fonts-dejavu-core`) plus a minimal
+fontconfig config written to `AppDir/etc/fonts/fonts.conf` - the exact path
+AppRun points `FONTCONFIG_FILE` at (§4.3) - so WeasyPrint has a discoverable
+font at runtime
 (mirrors the `ci.yml` "Install system libraries" step, which installs the same
 Pango stack + font for the `slow` render tests - naming `libpango-1.0-0` +
 `libpangoft2-1.0-0` + `fonts-dejavu-core` explicitly and pulling the rest of the
@@ -223,9 +231,13 @@ Steps: checkout; run `packaging/build-appimage.sh` (Docker is preinstalled on
 GitHub runners, so the script's `ubuntu:22.04` build container runs directly - no
 separate `apt-get` step, that lives inside the container per §4.2); smoke-test
 the built file with `./dist/AlbumBuilder-*-x86_64.AppImage --version` (asserts it
-prints `__version__`) and `--selftest` (asserts exit 0); on a tag push, upload
+prints `__version__`) and `--selftest` (asserts exit 0); extract the AppDir with
+`--appimage-extract` and assert `find squashfs-root` sees no `pyproject.toml`
+(INV-23-4) and no `torch`/`whisperx` directory (INV-23-5); on a tag push, upload
 the AppImage to the matching GitHub Release. FUSE is available on the runner, so
-the AppImage runs directly; the smoke steps do not need `--appimage-extract-and-run`.
+the AppImage runs directly for the `--version`/`--selftest` smoke steps. All of
+these are verification/upload steps, not build stages - the build itself stays
+entirely inside `build-appimage.sh` (INV-23-9).
 
 ### 4.6 Desktop integration
 
@@ -255,11 +267,13 @@ requires it) - see §9.
   bundle contains no `pyproject.toml` at the location `_running_from_source_tree()`
   probes (three levels up from the `album_builder` package - i.e. package dir ->
   `site-packages` -> its parent, never a repo root inside the mount) and AppRun
-  sets no dev-mode env. *Test:* `find <extracted AppDir> -name pyproject.toml` ->
-  empty, so `app._running_from_source_tree()` returns False inside the mount and
-  paths fall back to `~` per Spec 22. *Breaks when:* the build copies the repo
-  checkout (with `pyproject.toml`) instead of `pip install`ing the package, or
-  AppRun exports `ALBUM_BUILDER_DEV_MODE=1`.
+  sets no dev-mode env. *Test:* both halves - `find <extracted AppDir> -name
+  pyproject.toml` -> empty AND `grep -c ALBUM_BUILDER_DEV_MODE <AppDir>/AppRun`
+  -> 0, so `app._running_from_source_tree()` returns False and no dev-mode
+  override fires inside the mount; paths fall back to `~` per Spec 22.
+  *Breaks when:* the build copies the repo checkout (with `pyproject.toml`)
+  instead of `pip install`ing the package, or AppRun exports
+  `ALBUM_BUILDER_DEV_MODE=1`.
 - **INV-23-5** - The heavy ML stack is absent. *Test:*
   `find <extracted AppDir> -maxdepth 6 -name 'torch' -o -name 'whisperx'` ->
   empty. *Breaks when:* `requirements.txt` gains `torch`/`whisperx`, or the build
@@ -269,12 +283,13 @@ requires it) - see §9.
   errors. *Breaks when:* the `.desktop` template loses a required key
   (`Exec`, `Type`, `Name`) or the `@@LAUNCHER@@` token is left unsubstituted.
 - **INV-23-7** - The build runs in a pinned `ubuntu:22.04` container, which sets
-  the AppImage's glibc floor independently of the CI runner image. *Test:*
-  `grep 'ubuntu:22.04' packaging/build-appimage.sh` -> the container base tag is
-  present (a static, falsifiable check on the pin). That the artifact actually
-  runs on an older-than-2.35 glibc host is NOT machine-checked in CI (no old-glibc
-  runner) - see §11. *Breaks when:* the container base tag is bumped to a newer
-  image, silently raising the floor.
+  the AppImage's glibc floor independently of the CI runner image. *Test:* the
+  `docker`/`podman run` invocation line in `packaging/build-appimage.sh` names an
+  `ubuntu:22.04...` image (grep the run line, not any mention - a stray comment
+  must not satisfy it). That the artifact actually runs on an older-than-2.35
+  glibc host is NOT machine-checked in CI (no old-glibc runner) - see §11.
+  *Breaks when:* the run line's base image is bumped to a newer tag, silently
+  raising the floor.
 - **INV-23-8** - A version-tag push produces a Release asset. *Test:* the
   `appimage.yml` workflow triggers on `push: tags: ['v*']` and has an upload step
   targeting the tag's Release; confirmed end-to-end by an actual tagged release
@@ -288,16 +303,28 @@ requires it) - see §9.
   steps, and the upload. *Breaks when:* the workflow inlines any build stage
   instead of delegating to the script - the drift the single-source rule (§3)
   exists to prevent.
-- **INV-23-10** - The build fetches its tooling at pinned versions, not floating
-  `latest`. *Test:* `grep -E 'python-appimage|appimagetool' packaging/build-appimage.sh`
-  shows a pinned version (a tag/release or a checksum-verified download), never
-  `latest`/`HEAD`. *Breaks when:* the script pulls an unpinned build tool, so a
-  changed or compromised upstream silently enters an artifact users download and
-  run unsandboxed - the trust boundary §5.5 requires stating.
+- **INV-23-10** - Every build input is pinned to an immutable reference, not a
+  moving one: the base image as `ubuntu:22.04@sha256:...` (the `:22.04` tag kept
+  so INV-23-7's floor grep still resolves, the `@sha256` digest for the pin), and
+  `python-appimage` / `appimagetool` each by a version tag or checksummed asset.
+  *Test:* `grep -E 'ubuntu:22.04@sha256:|python-appimage|appimagetool' packaging/build-appimage.sh`
+  shows the base carrying a digest and each tool a version tag - never `latest`,
+  `HEAD`, a bare `ubuntu:22.04`, or a branch name. *Breaks when:* any input is fetched by
+  a moving reference, so a changed or compromised upstream silently enters an
+  artifact users download and run unsandboxed - the supply-chain trust boundary
+  this spec must state (spec-format standard §5.5). (Byte-identical `apt` package
+  versions are deliberately NOT pinned - §9; the guarantee is a fixed glibc floor
+  and library set, not a bit-reproducible build.)
+
+## 6. Failure modes
 
 - **A native library is missed in the §4.2 closure.** `--selftest` fails in CI
   (INV-23-2) and the release build stops before upload - the artifact never
   ships broken.
+- **No network inside the build container.** The stage-4 `apt-get` (§4.2) and the
+  stage-2 tool fetch (§4.1) need internet; without it the build fails early and
+  loudly, before producing an artifact. A build-time failure only - never a
+  shipped-broken artifact.
 - **The build host has no Docker or Podman.** `build-appimage.sh` exits
   immediately with a clear prerequisite message - it cannot pin the build
   environment without a container runtime, and a native host build is rejected
@@ -325,7 +352,7 @@ requires it) - see §9.
 
 Unit-testable in `tests/` (run in the normal suite):
 
-- **TC-23-01** (`tests/services/test_TC_23_appimage.py`) - `run()` with
+- **TC-23-01** (`tests/test_TC_23_appimage.py`) - `run()` with
   `sys.argv = ["album-builder", "--version"]` prints `__version__` and returns 0
   without constructing a `QApplication`. Locks INV-23-1's arg path (not the
   bundle).
@@ -377,6 +404,11 @@ only this catcher.
   Phase Dist-4 (Flatpak/Flathub).
 - **GPG/embedded signing of the AppImage** - deferred; not required to publish a
   Release asset. Tracked by the Distribution epic (post-Dist-4 hardening).
+- **Byte-for-byte reproducible builds** - the base image is digest-pinned
+  (INV-23-10) but `apt` point-release versions are not, so two builds weeks apart
+  may differ in bits while keeping the same glibc floor and library set (§4.1).
+  Full bit-reproducibility (an `apt` snapshot or per-package pins) is deferred;
+  tracked by the Distribution epic.
 - **arm64 (`aarch64`) AppImage** - x86_64 only for now; a second matrix arch is a
   follow-up under the Distribution epic.
 - **Windows `.exe`** - Phase Dist-3. **Flatpak/Flathub** - Phase Dist-4.
@@ -404,7 +436,7 @@ only this catcher.
 
 | Rule | What catches a breach |
 |------|----------------------|
-| INV-23-1 (arg path) | `tests/services/test_TC_23_appimage.py::test_version_flag` (TC-23-01) |
+| INV-23-1 (arg path) | `tests/test_TC_23_appimage.py::test_version_flag` (TC-23-01) |
 | INV-23-1 (real bundle) | `appimage.yml` `--version` smoke step (CI-only; a real build is too heavy for the unit suite) |
 | INV-23-2 (render probe) | `test_TC_23_appimage.py::test_selftest` (TC-23-02, `slow`) |
 | INV-23-2 (real bundle libs) | `appimage.yml` `--selftest` step (CI-only) |
@@ -412,16 +444,19 @@ only this catcher.
 | INV-23-4 | `appimage.yml` `find ... pyproject.toml` over the extracted AppDir - **CI-only** |
 | INV-23-5 | `appimage.yml` `find ... torch/whisperx` over the extracted AppDir - **CI-only** |
 | INV-23-6 | `test_TC_23_appimage.py::test_desktop_valid` (TC-23-03; skipped if `desktop-file-validate` absent) |
-| INV-23-7 | `grep 'ubuntu:22.04'` in `build-appimage.sh` (static check on the container base tag); a real old-glibc run is manual, tracked by the Distribution epic |
+| INV-23-7 | `grep` the `docker`/`podman run` line in `build-appimage.sh` for `ubuntu:22.04` (static; a stray comment must not satisfy it); a real old-glibc run is manual, tracked by the Distribution epic |
 | INV-23-8 | **nothing automated** - proven only by an actual tagged release; the workflow file is the static artifact a cold reader checks |
 | INV-23-9 | **nothing mechanical** - the parity is structural (like `ci.yml` -> `local-CI.sh`); a cold reader confirms `appimage.yml` only calls `build-appimage.sh` |
-| INV-23-10 | `grep` for a pinned version in `build-appimage.sh` (a cold reader, or a CI lint step once the script exists) |
+| INV-23-10 | `grep` in `build-appimage.sh` that the base image carries an `@sha256:` digest and each tool a version tag (a cold reader, or a CI lint step once the script exists) |
 
 ## 12. Cross-doc impact
 
-- **`ROADMAP.md`** - flip Phase Dist-2 to shipped when implemented; the epic's
-  "GStreamer / Cairo / GDK-PixBuf" wording is superseded by §3/§4.2 (FFmpeg
-  backend, no Cairo/GDK-PixBuf) and should be annotated.
+- **`ROADMAP.md`** - flip Phase Dist-2 to shipped when implemented; annotate the
+  epic's Dist-2 bullet where §3/§4 supersede it: the "GStreamer / Cairo /
+  GDK-PixBuf" wording (FFmpeg backend, no Cairo/GDK-PixBuf), the "`linuxdeploy` ...
+  or `python-appimage`" fork (resolved to `python-appimage`, §3/§8), and the new
+  containerised build approach (user decision 2026-07-28, not in the original
+  bullet).
 - **`README.md`** - add a "Download" section (AppImage link, `chmod +x`, the
   `--appimage-extract-and-run` and host-GL/below-floor-glibc notes from §6).
 - **`CLAUDE.md`** - note the new `packaging/build-appimage.sh` and
@@ -429,16 +464,25 @@ only this catcher.
 - **`docs/specs/00-app-overview.md`** - add Spec 23 to the spec index.
 - **No sibling-spec contract changes** - Dist-2 adds a package around Spec 22's
   already-portable code; it does not alter Specs 08/09/10.
+- **`docs/standards/dependency-currency.md`** - INV-23-10 introduces pinned
+  build-time tooling (base-image digest, `python-appimage`, `appimagetool`) that
+  the standard's scope table does not yet cover, so a future currency sweep
+  (global rule 5c) could misread the deliberate pins as staleness. Add a
+  build-tooling category, or a one-line note that these pins are trust-boundary
+  pins, not breakage holdbacks.
 - **Related pre-existing staleness (NOT Dist-2 scope, flagged so it is not
-  forgotten):** `README.md`'s "System dependencies" still lists GStreamer plugins,
-  and `src/album_builder/ui/main_window.py`'s codec-error dialog tells users to
+  forgotten):** `README.md`'s "System dependencies" still lists GStreamer plugins
+  *and* WeasyPrint "Pango / Cairo / GDK-PixBuf" (README line 36), and
+  `src/album_builder/ui/main_window.py`'s codec-error dialog tells users to
   `zypper install gstreamer-plugins-*`. The PyQt6 wheel uses the FFmpeg backend
-  (§3), so this advice is inaccurate for a pip/wheel install too. This concerns
-  the **source install**, not the AppImage, so it is a separate cleanup - surfaced
-  to the user, tracked outside this spec.
+  and WeasyPrint 69 loads no Cairo/GDK-PixBuf (§3/§4.2), so this advice is
+  inaccurate for a pip/wheel install too. This concerns the **source install**,
+  not the AppImage, so it is a separate cleanup - surfaced to the user, tracked
+  outside this spec.
 
 ## 13. Cold-eyes loop log
 
 | Loop | Date | Lanes | CRIT | HIGH | MED | LOW | Outcome |
 |------|------|-------|------|------|-----|-----|---------|
 | 1 | 2026-07-28 | 3 cold (internal-consistency / code-accuracy / cross-doc+arch) + §1e pre-pass | 1 | 2 | 3 | 3 | 9 verified (0 unverified) + 1 mechanical, all fixed. **CRIT:** the §4.3 AppRun `exec "$APPDIR/opt/python*/bin/python"` never launches (a glob does not expand in double quotes) -> loop resolver. **HIGH:** §7 listed INV-23-8 among CI-exercised checks, but a real `v*` tag is needed -> static-only wording; build-parity gap (an openSUSE-host build bakes the wrong glibc, so "local == release" was false) -> user chose a pinned `ubuntu:22.04` **build container**, rewiring §3/§4.1/4.2/4.5 + INV-23-7/9. **MED:** added the below-floor-glibc failure mode; reframed INV-23-7 to a static `grep` on the container tag; added supply-chain pin INV-23-10. **LOW:** wording precision (INV-23-4, §4.2) + flagged stale README/`main_window.py` GStreamer advice as a separate cleanup (surfaced, not in Dist-2 scope). Code-accuracy lane clean (all file/symbol/version claims confirmed). §1e: 3 What-checks-this cells blurred a catcher with a bold `nothing` -> single-form. |
+| 2 | 2026-07-28 | 3 cold (same partition) | 1 | 3 | 7 | 4 | All verified & fixed; code-accuracy lane clean again. **CRIT:** the loop-1 INV-23-10 edit had deleted the `## 6. Failure modes` heading (headings jumped §5->§7) - restored. **HIGH:** §4.5 never extracted the AppDir, so INV-23-4/5's claimed CI `find` checks did not exist -> added the extract+`find` steps; `appimagetool` is itself an AppImage needing `--appimage-extract-and-run` in a FUSE-less container -> §4.1 stage 6; pinning was uneven (base image a mutable tag, "identical artifact" overstated) -> INV-23-10 now pins the base by `@sha256` digest, §4.1 softened to "same broadly-compatible artifact", byte-repro deferred (§9). **MED:** INV-23-4 test checks both halves (pyproject + dev-mode env); INV-23-7/10 tests tightened against comment/branch-ref gaming; FONTCONFIG path tied to §4.2; test file moved to `tests/test_TC_23_appimage.py` (app.py is top-level, not `services/`); §12 ROADMAP + README (line 36 WeasyPrint) staleness completed. **LOW:** writable `dist/` mount spelled out; `§5.5` -> spec-format-standard qualifier; dependency-currency category note; no-network failure mode. |
