@@ -249,15 +249,23 @@ the produced filename - INV-23-3) and `--selftest` (asserts exit 0); extract the
 AppDir with `--appimage-extract` and assert over `squashfs-root`: no
 `pyproject.toml` and no `ALBUM_BUILDER_DEV_MODE` in `AppRun` (INV-23-4), no
 `torch`/`whisperx` directory (INV-23-5), and all six §4.2 sonames in `usr/lib`
-plus `etc/fonts/fonts.conf` and a bundled font (INV-23-2 real-bundle check, which
-`--selftest` alone cannot guarantee). These are coreutils-only checks - no `apt`,
-so INV-23-9 holds; INV-23-6's real-bundle `desktop-file-validate` runs inside the
-build script at stage 5, not here. On a tag push, upload the AppImage to the tag's
-GitHub Release (creating the Release if it does not exist yet). FUSE is available
-on the runner, so the AppImage runs directly for the `--version`/`--selftest`
-smoke steps. All of these are verification/upload steps,
-not build stages - the build itself stays entirely inside `build-appimage.sh`
-(INV-23-9).
+plus `etc/fonts/fonts.conf` and a bundled font (INV-23-2 real-bundle presence
+check). INV-23-6's real-bundle `desktop-file-validate` runs inside the build
+script at stage 5, not here. Then a **clean-container compatibility test** (the
+canonical AppImage test): run the finished AppImage inside a fresh `ubuntu:22.04`
+(digest read from `build-appimage.sh`) that has only the base host libs
+(`libgl1`/`libegl1`/`libxkbcommon0`/`libdbus-1-3`) and *not* the WeasyPrint/Pango
+stack, via `--appimage-extract-and-run --version` and `--selftest` - a green
+`--selftest` there proves the native libraries are genuinely bundled, not borrowed
+from the runner (the leakage `--selftest` on the runner cannot catch). Finally a
+best-effort `appimagelint` report (post-build, `continue-on-error` - it never
+enters the artifact and only ships a rolling `continuous` build). On a tag push,
+upload the AppImage to the tag's GitHub Release (creating the Release if it does
+not exist yet). FUSE is available on the runner, so the AppImage runs directly for
+the `--version`/`--selftest` smoke steps. **All of these are verification steps,
+not build stages** - the artifact is assembled entirely inside `build-appimage.sh`
+(INV-23-9); a verification step *may* `apt-get` base libs into a throwaway
+clean-room container, which is a test fixture, not a build of the shipped file.
 
 ### 4.6 Desktop integration
 
@@ -284,7 +292,10 @@ requires it) - see §9.
   bundled font file exist - the font half, because `--selftest` can render with a
   *system* font (verified: WeasyPrint writes a non-empty PDF with no bundled font),
   so its pass alone does not prove the bundle's font is present. (b) and (c) are
-  structural checks no system fallback can mask. *Breaks when:* any of the six §4.2
+  structural checks no system fallback can mask; AND (d) the workflow re-runs
+  `--selftest` inside a **clean `ubuntu:22.04`** with no WeasyPrint/Pango stack
+  installed (§4.5) - the definitive dynamic proof, since there a missing bundled
+  lib or font has no system copy to borrow. *Breaks when:* any of the six §4.2
   libraries or its transitive closure is missing from `AppDir/usr/lib`, or the
   bundled font / `fonts.conf` is absent.
 - **INV-23-3** - The AppImage version matches the runtime single source. *Test:*
@@ -334,14 +345,15 @@ requires it) - see §9.
   if absent) the tag's Release; confirmed end-to-end by an actual tagged release
   (manual). *Breaks when:* the trigger, the `permissions: contents: write` block,
   or the upload step is removed.
-- **INV-23-9** - The release build runs the same script a developer runs locally,
-  not a reimplementation. *Test:* `appimage.yml`'s build job invokes
-  `packaging/build-appimage.sh` and contains no build stages of its own - no
-  `apt-get`, `pip install`, `appimagetool`, or library-copy steps (all of those
-  live inside the script's container); only checkout, the script call, the smoke
-  steps, and the upload. *Breaks when:* the workflow inlines any build stage
-  instead of delegating to the script - the drift the single-source rule (§3)
-  exists to prevent.
+- **INV-23-9** - The shipped artifact is assembled only by the script a developer
+  also runs, not reimplemented in the workflow. *Test:* `appimage.yml` invokes
+  `packaging/build-appimage.sh` and has no stage that assembles the AppDir - no
+  `pip install`, `appimagetool`, or library-copy, and no `apt-get` that installs
+  *into the shipped bundle*; the sole `apt-get` in the workflow is inside the
+  throwaway **clean-room test container** (base host libs, a verification fixture
+  §4.5), never touching the artifact. *Breaks when:* the workflow inlines a stage
+  that builds the shipped AppDir instead of delegating to the script - the drift
+  the single-source rule (§3) exists to prevent.
 - **INV-23-10** - The build's own **tooling** is pinned to an immutable
   reference: the base image as `ubuntu:22.04@sha256:...` (the `:22.04` tag kept so
   INV-23-7's floor grep still resolves, the `@sha256` digest for the pin), and
@@ -494,9 +506,9 @@ only this catcher.
 | Rule | What catches a breach |
 |------|----------------------|
 | INV-23-1 (arg path) | `tests/test_TC_23_appimage.py::test_version_flag` (TC-23-01) |
-| INV-23-1 (real bundle) | `appimage.yml` `--version` smoke step (CI-only; a real build is too heavy for the unit suite) |
+| INV-23-1 (real bundle) | `appimage.yml` `--version` on the runner + inside a clean `ubuntu:22.04` (CI-only; a real build is too heavy for the unit suite) |
 | INV-23-2 (render probe) | `test_TC_23_appimage.py::test_selftest` (TC-23-02, `slow`) |
-| INV-23-2 (real bundle libs + font) | `appimage.yml` `--selftest` + structural presence of the six `usr/lib` sonames AND `etc/fonts/fonts.conf` + a bundled font (CI-only; structural checks needed because `--selftest` can dlopen a system lib and render with a system font) |
+| INV-23-2 (real bundle libs + font) | `appimage.yml`: `--selftest` + structural presence of the six `usr/lib` sonames + `etc/fonts/fonts.conf` + a font, AND `--selftest` inside a clean `ubuntu:22.04` with no Pango stack (the definitive check - no system copy to borrow) |
 | INV-23-3 | `appimage.yml` filename-vs-`--version` assertion + a static grep that stage 1 reads `version.py` (CI-only) |
 | INV-23-4 | `appimage.yml` `find ... pyproject.toml` + `! grep -q ALBUM_BUILDER_DEV_MODE AppRun` over the extracted AppDir - **CI-only** |
 | INV-23-5 | `appimage.yml` `find ... torch/whisperx` over the extracted AppDir - **CI-only** |
