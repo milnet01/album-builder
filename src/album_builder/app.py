@@ -60,6 +60,7 @@ def run() -> int:
     # Headless entry points (Spec 23 INV-23-1/2), parsed before QApplication so
     # they work with no display - the AppImage smoke tests rely on this.
     argv = sys.argv[1:]
+    _reattach_windows_std_streams()  # Spec 24 INV-24-1: make print() reach the console
     if "--version" in argv or "-V" in argv:
         print(__version__)
         return 0
@@ -100,6 +101,57 @@ def run() -> int:
         server.close()
         lock.detach()
     return rc
+
+
+def _reattach_windows_std_streams() -> None:
+    """Give the headless CLI flags a working stdout on the Windows bundle.
+
+    The Windows one-folder build (Spec 24 Section 4.1) is a *windowed*
+    PyInstaller exe (`console=False`, so a normal GUI launch shows no console).
+    A windowed exe starts with `sys.stdout`/`sys.stderr` bound to an invalid
+    file descriptor, so `AlbumBuilder.exe --version` would write into the void
+    and only fail (OSError EINVAL) at interpreter shutdown - nothing reaches the
+    caller (Spec 24 INV-24-1/3). Rebind the std streams onto the OS standard
+    handle the launcher actually handed us: the capture pipe PowerShell/cmd set
+    up (`$v = & AlbumBuilder.exe --version`), or - for an interactive run with
+    no pipe - the parent console we attach to. No-op unless we are a frozen
+    Windows build, so dev / Linux / the AppImage are untouched.
+    """
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return
+    import ctypes
+    import msvcrt
+
+    kernel32 = ctypes.windll.kernel32
+    kernel32.GetStdHandle.restype = ctypes.c_void_p  # avoid 64-bit handle truncation
+    kernel32.GetStdHandle.argtypes = (ctypes.c_uint,)
+    kernel32.AttachConsole.argtypes = (ctypes.c_uint,)
+    STD_OUTPUT_HANDLE = 0xFFFFFFF5  # (DWORD)-11
+    STD_ERROR_HANDLE = 0xFFFFFFF4  # (DWORD)-12
+    ATTACH_PARENT_PROCESS = 0xFFFFFFFF  # (DWORD)-1
+    invalid = ctypes.c_void_p(-1).value  # INVALID_HANDLE_VALUE as unsigned
+
+    def _bind(std_id: int):
+        handle = kernel32.GetStdHandle(std_id)
+        if not handle or handle == invalid:
+            return None
+        try:
+            fd = msvcrt.open_osfhandle(handle, os.O_WRONLY)
+            return os.fdopen(fd, "w", buffering=1)
+        except OSError:
+            return None
+
+    out = _bind(STD_OUTPUT_HANDLE)
+    if out is None:
+        # No inherited stdout (interactive launch with no console): borrow the
+        # parent process's console, then retry the bind.
+        kernel32.AttachConsole(ATTACH_PARENT_PROCESS)
+        out = _bind(STD_OUTPUT_HANDLE)
+    err = _bind(STD_ERROR_HANDLE)
+    if out is not None:
+        sys.stdout = out
+    if err is not None:
+        sys.stderr = err
 
 
 def _selftest() -> int:
