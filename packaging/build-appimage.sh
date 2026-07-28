@@ -120,6 +120,10 @@ mkdir -p "$APPDIR/usr/lib"
 # skipped if not (INV-23-2).
 weasy_libs_required="libgobject-2.0.so.0 libpango-1.0.so.0 libpangoft2-1.0.so.0 \
 libharfbuzz.so.0 libfontconfig.so.1"
+# glib companions that Qt (bundled in the PyQt6 wheel) links but the WeasyPrint
+# libraries' ldd closure does not pull - and which are not host/driver libs, so
+# they belong in the bundle (e.g. libgthread, else `import PyQt6.QtCore` fails).
+qt_glib_required="libgthread-2.0.so.0 libgio-2.0.so.0 libgmodule-2.0.so.0"
 weasy_libs_optional="libharfbuzz-subset.so.0"
 # Copy each named soname plus its ldd closure, minus the driver/core libraries
 # that must come from the host (libGL is driver-coupled; libc/ld are the base).
@@ -139,17 +143,20 @@ copy_with_closure() {
         cp -uL "$dep" "$APPDIR/usr/lib/"
     done
 }
-for lib in $weasy_libs_required; do copy_with_closure "$lib"; done
+for lib in $weasy_libs_required $qt_glib_required; do copy_with_closure "$lib"; done
 for lib in $weasy_libs_optional; do copy_with_closure "$lib" optional; done
-# Font + a minimal fontconfig config at the exact path AppRun sets (Section 4.3).
+# Font + a fontconfig config TEMPLATE. The bundled font dir is only known at
+# runtime (the AppImage extracts to a random path), so the template carries
+# @APPDIR@/@CACHE@ placeholders that AppRun substitutes at launch (§4.3) - an
+# absolute path baked here would point at the host's (empty) /usr/share/fonts.
 mkdir -p "$APPDIR/usr/share/fonts" "$APPDIR/etc/fonts"
 cp -uL /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf "$APPDIR/usr/share/fonts/"
 cat > "$APPDIR/etc/fonts/fonts.conf" <<'FONTS'
 <?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
 <fontconfig>
-  <dir>/usr/share/fonts</dir>
-  <cachedir>/tmp/fontconfig-cache</cachedir>
+  <dir>@APPDIR@/usr/share/fonts</dir>
+  <cachedir>@CACHE@/album-builder-fontconfig</cachedir>
 </fontconfig>
 FONTS
 
@@ -162,7 +169,12 @@ cat > "$APPDIR/AppRun" <<'APPRUN'
 HERE="$(dirname "$(readlink -f "$0")")"
 export APPDIR="${APPDIR:-$HERE}"
 export LD_LIBRARY_PATH="$APPDIR/usr/lib:$LD_LIBRARY_PATH"
-export FONTCONFIG_FILE="$APPDIR/etc/fonts/fonts.conf"
+# Substitute the runtime AppDir path into the fontconfig template (§4.2) so
+# fontconfig finds the bundled font wherever the AppImage extracted to.
+_fc="$(mktemp)"
+sed -e "s|@APPDIR@|$APPDIR|g" -e "s|@CACHE@|${XDG_CACHE_HOME:-$HOME/.cache}|g" \
+    "$APPDIR/etc/fonts/fonts.conf" > "$_fc"
+export FONTCONFIG_FILE="$_fc"
 # Resolve the bundled interpreter WITHOUT a quoted glob (a glob does not expand
 # in double quotes). The binary is bin/python3.<minor> (e.g. python3.13).
 PYTHON=

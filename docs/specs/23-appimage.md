@@ -75,10 +75,17 @@ terminal or manage a Python toolchain. Consequences:
 - **WhisperX/torch stays out.** It is not in `requirements.txt` and the build
   installs only `requirements.txt`, so the heavy ML stack never enters the
   bundle. It remains an optional `pip` extra for source installs.
-- **`libGL` is NOT bundled; it comes from the host.** GL is GPU-driver-coupled;
-  bundling it breaks hardware acceleration. Standard AppImage practice is to rely
-  on the host's `libGL`/`libEGL` and the core X11 client libraries. Only
-  WeasyPrint's non-driver native libraries are bundled.
+- **Base desktop libraries come from the host, not the bundle.** GL/EGL are
+  GPU-driver-coupled (bundling breaks hardware acceleration); the audio client
+  libraries (`libpulse`, `libasound`) are audio-server-coupled (bundling risks a
+  client/server version mismatch). Standard AppImage practice is to rely on the
+  host for `libGL`/`libEGL`, the core X11 client libraries, and the audio client
+  libraries - any desktop Linux has them (and `ci.yml` installs the same set for
+  its tests). The bundle carries the **app-specific** native stack: WeasyPrint's
+  Pango/HarfBuzz/fontconfig libraries plus the glib companions Qt needs
+  (`libgthread`/`libgio`/`libgmodule`, which the Pango closure does not pull) -
+  §4.2. The clean-container test (§4.5) installs only the host base libs, so a
+  green run there proves the app-specific stack really is bundled.
 - **One local build script is the single source of truth; CI invokes it
   unchanged** (user, 2026-07-28: keep builds consistent, forget nothing).
   `packaging/build-appimage.sh` is what a developer runs locally to produce the
@@ -158,12 +165,17 @@ WeasyPrint 69 does **not** load Cairo or GDK-PixBuf (it renders PDF itself); the
 roadmap's "Cairo / GDK-PixBuf" entries are stale and are not bundled. Inside the
 `ubuntu:22.04` container (§4.1), the build `apt-get install`s the packages that
 provide the five required libraries (`libharfbuzz-subset0` is not a 22.04
-package), copies each
-`.so` plus its transitive ELF dependency closure (resolved with `ldd`) into
-`AppDir/usr/lib`, and bundles a font (`fonts-dejavu-core`) plus a minimal
-fontconfig config written to `AppDir/etc/fonts/fonts.conf` - the exact path
-AppRun points `FONTCONFIG_FILE` at (§4.3) - so WeasyPrint has a discoverable
-font at runtime
+package), copies each `.so` plus its transitive ELF dependency closure (resolved
+with `ldd`) into `AppDir/usr/lib`. It **also** bundles the glib companions
+`libgthread-2.0.so.0` / `libgio-2.0.so.0` / `libgmodule-2.0.so.0`: Qt (in the
+PyQt6 wheel) links them but the WeasyPrint libraries' `ldd` closure does not pull
+them, and they are not host/driver libs - without `libgthread`, `import
+PyQt6.QtCore` fails in a clean environment. It then bundles a font
+(`fonts-dejavu-core`) plus a fontconfig config **template** at
+`AppDir/etc/fonts/fonts.conf` carrying `@APPDIR@`/`@CACHE@` placeholders that
+AppRun substitutes at launch (§4.3) - an absolute path baked at build time would
+point at the host's empty `/usr/share/fonts`, since the AppImage extracts to a
+runtime-random path - so WeasyPrint has a discoverable font at runtime
 (mirrors the `ci.yml` "Install system libraries" step, which installs the same
 Pango stack + font for the `slow` render tests - naming `libpango-1.0-0` +
 `libpangoft2-1.0-0` + `fonts-dejavu-core` explicitly and pulling the rest of the
@@ -178,15 +190,24 @@ runtime is self-contained, then execs the app, passing all arguments through:
 #!/bin/sh
 # AppRun is exec'd directly by the AppImage runtime (not via a shell), so the
 # shebang is mandatory - without it execve fails ENOEXEC and nothing launches.
+HERE="$(dirname "$(readlink -f "$0")")"
+export APPDIR="${APPDIR:-$HERE}"
 export LD_LIBRARY_PATH="$APPDIR/usr/lib:$LD_LIBRARY_PATH"
-export FONTCONFIG_FILE="$APPDIR/etc/fonts/fonts.conf"
-# Resolve the bundled interpreter WITHOUT a quoted glob - a glob does not
-# expand inside double quotes, so "$APPDIR/opt/python*/bin/python3" would be
-# passed to exec literally and fail. Expand it via an unquoted loop instead.
-for _py in "$APPDIR"/opt/python*/bin/python3; do PYTHON="$_py"; break; done
-# If the glob matched nothing it stays literal (with a '*'); fail with a clear
-# message rather than an opaque exec error on an unrecognisable path.
-[ -x "$PYTHON" ] || { echo "AppRun: bundled interpreter missing under $APPDIR/opt" >&2; exit 1; }
+# Substitute the runtime AppDir path into the fontconfig template (§4.2) so
+# fontconfig finds the bundled font wherever the AppImage extracted to.
+_fc="$(mktemp)"
+sed -e "s|@APPDIR@|$APPDIR|g" -e "s|@CACHE@|${XDG_CACHE_HOME:-$HOME/.cache}|g" \
+    "$APPDIR/etc/fonts/fonts.conf" > "$_fc"
+export FONTCONFIG_FILE="$_fc"
+# Resolve the bundled interpreter WITHOUT a quoted glob (a glob does not expand
+# inside double quotes). The binary is bin/python3.<minor> (e.g. python3.13);
+# skip the *-config helpers and fail clearly if the glob matched nothing.
+PYTHON=
+for _py in "$APPDIR"/opt/python*/bin/python3.*; do
+    case "$_py" in *-config) continue ;; esac
+    [ -x "$_py" ] && { PYTHON="$_py"; break; }
+done
+[ -n "$PYTHON" ] && [ -x "$PYTHON" ] || { echo "AppRun: bundled interpreter missing under $APPDIR/opt" >&2; exit 1; }
 exec "$PYTHON" -m album_builder "$@"
 ```
 
@@ -252,30 +273,29 @@ jobs:
 
 Steps: checkout; run `packaging/build-appimage.sh` (Docker is preinstalled on
 GitHub runners, so the script's `ubuntu:22.04` build container runs directly - no
-separate `apt-get` step, that lives inside the container per §4.2); smoke-test
-the built file with `./dist/AlbumBuilder-*-x86_64.AppImage --version` (asserts it
-prints `__version__`, and that the printed value equals the `<version>` field in
-the produced filename - INV-23-3) and `--selftest` (asserts exit 0); extract the
-AppDir with `--appimage-extract` and assert over `squashfs-root`: no
-`pyproject.toml` and no `ALBUM_BUILDER_DEV_MODE` in `AppRun` (INV-23-4), no
-`torch`/`whisperx` directory (INV-23-5), and the five required §4.2 sonames in `usr/lib`
-plus `etc/fonts/fonts.conf` and a bundled font (INV-23-2 real-bundle presence
-check). INV-23-6's real-bundle `desktop-file-validate` runs inside the build
-script at stage 5, not here. Then a **clean-container compatibility test** (the
-canonical AppImage test): run the finished AppImage inside a fresh `ubuntu:22.04`
-(digest read from `build-appimage.sh`) that has only the base host libs
-(`libgl1`/`libegl1`/`libxkbcommon0`/`libdbus-1-3`) and *not* the WeasyPrint/Pango
-stack, via `--appimage-extract-and-run --version` and `--selftest` - a green
-`--selftest` there proves the native libraries are genuinely bundled, not borrowed
-from the runner (the leakage `--selftest` on the runner cannot catch). Finally a
+separate `apt-get` step, that lives inside the container per §4.2). Then
+**static + extract-only checks on the runner** (the headless runner lacks the
+base GL/EGL libraries a real desktop has, so the AppImage is not *run* here):
+`grep` that stage 1 reads `version.py` (INV-23-3 source), then
+`--appimage-extract` and assert over `squashfs-root` - no `pyproject.toml` and no
+`ALBUM_BUILDER_DEV_MODE` in `AppRun` (INV-23-4), no `torch`/`whisperx` directory
+(INV-23-5), the five required §4.2 sonames in `usr/lib` plus `etc/fonts/fonts.conf`
+and a bundled font (INV-23-2 presence). INV-23-6's real-bundle
+`desktop-file-validate` runs inside the build script at stage 5, not here. Then
+the **definitive run, inside a clean container** (the canonical AppImage test):
+`docker run` a fresh `ubuntu:22.04` (digest read from `build-appimage.sh`) with
+only the base host libs (`libgl1`/`libegl1`/`libxkbcommon0`/`libdbus-1-3`/`libpulse0`/`libasound2`) and
+*not* the WeasyPrint/Pango stack, then `--appimage-extract-and-run --version`
+(asserts it prints the version and that it equals the filename's `<version>` -
+INV-23-1/3) and `--selftest` (INV-23-2). A green `--selftest` there proves the
+native libraries are genuinely bundled, not borrowed from the host. Finally a
 best-effort `appimagelint` report (post-build, `continue-on-error` - it never
 enters the artifact and only ships a rolling `continuous` build). On a tag push,
 upload the AppImage to the tag's GitHub Release (creating the Release if it does
-not exist yet). FUSE is available on the runner, so the AppImage runs directly for
-the `--version`/`--selftest` smoke steps. **All of these are verification steps,
-not build stages** - the artifact is assembled entirely inside `build-appimage.sh`
-(INV-23-9); a verification step *may* `apt-get` base libs into a throwaway
-clean-room container, which is a test fixture, not a build of the shipped file.
+not exist yet). **All of these are verification steps, not build stages** - the
+artifact is assembled entirely inside `build-appimage.sh` (INV-23-9); a
+verification step *may* `apt-get` base libs into a throwaway clean-room container,
+which is a test fixture, not a build of the shipped file.
 
 ### 4.6 Desktop integration
 
@@ -521,10 +541,10 @@ only this catcher.
 | Rule | What catches a breach |
 |------|----------------------|
 | INV-23-1 (arg path) | `tests/test_TC_23_appimage.py::test_version_flag` (TC-23-01) |
-| INV-23-1 (real bundle) | `appimage.yml` `--version` on the runner + inside a clean `ubuntu:22.04` (CI-only; a real build is too heavy for the unit suite) |
+| INV-23-1 (real bundle) | `appimage.yml` `--version` inside a clean `ubuntu:22.04` (the headless runner lacks the base GL/EGL libs to run it; CI-only) |
 | INV-23-2 (render probe) | `test_TC_23_appimage.py::test_selftest` (TC-23-02, `slow`) |
 | INV-23-2 (real bundle libs + font) | `appimage.yml`: `--selftest` + structural presence of the five required `usr/lib` sonames + `etc/fonts/fonts.conf` + a font, AND `--selftest` inside a clean `ubuntu:22.04` with no Pango stack (the definitive check - no system copy to borrow) |
-| INV-23-3 | `appimage.yml` filename-vs-`--version` assertion + a static grep that stage 1 reads `version.py` (CI-only) |
+| INV-23-3 | `appimage.yml` filename-vs-`--version` assertion (in the clean container) + a static grep on the runner that stage 1 reads `version.py` (CI-only) |
 | INV-23-4 | `appimage.yml` `find ... pyproject.toml` + `! grep -q ALBUM_BUILDER_DEV_MODE AppRun` over the extracted AppDir - **CI-only** |
 | INV-23-5 | `appimage.yml` `find ... torch/whisperx` over the extracted AppDir - **CI-only** |
 | INV-23-6 | `test_TC_23_appimage.py::test_desktop_valid` (TC-23-03, unit) + `build-appimage.sh` stage 5 `desktop-file-validate` on the generated `.desktop` (build fails if invalid) |
