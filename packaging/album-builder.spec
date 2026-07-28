@@ -50,7 +50,15 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="AlbumBuilder",
-    console=False,                       # GUI app - no console window
+    # console-SUBSYSTEM exe so --version/--selftest print to a real stdout that
+    # PowerShell can capture (a windowed console=False exe has no working stdout -
+    # print() raises OSError EINVAL; Spec 24 INV-24-1/3). hide_console dismisses
+    # the console window the bootloader owns on a GUI double-click ("hide-early",
+    # before Python starts, so no lingering window); when launched from an
+    # existing terminal the parent console is used and left visible for the CLI
+    # flags. PyInstaller 6 idiom for a dual GUI/CLI app.
+    console=True,
+    hide_console="hide-early",
     icon=str(icon) if icon.exists() else None,
 )
 
