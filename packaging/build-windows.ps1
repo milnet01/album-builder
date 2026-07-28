@@ -55,30 +55,27 @@ $bash = "$MsysRoot\usr\bin\bash.exe"
 # --selftest smoke check (INV-24-2) proves the closure is complete. ------------
 Write-Host "stage 4: stage WeasyPrint DLL closure"
 New-Item -ItemType Directory -Force -Path $DllDir | Out-Null
-$required = @(
-    "libgobject-2.0-0.dll", "libpango-1.0-0.dll", "libpangoft2-1.0-0.dll",
-    "libharfbuzz-0.dll", "libfontconfig-1.dll"
-)
-# ldd each required DLL, keep the resolved paths that live under mingw64 (drop
-# C:\Windows\* system libs), unique, then copy the union into the stage dir.
-$msysDll = ($MsysBin -replace '\\','/')                       # C:/msys64/mingw64/bin
-$closure = & $bash -lc @"
-set -e
-for d in $($required -join ' '); do ldd /mingw64/bin/\$d 2>/dev/null; done \
-  | awk '/=> \//{print \$3}' | sort -u | grep -i '/mingw64/'
-"@
-$copied = 0
-foreach ($p in $closure) {
-    $win = & $bash -lc "cygpath -w '$p'"
-    if (Test-Path $win) { Copy-Item -Force $win $DllDir; $copied++ }
-}
-# Also copy the required DLLs themselves (a required DLL is not in its own ldd).
-foreach ($d in $required) {
-    $src = Join-Path $MsysBin $d
-    if (-not (Test-Path $src)) { throw "stage 4: required DLL missing: $d" }
-    Copy-Item -Force $src $DllDir
-}
-Write-Host "stage 4: staged $($copied + $required.Count) DLL(s)"
+# Do the whole ldd-closure copy inside bash (a SINGLE-quoted here-string, so
+# PowerShell does not interpolate $d/$3 across the boundary). Inputs cross via
+# environment variables. `ldd` resolves the FULL transitive closure; we keep
+# only the /mingw64/ DLLs - the Windows System32 deps the target already has.
+$env:WB_OUT = (& $bash -lc "cygpath -u '$DllDir'").Trim()
+$env:WB_REQUIRED = "libgobject-2.0-0.dll libpango-1.0-0.dll libpangoft2-1.0-0.dll libharfbuzz-0.dll libfontconfig-1.dll"
+& $bash -lc @'
+set -euo pipefail
+mkdir -p "$WB_OUT"
+for d in $WB_REQUIRED; do
+  src="/mingw64/bin/$d"
+  [ -f "$src" ] || { echo "stage 4: required DLL missing: $d" >&2; exit 1; }
+  cp -f "$src" "$WB_OUT/"
+done
+for d in $WB_REQUIRED; do ldd "/mingw64/bin/$d"; done \
+  | awk "/=> \/mingw64\//{print \$3}" | sort -u | while read -r dep; do
+      [ -f "$dep" ] && cp -f "$dep" "$WB_OUT/"
+    done
+echo "stage 4: staged $(ls -1 "$WB_OUT" | wc -l) DLL(s)"
+'@
+if ($LASTEXITCODE -ne 0) { throw "stage 4 (DLL closure) failed" }
 
 # --- Stage 5: font + fontconfig config (Spec 24 Section 4.2). ------------------
 # Bundle DejaVu and a fonts.conf that looks in the bundled dir AND the always-
