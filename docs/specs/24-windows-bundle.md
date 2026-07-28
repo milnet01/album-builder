@@ -1,6 +1,6 @@
 # 24 - Windows bundle (PyInstaller .exe distribution)
 
-**Status:** spec draft (2026-07-28).
+**Status:** accepted (2026-07-28).
 **Kind:** implement.
 **Source:** ROADMAP "Distribution & cross-platform packaging" epic, Phase Dist-3 (user-request-2026-07-25, resequenced 2026-07-28).
 **Depends on:** 22 (portability groundwork - the config-path + symlink-or-playlist fallbacks this bundle relies on).
