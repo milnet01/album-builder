@@ -163,6 +163,9 @@ The AppRun (the AppImage's entry script) sets the environment so the bundled
 runtime is self-contained, then execs the app, passing all arguments through:
 
 ```sh
+#!/bin/sh
+# AppRun is exec'd directly by the AppImage runtime (not via a shell), so the
+# shebang is mandatory - without it execve fails ENOEXEC and nothing launches.
 export LD_LIBRARY_PATH="$APPDIR/usr/lib:$LD_LIBRARY_PATH"
 export FONTCONFIG_FILE="$APPDIR/etc/fonts/fonts.conf"
 # Resolve the bundled interpreter WITHOUT a quoted glob - a glob does not
@@ -203,8 +206,11 @@ def run() -> int:
   with no display.
 - `--selftest` renders a trivial HTML to PDF via WeasyPrint in a temp file,
   returns 0 on a non-empty PDF and 1 otherwise. It is a liveness probe for the
-  §4.2 native libraries - not report generation - so it does not reuse
-  `services/report.py` (which needs an album).
+  §4.2 native libraries that **Spec 09**'s report generation (`services/report.py`
+  -> WeasyPrint) depends on - not report generation itself - so it does not reuse
+  `services/report.py` (which needs an album). (This is why Spec 09 is a
+  reference in the header: Dist-2 must keep its report flow working in the bundle,
+  without changing its contract.)
 
 `__version__` is the single version source the build reads (§4.1 stage 1);
 `pyproject.toml`'s `version` is a separate copy kept in sync by `/bump` (§6).
@@ -224,8 +230,9 @@ permissions:
 
 jobs:
   appimage:
-    runs-on: ubuntu-latest   # the ubuntu:22.04 build container (§4.1) pins the
-                             # glibc floor, so the runner image is not load-bearing
+    runs-on: ubuntu-24.04    # pinned like ci.yml (dependency-currency standard);
+                             # the ubuntu:22.04 build container (§4.1) - not this
+                             # runner - sets the glibc floor, so a bump here is safe
 ```
 
 Steps: checkout; run `packaging/build-appimage.sh` (Docker is preinstalled on
@@ -233,13 +240,17 @@ GitHub runners, so the script's `ubuntu:22.04` build container runs directly - n
 separate `apt-get` step, that lives inside the container per §4.2); smoke-test
 the built file with `./dist/AlbumBuilder-*-x86_64.AppImage --version` (asserts it
 prints `__version__`, and that the printed value equals the `<version>` field in
-the produced filename - INV-23-3) and `--selftest` (asserts exit 0); extract the AppDir with
-`--appimage-extract` and assert `find squashfs-root` sees no `pyproject.toml`
-(INV-23-4) and no `torch`/`whisperx` directory (INV-23-5); on a tag push, upload
-the AppImage to the matching GitHub Release. FUSE is available on the runner, so
-the AppImage runs directly for the `--version`/`--selftest` smoke steps. All of
-these are verification/upload steps, not build stages - the build itself stays
-entirely inside `build-appimage.sh` (INV-23-9).
+the produced filename - INV-23-3) and `--selftest` (asserts exit 0); extract the
+AppDir with `--appimage-extract` and assert over `squashfs-root`: no
+`pyproject.toml` (INV-23-4), no `torch`/`whisperx` directory (INV-23-5), all six
+§4.2 sonames present in `usr/lib` (INV-23-2 real-bundle check, which `--selftest`
+alone cannot guarantee), and `desktop-file-validate usr/share/applications/*.desktop`
+passes (INV-23-6 real-bundle check); on a tag push, upload the AppImage to the
+tag's GitHub Release (creating the Release if it does not exist yet). FUSE is
+available on the runner, so the AppImage runs directly for the
+`--version`/`--selftest` smoke steps. All of these are verification/upload steps,
+not build stages - the build itself stays entirely inside `build-appimage.sh`
+(INV-23-9).
 
 ### 4.6 Desktop integration
 
@@ -257,14 +268,21 @@ requires it) - see §9.
   no `DISPLAY` -> prints `__version__` and exits 0.
   *Breaks when:* a bundled Python or Qt shared library fails to load, so the
   import chain raises before the version print.
-- **INV-23-2** - WeasyPrint renders inside the bundle. *Test:*
-  `./dist/AlbumBuilder-<version>-x86_64.AppImage --selftest` -> exits 0 after
-  writing a non-empty PDF. *Breaks when:* any of the six §4.2 libraries or its
-  transitive closure is missing from `AppDir/usr/lib`, or no font is discoverable.
+- **INV-23-2** - WeasyPrint renders inside the bundle. *Test:* two complementary
+  checks, because `--selftest` alone is gameable (WeasyPrint dlopens by soname, so
+  a bundle missing a lib can fall back to a system copy on the runner and still
+  pass): (a) `./dist/AlbumBuilder-<version>-x86_64.AppImage --selftest` -> exits 0
+  after a non-empty PDF; AND (b) the extracted `squashfs-root/usr/lib` contains all
+  six §4.2 sonames (a structural presence check that no system fallback can mask).
+  *Breaks when:* any of the six §4.2 libraries or its transitive closure is missing
+  from `AppDir/usr/lib`, or no font is discoverable.
 - **INV-23-3** - The AppImage version matches the runtime single source. *Test:*
-  the `--version` output equals `album_builder.version.__version__` and the
-  filename's `<version>` field. *Breaks when:* the build hardcodes a version, or
-  reads a source other than `version.py`.
+  both - (a) the `--version` output equals the `<version>` field of the produced
+  filename (catches a hardcoded/mismatched version), AND (b) stage 1 of
+  `build-appimage.sh` reads `album_builder/version.py`, not `pyproject.toml` (a
+  static grep; catches a wrong source even while `/bump` keeps the two files in
+  sync, which would otherwise hide it). *Breaks when:* the build hardcodes a
+  version, or reads a source other than `version.py`.
 - **INV-23-4** - No writable state targets the read-only mount, because the
   bundle contains no `pyproject.toml` at the location `_running_from_source_tree()`
   probes (`app.py` resolved then three `.parent` hops - package dir -> its parent
@@ -277,13 +295,18 @@ requires it) - see §9.
   instead of `pip install`ing the package, or AppRun exports
   `ALBUM_BUILDER_DEV_MODE=1`.
 - **INV-23-5** - The heavy ML stack is absent. *Test:*
-  `find <extracted AppDir> -maxdepth 6 -name 'torch' -o -name 'whisperx'` ->
-  empty. *Breaks when:* `requirements.txt` gains `torch`/`whisperx`, or the build
+  `find <extracted AppDir> -maxdepth 6 \( -name 'torch' -o -name 'whisperx' \)` ->
+  empty (the parens bind the `-o` so `-maxdepth` applies to both names).
+  *Breaks when:* `requirements.txt` gains `torch`/`whisperx`, or the build
   installs an extra that pulls them.
-- **INV-23-6** - The bundled desktop entry is valid. *Test:*
-  `desktop-file-validate` on the generated `album-builder.desktop` -> exit 0, no
-  errors. *Breaks when:* the `.desktop` template loses a required key
-  (`Exec`, `Type`, `Name`) or the `@@LAUNCHER@@` token is left unsubstituted.
+- **INV-23-6** - The bundled desktop entry is valid. *Test:* two layers -
+  (a) TC-23-03 substitutes the `@@LAUNCHER@@` token in
+  `packaging/album-builder.desktop.in` and runs `desktop-file-validate` on the
+  result (unit), AND (b) `appimage.yml` runs `desktop-file-validate` on the
+  `album-builder.desktop` inside the extracted `squashfs-root` (the real bundle,
+  so a broken stage-5 substitution is caught). *Breaks when:* the `.desktop`
+  template loses a required key (`Exec`, `Type`, `Name`) or the `@@LAUNCHER@@`
+  token is left unsubstituted.
 - **INV-23-7** - The build runs in a pinned `ubuntu:22.04` container, which sets
   the AppImage's glibc floor independently of the CI runner image. *Test:* the
   `docker`/`podman run` invocation line in `packaging/build-appimage.sh` names an
@@ -293,10 +316,11 @@ requires it) - see §9.
   *Breaks when:* the run line's base image is bumped to a newer tag, silently
   raising the floor.
 - **INV-23-8** - A version-tag push produces a Release asset. *Test:* the
-  `appimage.yml` workflow triggers on `push: tags: ['v*']` and has an upload step
-  targeting the tag's Release; confirmed end-to-end by an actual tagged release
-  (manual). *Breaks when:* the trigger or the upload step is removed, or
-  `permissions: contents: write` is dropped.
+  `appimage.yml` workflow triggers on `push: tags: ['v*']`, declares
+  `permissions: contents: write`, and has an upload step that targets (and creates
+  if absent) the tag's Release; confirmed end-to-end by an actual tagged release
+  (manual). *Breaks when:* the trigger, the `permissions: contents: write` block,
+  or the upload step is removed.
 - **INV-23-9** - The release build runs the same script a developer runs locally,
   not a reimplementation. *Test:* `appimage.yml`'s build job invokes
   `packaging/build-appimage.sh` and contains no build stages of its own - no
@@ -319,10 +343,10 @@ requires it) - see §9.
   *Breaks when:* a tooling input is fetched by a moving reference, so a changed or
   compromised upstream silently enters an artifact users download and run
   unsandboxed - the supply-chain trust boundary this spec must state (spec-format
-  standard §5.5). The base-image digest is refreshed on the dependency-currency
-  security cadence (§12), not frozen forever; byte-identical `apt` package versions
-  are not pinned (§9) - the guarantee is a fixed glibc floor and library set, not a
-  bit-reproducible build.
+  standard §5.5). The base-image digest is re-pointed to the current digest by the
+  dependency-currency standard's periodic **sweep** (§12), not frozen forever;
+  byte-identical `apt` package versions are not pinned (§9) - the guarantee is a
+  fixed glibc floor and library set, not a bit-reproducible build.
 
 ## 6. Failure modes
 
@@ -450,11 +474,11 @@ only this catcher.
 | INV-23-1 (arg path) | `tests/test_TC_23_appimage.py::test_version_flag` (TC-23-01) |
 | INV-23-1 (real bundle) | `appimage.yml` `--version` smoke step (CI-only; a real build is too heavy for the unit suite) |
 | INV-23-2 (render probe) | `test_TC_23_appimage.py::test_selftest` (TC-23-02, `slow`) |
-| INV-23-2 (real bundle libs) | `appimage.yml` `--selftest` step (CI-only) |
-| INV-23-3 | `appimage.yml` version-match assertion (CI-only); `pyproject.toml`-vs-`version.py` drift is out of this INV's scope - see §6, `/bump`'s job |
-| INV-23-4 | `appimage.yml` `find ... pyproject.toml` over the extracted AppDir - **CI-only** |
+| INV-23-2 (real bundle libs) | `appimage.yml` `--selftest` + a `squashfs-root/usr/lib` soname-presence check (CI-only; presence check needed because `--selftest` can dlopen a system copy) |
+| INV-23-3 | `appimage.yml` filename-vs-`--version` assertion + a static grep that stage 1 reads `version.py` (CI-only) |
+| INV-23-4 | `appimage.yml` `find ... pyproject.toml` + `grep ALBUM_BUILDER_DEV_MODE AppRun` over the extracted AppDir - **CI-only** |
 | INV-23-5 | `appimage.yml` `find ... torch/whisperx` over the extracted AppDir - **CI-only** |
-| INV-23-6 | `test_TC_23_appimage.py::test_desktop_valid` (TC-23-03; skipped if `desktop-file-validate` absent) |
+| INV-23-6 | `test_TC_23_appimage.py::test_desktop_valid` (TC-23-03, unit) + `appimage.yml` `desktop-file-validate` over the extracted bundle's `.desktop` (CI-only, real substitution) |
 | INV-23-7 | `grep` the `docker`/`podman run` line in `build-appimage.sh` for `ubuntu:22.04` (static; a stray comment must not satisfy it); a real old-glibc run is manual, tracked by the Distribution epic |
 | INV-23-8 | **nothing automated** - proven only by an actual tagged release; the workflow file is the static artifact a cold reader checks |
 | INV-23-9 | **nothing mechanical** - the parity is structural (like `ci.yml` -> `local-CI.sh`); a cold reader confirms `appimage.yml` only calls `build-appimage.sh` |
@@ -484,12 +508,13 @@ only this catcher.
   does supersede one *scope* line in Spec 12 - above.)
 - **`docs/standards/dependency-currency.md`** - INV-23-10 introduces pinned
   build-time tooling (base-image digest, `python-appimage`, `appimagetool`) that
-  the standard's scope table does not yet cover. Add a build-tooling category with
-  a **security-refresh trigger**: the base-image digest (and the tools) are
-  re-pointed to the current digest on the standard's security cadence - they are
-  trust-boundary pins, NOT permanent freezes exempt from the sweep. The frozen
-  image ships OS libraries into every artifact (§4.2), so CVE staleness is real;
-  global rule 5c's sweep must still see them.
+  the standard's scope table does not yet cover. Add a build-tooling category
+  re-pointed to the current digest by the standard's periodic **sweep** (its
+  actual mechanism - the "The sweep (check, don't wait)" section - not a bespoke
+  cadence): the base-image digest and the pinned tools are trust-boundary pins,
+  NOT permanent freezes exempt from that sweep. The frozen image ships OS
+  libraries into every artifact (§4.2), so CVE staleness is real; global rule 5c's
+  sweep must still see them.
 - **Related pre-existing staleness (NOT Dist-2 scope, flagged so it is not
   forgotten):** `README.md`'s "System dependencies" still lists GStreamer plugins
   (README line 33) *and* WeasyPrint "Pango / Cairo / GDK-PixBuf" (line 36), and
@@ -507,3 +532,4 @@ only this catcher.
 | 1 | 2026-07-28 | 3 cold (internal-consistency / code-accuracy / cross-doc+arch) + §1e pre-pass | 1 | 2 | 3 | 3 | 9 verified (0 unverified) + 1 mechanical, all fixed. **CRIT:** the §4.3 AppRun `exec "$APPDIR/opt/python*/bin/python"` never launches (a glob does not expand in double quotes) -> loop resolver. **HIGH:** §7 listed INV-23-8 among CI-exercised checks, but a real `v*` tag is needed -> static-only wording; build-parity gap (an openSUSE-host build bakes the wrong glibc, so "local == release" was false) -> user chose a pinned `ubuntu:22.04` **build container**, rewiring §3/§4.1/4.2/4.5 + INV-23-7/9. **MED:** added the below-floor-glibc failure mode; reframed INV-23-7 to a static `grep` on the container tag; added supply-chain pin INV-23-10. **LOW:** wording precision (INV-23-4, §4.2) + flagged stale README/`main_window.py` GStreamer advice as a separate cleanup (surfaced, not in Dist-2 scope). Code-accuracy lane clean (all file/symbol/version claims confirmed). §1e: 3 What-checks-this cells blurred a catcher with a bold `nothing` -> single-form. |
 | 2 | 2026-07-28 | 3 cold (same partition) | 1 | 3 | 7 | 4 | All verified & fixed; code-accuracy lane clean again. **CRIT:** the loop-1 INV-23-10 edit had deleted the `## 6. Failure modes` heading (headings jumped §5->§7) - restored. **HIGH:** §4.5 never extracted the AppDir, so INV-23-4/5's claimed CI `find` checks did not exist -> added the extract+`find` steps; `appimagetool` is itself an AppImage needing `--appimage-extract-and-run` in a FUSE-less container -> §4.1 stage 6; pinning was uneven (base image a mutable tag, "identical artifact" overstated) -> INV-23-10 now pins the base by `@sha256` digest, §4.1 softened to "same broadly-compatible artifact", byte-repro deferred (§9). **MED:** INV-23-4 test checks both halves (pyproject + dev-mode env); INV-23-7/10 tests tightened against comment/branch-ref gaming; FONTCONFIG path tied to §4.2; test file moved to `tests/test_TC_23_appimage.py` (app.py is top-level, not `services/`); §12 ROADMAP + README (line 36 WeasyPrint) staleness completed. **LOW:** writable `dist/` mount spelled out; `§5.5` -> spec-format-standard qualifier; dependency-currency category note; no-network failure mode. |
 | 3 | 2026-07-28 | 2 cold (internal+shell / cross-doc+arch; code-accuracy skipped - its §2/§4.4 claims byte-unchanged and clean in loops 1-2) | 0 | 2 | 3 | 3 | 9 verified (+1 INFO), all fixed. Architecture confirmed coherent; findings are now refinements, not rewrites. **HIGH:** INV-23-3's filename half had no CI catcher (§4.5 only ran `--version`) -> added a filename-vs-`$VERSION` assertion + listed INV-23-3 in §7's CI-only set; INV-23-10 overclaimed "every build input pinned" while the `pip` deps are deliberately floors-only -> rescoped to build **tooling**, floors-only posture stated. **MED:** INV-23-10 grep was gameable (name-presence, not ref-inspection) -> test now inspects the fetch/run lines; base-image digest given a security-refresh trigger (not a permanent freeze, §12); reconciled Spec 12's AppImage *out-of-scope (v1)* line (now superseded - header + §12). **LOW:** §6 no-network names stage-3 `pip`; INV-23-4 hop-count off-by-one corrected against `app.py`; README citation split to lines 33/36. **INFO:** unsourced "project test convention" reworded to CLAUDE.md's contract-anchor practice. |
+| 4 | 2026-07-28 | 2 cold (internal+shell / cross-doc+arch) | 0 | 2 | 2 | 6 | Cross-doc/architecture lane **converged** (all findings polish; every factual claim re-confirmed exact - Spec 22/12 citations, ROADMAP, README lines 33/36, WeasyPrint six libs, `_running_from_source_tree` hops, linuxdeploy-plugin-python deprecation). Internal/shell lane found concrete testability/shell fixes, no design change. **HIGH:** the §4.3 AppRun snippet lacked a `#!/bin/sh` shebang (AppRun is exec'd directly -> ENOEXEC) -> added; INV-23-3's test could not catch a wrong version *source* while `/bump` keeps `version.py`/`pyproject.toml` synced -> added a static "stage 1 reads `version.py`" check. **MED:** `--selftest` can dlopen a system lib and mask a missing bundle lib -> added a `squashfs-root/usr/lib` soname-presence check (INV-23-2); §4.5 upload now creates the Release if absent (INV-23-8). **LOW:** INV-23-8 test checks the `permissions` block; INV-23-6 gains a real-bundle `desktop-file-validate`; INV-23-5 `find` parens; Spec 09 reference justified (§4.4); "security cadence" -> the standard's actual "sweep"; `runs-on` pinned to `ubuntu-24.04` like `ci.yml`. |
