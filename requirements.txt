@@ -5,6 +5,8 @@
 # in that standard -- never an undocumented pin.
 PyQt6>=6.6
 mutagen>=1.47
+# Cross-platform per-user config dir (Spec 22 portability groundwork)
+platformdirs>=4.11
 # Phase 4 (v0.5.0) — report generation + cover normalisation
 Jinja2>=3.1
 weasyprint>=68

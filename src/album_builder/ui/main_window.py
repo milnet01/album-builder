@@ -4,13 +4,11 @@ AlbumStore + LibraryWatcher + AppState (Phase 2) + Player (Phase 3A)."""
 from __future__ import annotations
 
 import logging
-import shutil
-import subprocess
 from pathlib import Path
 from uuid import UUID
 
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QActionGroup, QKeySequence, QShortcut
+from PyQt6.QtCore import Qt, QTimer, QUrl
+from PyQt6.QtGui import QActionGroup, QDesktopServices, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
@@ -679,16 +677,16 @@ class MainWindow(QMainWindow):
             logger.info("toast: %s", message)
 
     def _open_in_file_manager(self, folder: Path) -> None:
-        """xdg-open the given folder; best-effort, failure is silent."""
-        if shutil.which("xdg-open") is None:
-            return
+        """Reveal the given folder in the OS file manager; best-effort (Spec 22).
+
+        Cross-platform via QDesktopServices (xdg-open on Linux, ShellExecute on
+        Windows, open on macOS). Failure never propagates (INV-22-4).
+        """
         try:
-            subprocess.Popen(
-                ["xdg-open", str(folder)],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            )
-        except OSError as exc:
-            logger.warning("xdg-open failed: %s", exc)
+            if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder))):
+                logger.warning("open folder failed: %s", folder)
+        except Exception as exc:  # never let a UI-open failure escape (INV-22-4)
+            logger.warning("open folder raised: %s", exc)
 
     def _on_new_album(self) -> None:
         name, ok = QInputDialog.getText(self, "New album", "Album name (1-80 chars):")

@@ -15,10 +15,11 @@ Public API:
 - `cleanup_stale_staging(folder)` -> bool. Wipes `.export.new/` from a
   prior crash; returns True when something was actually wiped.
 
-FAT32/vfat fallback (Spec 08 §Errors row "filesystem doesn't support
-symlinks"): scoped out for v0.5.0. Linux desktop targets all support
-symlink(2) natively; the hardlink/copy fallback chain is deferred to v0.6+
-and lives in the spec only.
+Non-symlink filesystems (FAT/exFAT, Windows without Developer Mode) are
+handled playlist-only (Spec 22): `_supports_symlinks` probes the target dir,
+and when it returns False the export writes `playlist.m3u8` + album artifacts
+with no numbered entries -- no hardlink, copy, consent dialog, or capability
+cache. On Linux the probe always returns True, so the export is unchanged.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -196,6 +198,26 @@ def _render_m3u(album: Any, library: Any) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _supports_symlinks(directory: Path) -> bool:
+    """Return True iff `directory`'s filesystem supports symlinks (Spec 22).
+
+    Creates and immediately unlinks a uniquely-named throwaway symlink inside
+    `directory`; returns False on OSError (FAT/exFAT, Windows without Developer
+    Mode). A couple of syscalls, no persistence. On Linux this always returns
+    True, so the export path is unchanged.
+    """
+    probe = directory / f".symlink-probe-{uuid.uuid4().hex}"
+    try:
+        probe.symlink_to(".")
+    except OSError:
+        return False
+    try:
+        probe.unlink()
+    except OSError:
+        pass
+    return True
+
+
 def is_export_fresh(album: Any, folder: Path, library: Any) -> bool:
     """Drift-detection invariant (Spec 08 §`_commit_export` Drift-detection).
 
@@ -215,6 +237,10 @@ def is_export_fresh(album: Any, folder: Path, library: Any) -> bool:
         if _has_control_char(track_path):
             continue
         expected += 1
+    if not _supports_symlinks(folder):
+        # Playlist-only export creates zero symlinks by design (Spec 22 INV-22-3);
+        # expect zero so it never reads as perpetually stale.
+        expected = 0
     actual = sum(1 for p in folder.iterdir() if p.is_symlink())
     return actual == expected
 
@@ -242,6 +268,12 @@ def _build_staging(
     width = 3 if len(album.track_paths) > 99 else 2
     used_titles: set[str] = set()
     created = 0
+    can_symlink = _supports_symlinks(staging)
+    if not can_symlink:
+        # Playlist-only export (Spec 22 INV-22-1): the M3U still lists every
+        # track; we just skip the numbered symlink entries. One warning, not
+        # one-per-track.
+        log_warnings.append("symlinks unavailable on this filesystem; playlist-only export")
     for i, track_path_str in enumerate(album.track_paths, start=1):
         track_path = Path(track_path_str)  # list[str] on disk; coerce here
         track = library.find(track_path)
@@ -257,6 +289,8 @@ def _build_staging(
                 f"skipping track with control char in path: {track_path!r}"
             )
             continue
+        if not can_symlink:
+            continue  # playlist-only: no numbered entry, M3U lists the track
         ext = _ext_for_symlink(track_path.suffix)
         title = sanitise_title(_track_title(track, track_path))
         prefix = f"{i:0{width}d}"

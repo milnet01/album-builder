@@ -1,4 +1,4 @@
-"""User settings persisted at ``$XDG_CONFIG_HOME/album-builder/settings.json``."""
+"""User settings persisted under the per-user config dir (see ``settings_dir``)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
+
+import platformdirs
 
 from album_builder.persistence.atomic_io import atomic_write_text
 
@@ -81,16 +83,21 @@ class UiSettings:
 def settings_dir() -> Path:
     """Return the directory that holds settings.json.
 
-    Honours ``XDG_CONFIG_HOME`` per the freedesktop Base Directory Spec; falls
-    back to ``~/.config`` when unset, empty, or set to a relative path
-    (the spec mandates absolute values; relative ones must be ignored).
+    Resolved per-platform via ``platformdirs`` (Spec 22): Linux
+    ``<XDG_CONFIG_HOME or ~/.config>/album-builder``, Windows
+    ``%LOCALAPPDATA%\\album-builder``, macOS
+    ``~/Library/Application Support/album-builder``.
+
+    On Linux this is byte-identical to the pre-Spec-22 behaviour: an absolute
+    ``XDG_CONFIG_HOME`` is honoured, and unset/empty/relative all fall back to
+    ``~/.config``. The freedesktop Base Directory Spec mandates absolute values,
+    so a relative ``XDG_CONFIG_HOME`` must be ignored -- platformdirs would
+    honour it, so we guard for that case explicitly before delegating.
     """
     xdg = os.environ.get("XDG_CONFIG_HOME")
-    if xdg and Path(xdg).is_absolute():
-        base = Path(xdg)
-    else:
-        base = Path.home() / ".config"
-    return base / "album-builder"
+    if xdg and not Path(xdg).is_absolute():
+        return Path.home() / ".config" / "album-builder"
+    return Path(platformdirs.user_config_dir("album-builder", appauthor=False))
 
 
 def settings_path() -> Path:

@@ -23,6 +23,7 @@ from album_builder.persistence.atomic_pair import scan_reports_dir
 from album_builder.persistence.debounce import DebouncedWriter
 from album_builder.services.export import (
     ExportFailed,
+    _supports_symlinks,
     cleanup_stale_staging,
     regenerate_album_exports,
     sanitise_title,
@@ -42,12 +43,20 @@ def _symlink_count_matches(album: Album, folder: Path) -> bool:
     return tells `rescan()` to mark the album `needs_regen` so the next
     mutation triggers a fresh export pass (Spec 08 §`_commit_export`
     drift-detection invariant).
+
+    Capability-aware (Spec 22 INV-22-3): on a filesystem without symlink
+    support a playlist-only export creates zero symlinks by design, so the
+    expected count is 0 there -- otherwise such an album would be perpetually
+    flagged `needs_regen`. The coarse `len(track_paths)` base is retained (this
+    check stays library-free; it does not switch to the precise non-missing
+    count).
     """
     try:
         actual = sum(1 for p in folder.iterdir() if p.is_symlink())
     except OSError:
         return True  # can't check — don't false-flag
-    return actual == len(album.track_paths)
+    expected = len(album.track_paths) if _supports_symlinks(folder) else 0
+    return actual == expected
 
 
 class AlbumStore(QObject):
