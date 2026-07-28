@@ -164,7 +164,7 @@ The promotion sequence:
 | During steps 1–4 of `_commit_export` | Live folder may have a mix of new + old symlinks; M3U is whichever the last successful os.replace left. | Next export pass re-runs the full sequence; the "snapshot existing → rename in → unlink stale" loop converges to the canonical state. |
 | After step 4 (clean) | Live folder fully updated; staging may or may not be cleaned up. | step 5 (rmtree) is idempotent and safe to retry. |
 
-**Drift-detection invariant** — `AlbumStore.rescan()` for each album checks `count(p for p in folder.iterdir() if p.is_symlink()) == count(track_paths in library where not is_missing)`. A mismatch flags the album as `needs_regen` and triggers a regeneration pass. On a filesystem without symlink support the expected count is `0` (a playlist-only export creates no symlinks by design, Spec 22 INV-22-3); the `is_symlink()` counting itself is unchanged, since no non-symlink entries are ever created.
+**Drift-detection invariant** — `AlbumStore.rescan()` self-heal checks `count(p for p in folder.iterdir() if p.is_symlink()) == len(album.track_paths)` via `_symlink_count_matches` — a library-free heuristic that over-counts missing tracks by design (it never under-flags). A mismatch flags the album as `needs_regen` and triggers a regeneration pass. (`is_export_fresh` is the precise, library-aware variant, expecting `count(non-missing tracks)`.) On a filesystem without symlink support the expected count is `0` (a playlist-only export creates no symlinks by design, Spec 22 INV-22-3); the `is_symlink()` counting itself is unchanged, since no non-symlink entries are ever created.
 
 ### Robustness
 
@@ -228,7 +228,7 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-08-16** — Each export pass appends a warning summary to `Albums/<slug>/.export-log`; after the 11th run, only the last 10 entries remain (rotation). The log file itself is excluded from the symlink wipe (it's a regular file in the album folder).
 - **TC-08-17** — Re-export over a folder containing dangling symlinks (source file moved out of `Tracks/`) does not raise in `strict=False`; the staging pass simply omits the dangling entries; surviving M3U omits the missing tracks.
 - **TC-08-18** — Track absolute path containing `\n` / `\r` / `\t` is rejected at export time with a toast; the entry is skipped; rest of the album exports normally.
-- **TC-08-19** — Drift-detection invariant: when `count(p for p in folder.iterdir() if p.is_symlink()) ≠ count(non-missing track_paths)`, `AlbumStore.rescan()` flags the album `needs_regen` and a regeneration converges the state on next mutation.
+- **TC-08-19** — Drift-detection invariant: `AlbumStore.rescan()` (via `_symlink_count_matches`) compares `count(p for p in folder.iterdir() if p.is_symlink())` against an expected count of `len(album.track_paths)` on a symlink-capable filesystem and `0` on one without symlink support (`_supports_symlinks(folder)`, Spec 22 INV-22-3) — so a playlist-only album reads fresh, not drifted. A mismatch flags the album `needs_regen` and a regeneration converges the state on next mutation. The base is library-free and over-counts missing tracks by design (never under-flags).
 
 ## Out of scope (v1)
 
