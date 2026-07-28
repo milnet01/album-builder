@@ -215,10 +215,13 @@ Branch 3) as an interrupted pair and deletes it. A PDF-less report is exactly a 
 `.html`, so without a change `AlbumStore.rescan` would wipe it on the next launch.
 The rule: a lone `.html` with **no** `.pdf` and **no** `pdf.tmp` sibling is a
 complete single-file report (an interrupted pair always leaves a `pdf.tmp`, since
-both tmps are written before either rename); it is kept and counted
-`pairs_completed`. This is a pure file-presence rule on **every** platform -
-`atomic_pair.py` is the pure persistence layer and does not consult engine state or
-platform.
+both tmps are written before either rename); it is kept, and `pairs_completed` -
+whose docstring currently reads "both finals exist" - widens to "a settled report is
+present (the pair OR a complete single-file HTML)", its docstring updated to match.
+The new keep-branch must be evaluated **before** the Branch 3 half-pair delete, or
+the lone `.html` is deleted before the rule sees it. This is a pure file-presence
+rule on **every** platform - `atomic_pair.py` is the pure persistence layer and does
+not consult engine state or platform.
 
 ### 4.4 Headless entry points - reused from Spec 23
 
@@ -513,15 +516,16 @@ catcher, the same class Spec 23 carried (its INV-23-8/9/10).
 - **`docs/specs/09-approval-report.md`** - **amend:** the canonical approve sequence
   currently writes an `(html, pdf)` pair unconditionally. Add that when the PDF
   render fails (the WeasyPrint native stack will not load, or a specific report will
-  not render) the report is the HTML alone and `step:render-rename-pdf` is skipped;
-  the two-file pair is unchanged wherever the PDF renders. Reference Spec 24 §4.3.
+  not render) the whole pair sequence (`step:render-tmp` / `render-rename-html` /
+  `render-rename-pdf`) is bypassed - the failure raises before any `.tmp` is written
+  - and the HTML is written as a single-file atomic write with **no `pdf.tmp`
+  created**; the two-file pair is unchanged wherever the PDF renders. Reference
+  Spec 24 §4.3.
 - **`docs/specs/10-persistence.md`** - **amend:** the atomic-pair scan currently
   treats a lone `.html` (one final, the other absent) as a half-pair to delete. Add
-  that a lone `.html` with **no** `.pdf` sibling and **no** `pdf.tmp` is a complete
-  single-file report on any platform (an interrupted pair always leaves a `pdf.tmp`,
-  since both tmps are written before either rename) - a pure file-presence rule,
-  since `atomic_pair.py` cannot consult engine state. Reference Spec 24 §4.3 /
-  INV-24-6.
+  the complete-single-file rule and the `pairs_completed` widening exactly as
+  Spec 24 §4.3(c) states it (the crash-window rationale and branch ordering live
+  there - do not restate them). Reference Spec 24 §4.3 / INV-24-6.
 - **No other sibling-spec contract changes** - Spec 24 adds a Windows package around
   Spec 22's portable code and the Spec 23-added flags; it does not alter Specs
   08/22/23.
@@ -531,3 +535,4 @@ catcher, the same class Spec 23 carried (its INV-23-8/9/10).
 | Loop | Date | Lanes | CRIT | HIGH | MED | LOW | Outcome |
 |------|------|-------|------|------|-----|-----|---------|
 | 1 | 2026-07-28 | 3 cold (consistency/structure - doc-vs-code accuracy - architecture/currency) | 0 | 1 | 2 | 3 | 6 verified (0 unverified), all fixed. **HIGH:** §4.3 named `WEASYPRINT_DLL_DIRECTORIES` as the bundle's DLL mechanism, but WeasyPrint 69 guards its own `add_dll_directory`/env-var block with `not hasattr(sys, 'frozen')` (verified in `ffi.py`) - inert inside a PyInstaller bundle -> rewrote §4.3a to rely on the runtime hook's own `os.add_dll_directory` + WeasyPrint's `LOAD_LIBRARY_SEARCH_DEFAULT_DIRS` dlopen flag. **MED:** the cached `pdf_engine_available()` probe rendered only trivial HTML, so a real report failing after the probe passed still crashed approve (the exact failure §2.3 closes), and the probe's own logic was untested -> replaced the probe with a point-of-use `try`/`except` in `render_report` (covers load AND render failure; no probe to invert), updating INV-24-6/7, §4.4, §7, §10. **LOW:** "complete report" was defined two ways (§4.3 vs §12) -> made the `scan_reports_dir` rule pure file-presence on all platforms, left `has_complete_report` unchanged (no production caller), reframed the Spec 09/10 amendments as render-failure / presence-based. |
+| 2 | 2026-07-28 | 2 cold (contract-chain consistency - mechanism accuracy) | 0 | 0 | 1 | 2 | 3 verified, all fixed - all fix-collateral in loop-1's §12 rewording. Both lanes re-verified the loop-1 rewrite sound: `ffi.py` confirms the §4.3a `sys.frozen` guard + `LOAD_LIBRARY_SEARCH_DEFAULT_DIRS` exactly, and the "interrupted pair always leaves a `pdf.tmp`" crash-window claim holds against `render_report`'s real write order (line 294 render precedes both tmp writes). **MED:** §12's Spec-09 amendment said "`step:render-rename-pdf` is skipped", but the failure raises before any `.tmp` is written, so the whole pair sequence is bypassed with no `pdf.tmp` created (the imprecise wording would orphan a `pdf.tmp` and break the presence rule) -> reworded to "pair sequence bypassed, no `pdf.tmp` created". **LOW:** deduped the crash-window rationale (§12 now points to §4.3c); noted `pairs_completed` widens + the new keep-branch must precede Branch 3's delete. |
