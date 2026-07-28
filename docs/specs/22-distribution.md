@@ -1,6 +1,6 @@
 # 22 - Portability groundwork (cross-platform export, config path, folder-open)
 
-**Status:** Ready for implementation (cold-eyes converged, Loop 3 clean) - **Last updated:** 2026-07-28 - **Depends on:** 00, 08, 09, 10 - **References (does not extend):** 06, 12 - **Blocks:** the Flatpak / Windows / OBS packaging phases (future specs)
+**Status:** Ready for implementation (cold-eyes converged, Loop 3 clean) - **Last updated:** 2026-07-28 - **Depends on:** 00, 08, 09, 10 - **References (does not extend):** 06, 12 - **Blocks:** the AppImage / Windows / Flatpak / OBS packaging phases (future specs)
 
 > **Cold-eyes loop log:** _converged at Loop 3 (2026-07-28). Loop 1 (2026-07-25, 3 cold reviewers - internal / code-accuracy / cross-spec) surfaced 15 verified findings, all fixed here. The largest: the draft's export fallback collided with Spec 08's deferred hardlink->copy-with-consent design. **Product decision (user, 2026-07-25): "just remember the links like WinAmp" - no copies.** So this phase **supersedes** Spec 08's copy-with-consent fallback (TC-08-10a/10b, never implemented) with a simpler **symlink-or-playlist-only** export, which also lets it drop the copy dialog, the per-filesystem cache, and the link-strategy-agnostic entry predicate the interim draft had added. Other Loop-1 fixes retained: folder-open wrapped so nothing escapes (INV-22-4); relative-`XDG_CONFIG_HOME` guard preserved so an existing test passes; no-Qt-boundary rationale corrected (persistence already imports Qt via `debounce.py`); dependency recorded as a floor (not a §4 Ledger cap); Spec 09/10 amendment spots enumerated.
 > Loop 2 (2026-07-28, deterministic citation pre-pass + 1 cold reviewer - CRITICAL 0 / HIGH 1 / MEDIUM 4 / LOW 2, of which 1 verified substantive): (a) re-verified every cross-spec citation exact, then - per user directive, line numbers rot - converted every `line NN` / `file.py:NNN` citation to stable section/symbol/TC-ID names; (b) fixed a dangling `Spec 22 §Design decision` self-reference (-> `§Purpose`, where the label actually lives); (c) reworded the `_symlink_count_matches` bullet so it keeps its existing library-free `len(track_paths)` base rather than appearing to adopt `is_export_fresh`'s precise non-missing count (the two drift checks are deliberately different bases). Other reviewer findings dismissed on verification (imports already present; TC-08-19 correctly needs no change; dependency-currency §5 exists).
@@ -8,8 +8,8 @@
 
 This is **Phase Dist-1** of the "Distribution & cross-platform packaging" epic
 (`ROADMAP.md` heading `## Future / deferred`). The epic turns Album Builder from a
-source-only, Linux-only checkout into downloadable builds (Flatpak/Flathub, Windows,
-OBS). Those packaging phases each get their own spec; **this phase touches only
+source-only, Linux-only checkout into downloadable builds (AppImage, Windows,
+Flatpak/Flathub, OBS). Those packaging phases each get their own spec; **this phase touches only
 application code** so the same codebase runs unchanged on Linux and correctly on
 Windows. It makes three POSIX-only chokepoints portable - export link creation, the
 config-directory resolver, and the "open this folder" helper - with **zero behavior
@@ -331,9 +331,10 @@ symlinks.
 
 ## Out of scope
 
-- **The actual packaging** - Flatpak manifest + Flathub submission (Phase Dist-2),
-  PyInstaller Windows bundle (Phase Dist-3), OBS RPM/DEB (Phase Dist-4). Each is its own
-  later spec; this phase ships no bundler, manifest, or installer.
+- **The actual packaging** - AppImage bundle (Phase Dist-2), PyInstaller Windows bundle
+  (Phase Dist-3), Flatpak manifest + Flathub submission (Phase Dist-4), OBS RPM/DEB
+  (Phase Dist-5). Each is its own later spec; this phase ships no bundler, manifest, or
+  installer.
 - **Hardlink / copy export fallback** - explicitly out (the WinAmp-style playlist-only
   design supersedes Spec 08's deferred copy-with-consent). If a future need arises to
   materialize real files on a removable device, it is a separate feature.
