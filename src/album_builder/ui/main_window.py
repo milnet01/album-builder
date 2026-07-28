@@ -1094,12 +1094,12 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Audio codecs unavailable",
-                "Audio playback requires the GStreamer / FFmpeg backend.\n"
-                "On openSUSE: install gstreamer-plugins-good and "
-                "gstreamer-plugins-libav via:\n\n"
-                "    sudo zypper install gstreamer-plugins-good "
-                "gstreamer-plugins-libav\n\n"
-                "Then restart the app.",
+                "Audio playback failed. This build decodes audio with PyQt6's "
+                "bundled FFmpeg backend, so no separate codec packages are needed "
+                "(the old GStreamer plugins are not used).\n\n"
+                "If playback keeps failing, make sure your audio system (PipeWire "
+                "or PulseAudio) is running, and try another track to rule out a "
+                "corrupt file.",
             )
             self._player.mark_codec_dialog_shown()
 

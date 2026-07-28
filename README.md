@@ -58,10 +58,10 @@ Then launch from the K Menu under Multimedia → Album Builder, or run `album-bu
 The installer assumes these are present:
 
 - Python 3.11+ (`zypper install python311`)
-- GStreamer audio plugins (`zypper install gstreamer-plugins-good gstreamer-plugins-bad gstreamer-plugins-libav`)
+- Audio output libraries — PulseAudio/PipeWire or ALSA client libs, normally already present on a desktop. No codec packages are needed: the `PyQt6` wheel decodes audio with a **bundled FFmpeg backend** (not GStreamer).
 - desktop-file-utils (for validation; optional)
 - Inkscape OR rsvg-convert OR cairosvg (for icon PNG generation; the installer falls back to cairosvg via pip if the others are missing)
-- WeasyPrint runtime libraries — Pango / Cairo / GDK-PixBuf, plus the standard fontconfig/freetype stack — for PDF report rendering (`zypper install pango cairo gdk-pixbuf fontconfig`; libffi is pulled in transitively by cairo/pango). On Debian / Ubuntu the equivalent set is `libpango-1.0-0 libpangoft2-1.0-0 libgdk-pixbuf-2.0-0 libharfbuzz-subset0`. WeasyPrint's [installation guide](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html) lists per-distro details if the import fails at runtime.
+- WeasyPrint runtime libraries — Pango / HarfBuzz / fontconfig (plus the freetype stack) — for PDF report rendering (`zypper install pango harfbuzz fontconfig`). WeasyPrint 69 renders PDF itself and **no longer needs Cairo or GDK-PixBuf**. On Debian / Ubuntu the equivalent set is `libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libfontconfig1`. WeasyPrint's [installation guide](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html) lists per-distro details if the import fails at runtime.
 
 ## Uninstall
 

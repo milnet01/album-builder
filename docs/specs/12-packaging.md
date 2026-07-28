@@ -139,8 +139,8 @@ torchaudio              # wav2vec2 forced-alignment model
 System packages required (documented in `README.md`):
 
 - `python3-devel` (for building any wheel that needs it)
-- `gstreamer-plugins-good`, `gstreamer-plugins-bad`, `gstreamer-plugins-libav` (audio decoding)
-- `pango`, `cairo`, `gdk-pixbuf2` (WeasyPrint runtime libs — typically already present on Plasma)
+- Audio output libs (PulseAudio/PipeWire or ALSA client) — normally already present; the `PyQt6` wheel decodes audio with a bundled **FFmpeg** backend, so no GStreamer plugins are needed.
+- `pango`, `harfbuzz`, `fontconfig` (WeasyPrint runtime libs — typically already present on Plasma; WeasyPrint 69 no longer needs `cairo`/`gdk-pixbuf`)
 - `inkscape` (optional, for icon PNG generation; `install.sh` falls back to `rsvg-convert`, then `cairosvg` via pip)
 
 The installer emits a one-line **check** for these and prints any missing ones; it does not auto-install (would require `sudo`).

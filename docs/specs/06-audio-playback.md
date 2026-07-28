@@ -71,10 +71,10 @@ Play tracks for preview and karaoke-style listening. Provide play/pause, seek, p
 | Active source's file removed between load and a same-row click | Treated as a fresh load against the now-missing path: `set_source` runs (ERROR → STOPPED reset path applies), `play()` then fails the same way "Source file missing on play" does — toast + `error` signal, library marks missing. The row glyph stays/reverts to `Glyphs.PLAY` once the ERROR settles. |
 | Late `state_changed(STOPPED)` arrives after a row-body preview-without-play has populated the now-playing pane (e.g. a slow `set_source` from a prior operation finally settles) | Pane keeps the preview metadata. `state_changed` transitions only repaint the row-button glyph (TC-06-19) — they do **not** repaint the now-playing block. (The now-playing pane is owned by the preview/play call sites, not by player-state signals.) |
 | Codec / decoder failure (e.g., corrupt MP3) | Same as missing — toast + error. App stays usable. |
-| Required GStreamer plugins missing | One-shot warning dialog at first playback failure: "Audio codecs unavailable. On openSUSE: install `gstreamer-plugins-good` and `gstreamer-plugins-libav`." |
+| Audio backend/codec failure (first occurrence) | One-shot warning dialog at first playback failure: "Audio codecs unavailable" - notes the bundled **FFmpeg** backend needs no separate codec packages (GStreamer is not used) and points the user at their audio system (PipeWire/PulseAudio). |
 | User clicks preview while another track is playing | Replace immediately; no fade. |
 | User scrubs beyond duration | Clamped to `duration - 1 s`. |
-| File extension is `.mpeg` (WhatsApp output) | Plays fine — Qt + GStreamer detect MP3 by content sniffing, not extension. Verified with the project's actual files. |
+| File extension is `.mpeg` (WhatsApp output) | Plays fine — Qt + FFmpeg detect MP3 by content sniffing, not extension. Verified with the project's actual files. |
 | App quit while playing | `QMediaPlayer.stop()` called in `closeEvent`. Position is *not* persisted (we re-open the track paused at zero — known limitation, low pain). |
 | `QMediaPlayer` reports `MediaStatus.BufferingMedia` (slow filesystem, NFS, USB-stick reading the source) | Show a subtle "Buffering..." indicator next to the play button. Transport stays interactive (the user can pause / seek). Auto-clears on `BufferedMedia`. Not an error condition — no toast. |
 | User triggers shortcut while focus is in a text field | Suppressed — shortcut is global only when focus isn't in a `QLineEdit` / `QTextEdit`. (Disambiguates Left/Right vs the target-counter field in Spec 04 — see Spec 00 keyboard table for the canonical rule.) |
@@ -91,7 +91,7 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-06-04** — Swapping the source mid-playback stops the previous track and starts the new one within 500 ms; only one `state == playing` is observed at any moment.
 - **TC-06-05** — `Player.set_source(missing_path)` then `play()` emits `error` and `state_changed(error)`; the app does not crash; a toast surfaces the path.
 - **TC-06-06** — `Player.set_source(corrupt_mp3)` raises the same error path as missing — no crash; toast shown.
-- **TC-06-07** — Codec-missing first-failure produces a one-shot dialog with the openSUSE install command; subsequent failures within the session do not re-show the dialog.
+- **TC-06-07** — Codec-error first-failure produces a one-shot "Audio codecs unavailable" dialog (the FFmpeg-backend guidance); subsequent failures within the session do not re-show the dialog.
 - **TC-06-08** — Seek beyond `duration` clamps to `duration - 1.0`.
 - **TC-06-09** — `closeEvent` calls `Player.stop()` synchronously; a play-then-quit cycle leaves no orphaned QMediaPlayer state.
 - **TC-06-10** — Volume + mute round-trip through `settings.json` (Spec 10 §`settings.json`): set volume 65, set muted true, restart app, observe restored values.
