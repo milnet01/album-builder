@@ -2,7 +2,8 @@
 
 **Status:** Draft (cold-eyes in progress) - **Last updated:** 2026-07-25 - **Depends on:** 00, 08, 09, 10 - **References (does not extend):** 06, 12 - **Blocks:** the Flatpak / Windows / OBS packaging phases (future specs)
 
-> **Cold-eyes loop log:** _in progress. Loop 1 (2026-07-25, 3 cold reviewers - internal / code-accuracy / cross-spec) surfaced 15 verified findings, all fixed here. The largest: the draft's export fallback collided with Spec 08's deferred hardlink->copy-with-consent design. **Product decision (user, 2026-07-25): "just remember the links like WinAmp" - no copies.** So this phase **supersedes** Spec 08's copy-with-consent fallback (TC-08-10a/10b, never implemented) with a simpler **symlink-or-playlist-only** export, which also lets it drop the copy dialog, the per-filesystem cache, and the link-strategy-agnostic entry predicate the interim draft had added. Other Loop-1 fixes retained: folder-open wrapped so nothing escapes (INV-22-4); relative-`XDG_CONFIG_HOME` guard preserved so an existing test passes; no-Qt-boundary rationale corrected (persistence already imports Qt via `debounce.py`); dependency recorded as a floor (not a §4 Ledger cap); Spec 09/10 amendment spots enumerated. Loop 2 pending._
+> **Cold-eyes loop log:** _in progress. Loop 1 (2026-07-25, 3 cold reviewers - internal / code-accuracy / cross-spec) surfaced 15 verified findings, all fixed here. The largest: the draft's export fallback collided with Spec 08's deferred hardlink->copy-with-consent design. **Product decision (user, 2026-07-25): "just remember the links like WinAmp" - no copies.** So this phase **supersedes** Spec 08's copy-with-consent fallback (TC-08-10a/10b, never implemented) with a simpler **symlink-or-playlist-only** export, which also lets it drop the copy dialog, the per-filesystem cache, and the link-strategy-agnostic entry predicate the interim draft had added. Other Loop-1 fixes retained: folder-open wrapped so nothing escapes (INV-22-4); relative-`XDG_CONFIG_HOME` guard preserved so an existing test passes; no-Qt-boundary rationale corrected (persistence already imports Qt via `debounce.py`); dependency recorded as a floor (not a §4 Ledger cap); Spec 09/10 amendment spots enumerated.
+> Loop 2 (2026-07-28, deterministic citation pre-pass + 1 cold reviewer - CRITICAL 0 / HIGH 1 / MEDIUM 4 / LOW 2, of which 1 verified substantive): (a) re-verified every cross-spec citation exact, then - per user directive, line numbers rot - converted every `line NN` / `file.py:NNN` citation to stable section/symbol/TC-ID names; (b) fixed a dangling `Spec 22 §Design decision` self-reference (-> `§Purpose`, where the label actually lives); (c) reworded the `_symlink_count_matches` bullet so it keeps its existing library-free `len(track_paths)` base rather than appearing to adopt `is_export_fresh`'s precise non-missing count (the two drift checks are deliberately different bases). Other reviewer findings dismissed on verification (imports already present; TC-08-19 correctly needs no change; dependency-currency §5 exists). Loop 3 confirms convergence._
 
 This is **Phase Dist-1** of the "Distribution & cross-platform packaging" epic
 (`ROADMAP.md` heading `## Future / deferred`). The epic turns Album Builder from a
@@ -134,7 +135,7 @@ the atomic-write layer, and the drift-detection invariant keep their shape.
 
 - `_supports_symlinks(dir: Path) -> bool` - probe: create + unlink a uniquely-named
   throwaway symlink inside `dir`; return `False` on `OSError`. No persistence.
-- `_build_staging(...)` (export.py:227) - before the per-track loop, compute
+- `_build_staging(...)` (in `export.py`) - before the per-track loop, compute
   `can_symlink = _supports_symlinks(staging)` (staging shares the album folder's
   filesystem). In the loop, create the numbered symlink only when `can_symlink`; otherwise
   skip the entry (the M3U still lists the track). When `not can_symlink`, append one
@@ -142,18 +143,22 @@ the atomic-write layer, and the drift-detection invariant keep their shape.
   rather than one-per-track. The `playlist.m3u8` render + write is unchanged (always
   happens). The existing disk-read sanity check runs only for entries actually created
   (i.e. symlinks) - unchanged from today for the symlink case.
-- `is_export_fresh(album, folder, library)` (export.py:199) - the expected count adapts:
+- `is_export_fresh(album, folder, library)` (in `export.py`) - the expected count adapts:
   `expected = count(non-missing tracks) if _supports_symlinks(folder) else 0`; `actual =
   count(p for p in folder.iterdir() if p.is_symlink())` (unchanged). The `_commit_export`
-  snapshot/unlink logic (export.py:290+) is unchanged - it already operates on
+  snapshot/unlink logic is unchanged - it already operates on
   `is_symlink()` entries, and a playlist-only export simply has none to snapshot.
 
 ### `services/album_store.py` - drift-check parity
 
-- `_symlink_count_matches` (album_store.py:36-47) - apply the same capability-aware expected
-  count as `is_export_fresh` (expected `0` when `not _supports_symlinks(folder)`), importing
-  `_supports_symlinks` from `export`, so a playlist-only album is not perpetually flagged
-  `needs_regen`. Counting of `actual` (via `is_symlink()`) is unchanged.
+- `_symlink_count_matches` (in `album_store.py`) - apply the same capability-aware **zero
+  adaptation** as `is_export_fresh`: `expected = len(album.track_paths) if
+  _supports_symlinks(folder) else 0`, importing `_supports_symlinks` from `export`, so a
+  playlist-only album is not perpetually flagged `needs_regen`. **Keep this check
+  library-free** - it retains its existing coarse `len(album.track_paths)` base (which
+  over-counts missing tracks by design; see its docstring) and does **not** switch to
+  `is_export_fresh`'s precise non-missing count. Counting of `actual` (via `is_symlink()`)
+  is unchanged.
 
 ### `persistence/settings.py` - cross-platform `settings_dir`
 
@@ -243,35 +248,37 @@ and logged; it never propagates (INV-22-4).
 ## Cross-spec amendments
 
 - **Spec 08 (`08-album-export.md`)** - **supersede** the copy fallback with playlist-only:
-  1. **Rewrite the "filesystem doesn't support symlinks" Errors row (line 194-195)** from
+  1. **Rewrite the "filesystem doesn't support symlinks" row in the §Errors table** (and the
+     immediately-following "Hardlink fallback ran once on this filesystem" row) from
      the hardlink -> copy-with-consent + `fs-caps.json` design to: *"skip the numbered
      entries and emit `playlist.m3u8` (the remembered-path list) only; no hardlink, copy,
-     consent dialog, or capability cache (Spec 22 §Design decision)."*
-  2. **Rewrite TC-08-10a / TC-08-10b** (currently the deferred hardlink/copy-consent
-     contracts, §Test contract lines 209/222/223) to the playlist-only contract: a
-     symlink-incapable filesystem yields `playlist.m3u8` + album artifacts, zero numbered
-     entries, one warn-log; the drift invariant expects zero symlinks there. Remove the
-     `fs-caps.json` / consent-dialog language.
-  3. **Amend the drift-detection invariant (line 167)** to note the expected symlink count
+     consent dialog, or capability cache (Spec 22 §Purpose)."*
+  2. **Rewrite TC-08-10a / TC-08-10b** (the deferred hardlink/copy-consent contracts in
+     §Test contract, also named in its "Open coverage gaps" bullet) to the playlist-only
+     contract: a symlink-incapable filesystem yields `playlist.m3u8` + album artifacts, zero
+     numbered entries, one warn-log; the drift invariant expects zero symlinks there. Remove
+     the `fs-caps.json` / consent-dialog language.
+  3. **Amend the "Drift-detection invariant" paragraph** (the `AlbumStore.rescan()`
+     symlink-count check just above §Robustness) to note the expected symlink count
      is `0` on a filesystem without symlink support (Spec 22 INV-22-3); the `is_symlink()`
      counting itself is unchanged (no non-symlink entries are ever created).
-  4. **Update the `export.py` header docstring (lines 18-21)** whose "FAT32/vfat fallback ...
+  4. **Update the `export.py` module docstring** whose "FAT32/vfat fallback ...
      scoped out for v0.5.0 ... deferred to v0.6+" note is now resolved: Spec 22 makes the
      non-symlink case playlist-only.
   (TC-08-07/13/19 and the `_commit_export` snapshot stay `is_symlink()`-based and need **no**
   change - entries remain symlink-only.)
-- **Spec 09 (`09-approval-report.md`)** - TC-09-18 (line 248) "`xdg-open <reports_folder>` is
+- **Spec 09 (`09-approval-report.md`)** - TC-09-18 "`xdg-open <reports_folder>` is
   invoked exactly once ... Failure of `xdg-open` ... is logged and silently ignored" ->
   assert `QDesktopServices.openUrl` is invoked once (gated on
   `settings.ui.open_report_folder_on_approve`) and a `False`/raising result is logged and
-  ignored. (The crash-recovery table's line-62 "symlink-count mismatch" phrasing stays
-  valid - drift still counts symlinks.)
+  ignored. (The crash-recovery table's `step:export-commit` row - "symlink-count mismatch" -
+  stays valid: drift still counts symlinks.)
 - **Spec 10 (`10-persistence.md`)** - (a) the "Files we own" table row for
-  `~/.config/album-builder/settings.json` (line 24) and the schema-section path (line 252)
-  are now platform-resolved (Linux unchanged/relative-guarded; Windows
-  `%LOCALAPPDATA%\album-builder`; macOS `~/Library/Application Support/album-builder`);
-  (b) the entries-row label "`01 - …`, `02 - …` symlinks" (line 20) becomes "symlinks
-  (symlink-capable filesystems; playlist-only otherwise, Spec 22)"; (c) TC-10-19 (line 318)
+  `~/.config/album-builder/settings.json` and the `settings.json` schema section's
+  "Lives at ... (XDG)" path line are now platform-resolved (Linux unchanged/relative-guarded;
+  Windows `%LOCALAPPDATA%\album-builder`; macOS `~/Library/Application Support/album-builder`);
+  (b) the entries-row label "`01 - …`, `02 - …` symlinks" becomes "symlinks
+  (symlink-capable filesystems; playlist-only otherwise, Spec 22)"; (c) TC-10-19
   stays Linux-valid, Linux-guarded, unchanged. The on-disk file format, atomic-write
   strategy, and `settings.json` schema are unchanged.
 - **`docs/standards/dependency-currency.md`** - `platformdirs` is added to `requirements.txt`
