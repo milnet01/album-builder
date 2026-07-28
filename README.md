@@ -45,6 +45,19 @@ it is built inside an Ubuntu 22.04 container). Notes:
 
 Prefer a system install with a K-Menu entry? Use `./install.sh` below.
 
+## Download (Windows) — no install
+
+On Windows, grab `AlbumBuilder-<version>-windows-x64.zip` from the
+[latest release](https://github.com/milnet01/album-builder/releases/latest), unzip
+it, and double-click `AlbumBuilder.exe` — no Python, no install. It bundles the
+Python runtime, PyQt6, and WeasyPrint's PDF libraries. Notes:
+
+- Requires 64-bit Windows 10 or newer.
+- The build is **unsigned**, so Windows SmartScreen shows a "Windows protected your
+  PC" prompt on first run — click **More info → Run anyway**.
+- **Lyric auto-alignment** (WhisperX + torch) is not in the bundle — the same
+  optional `pip` extra as on Linux.
+
 ## Install (openSUSE Tumbleweed + KDE Plasma)
 
 ```bash

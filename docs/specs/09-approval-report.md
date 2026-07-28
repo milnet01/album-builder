@@ -156,6 +156,8 @@ Long lyric lines (>500 chars) wrap via CSS `overflow-wrap: anywhere` so a single
 
 The two file writes are an atomic pair (see §Canonical approve sequence `step:render-tmp` through `step:render-rename-pdf`) but they share a single template execution.
 
+> **Spec 24 amendment (§4.3b).** When the PDF render fails - the WeasyPrint native stack will not load (e.g. a Windows bundle missing its DLLs) or a specific report will not render - the whole pair sequence is bypassed: the failure raises before any `.tmp` is written, the HTML is written alone via a single atomic write with **no `pdf.tmp` created**, and `render_report` returns `(html, None)` rather than crashing approve. The two-file pair above is unchanged wherever the PDF renders.
+
 ## File naming
 
 Report filenames embed the album name, which is user-supplied free text and may legitimately contain `/`, `:`, etc. They must be filesystem-safe.

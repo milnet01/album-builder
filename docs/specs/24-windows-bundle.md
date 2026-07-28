@@ -341,9 +341,10 @@ of this phase (Spec 20 §out-of-scope already defers it).
   `.html` and the `.pdf` as the Spec 10 atomic pair, exactly as before this phase.
   *Test:* unit - with `render_pdf_from_html` returning normally, `render_report`
   writes both finals and returns `(html, pdf)` with `pdf` non-None; the existing
-  Spec 09/10 report tests pass unmodified. *Breaks when:* the `try`/`except` swallows
-  a successful render or writes HTML-only unconditionally, so a good build loses its
-  PDF.
+  Spec 09 *render* tests pass unmodified (the success path is untouched). Two
+  atomic-pair *recovery* tests (one Spec 10, one Spec 09) are updated for the
+  redefined lone-`.html` state - see §7. *Breaks when:* the `try`/`except` swallows a successful render or writes
+  HTML-only unconditionally, so a good build loses its PDF.
 - **INV-24-8** - A version-tag push produces a Release asset. *Test:* `windows.yml`
   triggers on `push: tags: ['v*']`, declares `permissions: contents: write`, and
   has an upload step that targets (and creates if absent) the tag's Release;
@@ -405,8 +406,17 @@ Unit-testable in `tests/` (run in the normal suite, no Windows build needed):
   the `.html` in place. Locks INV-24-6's stability half (the anti-wipe contract).
 - **TC-24-03** (same file) - `render_report` with `render_pdf_from_html` returning
   normally (real WeasyPrint on Linux CI) writes both finals and returns `(html, pdf)`
-  non-None; the existing Spec 09/10 atomic-pair report tests pass unmodified. Locks
-  INV-24-7.
+  non-None; the existing Spec 09 render tests pass unmodified. Locks INV-24-7.
+
+**Two existing atomic-pair recovery tests are updated (a Step-8 fold-back, not new
+coverage):** `test_TC_10_26_artist_only_on_disk_half_pair_is_repaired` and
+`test_TC_09_30_artist_variant_recovery_independent_of_full` each asserted that a lone
+`.html` with **no** `.tmp` is deleted as a half-pair. §4.3(c) redefines that exact
+on-disk state as a complete single-file report, so their fixtures now carry the
+`pdf.tmp` an interrupted pair always leaves - they still test genuine crash-recovery,
+under the new contract. This is the only place the change touches a pre-existing
+test; INV-24-7's original "all existing tests unmodified" wording was too strong
+(caught when the suite ran).
 
 Each fallback test is written to fail against pre-fix `render_report` (which renders
 the PDF unconditionally and so raises when `render_pdf_from_html` is monkeypatched to
@@ -491,8 +501,8 @@ is the leg CI cannot cover (§3) and gates "shipped".
 | INV-24-3 | `windows.yml` filename-vs-`--version` assertion + a static grep that stage 1 reads `version.py` (CI-only) |
 | INV-24-4 | `windows.yml` `pyproject.toml`-absence check over the built folder (CI-only) |
 | INV-24-5 | `windows.yml` `torch`/`whisperx`-absence check over the built folder (CI-only) |
-| INV-24-6 | `tests/services/test_TC_24_windows_bundle.py::test_fallback_writes_html_only` (TC-24-01) + `::test_scan_keeps_lone_html` (TC-24-02) |
-| INV-24-7 | `tests/services/test_TC_24_windows_bundle.py::test_engine_available_writes_pair` (TC-24-03) + the existing Spec 09/10 report suites |
+| INV-24-6 | `tests/services/test_TC_24_windows_bundle.py::test_TC_24_01_pdf_failure_writes_html_only` + `::test_TC_24_02_scan_keeps_lone_html` |
+| INV-24-7 | `tests/services/test_TC_24_windows_bundle.py::test_TC_24_03_pdf_success_writes_pair` + the existing Spec 09 render suite |
 | INV-24-8 | **nothing automated** - proven only by an actual tagged release; the workflow file is the static artifact a cold reader checks |
 | INV-24-9 | **nothing mechanical** - the parity is structural (like `ci.yml` -> `local-CI.sh`); a cold reader confirms `windows.yml` only calls `build-windows.ps1` |
 | INV-24-10 | **nothing mechanical** - a cold reader (or a future CI lint) confirms PyInstaller and the action carry fixed versions in `build-windows.ps1` / `windows.yml` |
@@ -537,3 +547,5 @@ catcher, the same class Spec 23 carried (its INV-23-8/9/10).
 | 1 | 2026-07-28 | 3 cold (consistency/structure - doc-vs-code accuracy - architecture/currency) | 0 | 1 | 2 | 3 | 6 verified (0 unverified), all fixed. **HIGH:** §4.3 named `WEASYPRINT_DLL_DIRECTORIES` as the bundle's DLL mechanism, but WeasyPrint 69 guards its own `add_dll_directory`/env-var block with `not hasattr(sys, 'frozen')` (verified in `ffi.py`) - inert inside a PyInstaller bundle -> rewrote §4.3a to rely on the runtime hook's own `os.add_dll_directory` + WeasyPrint's `LOAD_LIBRARY_SEARCH_DEFAULT_DIRS` dlopen flag. **MED:** the cached `pdf_engine_available()` probe rendered only trivial HTML, so a real report failing after the probe passed still crashed approve (the exact failure §2.3 closes), and the probe's own logic was untested -> replaced the probe with a point-of-use `try`/`except` in `render_report` (covers load AND render failure; no probe to invert), updating INV-24-6/7, §4.4, §7, §10. **LOW:** "complete report" was defined two ways (§4.3 vs §12) -> made the `scan_reports_dir` rule pure file-presence on all platforms, left `has_complete_report` unchanged (no production caller), reframed the Spec 09/10 amendments as render-failure / presence-based. |
 | 2 | 2026-07-28 | 2 cold (contract-chain consistency - mechanism accuracy) | 0 | 0 | 1 | 2 | 3 verified, all fixed - all fix-collateral in loop-1's §12 rewording. Both lanes re-verified the loop-1 rewrite sound: `ffi.py` confirms the §4.3a `sys.frozen` guard + `LOAD_LIBRARY_SEARCH_DEFAULT_DIRS` exactly, and the "interrupted pair always leaves a `pdf.tmp`" crash-window claim holds against `render_report`'s real write order (line 294 render precedes both tmp writes). **MED:** §12's Spec-09 amendment said "`step:render-rename-pdf` is skipped", but the failure raises before any `.tmp` is written, so the whole pair sequence is bypassed with no `pdf.tmp` created (the imprecise wording would orphan a `pdf.tmp` and break the presence rule) -> reworded to "pair sequence bypassed, no `pdf.tmp` created". **LOW:** deduped the crash-window rationale (§12 now points to §4.3c); noted `pairs_completed` widens + the new keep-branch must precede Branch 3's delete. |
 | 3 | 2026-07-28 | 1 cold (fallback + atomic-pair contract chain; the rest of the doc accepted clean - both lanes verified it coherent at loop 2 and it was unchanged since) | 0 | 0 | 0 | 0 | **Clean - converged.** The cold lane re-verified §4.3(c) against `atomic_pair.py`, both §12 amendments against §4.3(b/c), and the whole point-of-use `try`/`except` + single-file-write + presence-rule chain: one mechanism throughout, no residual `pdf.tmp` contradiction, §11 count intact (10 rows / 3 `nothing`). Loop-2 fixes held. |
+| impl | 2026-07-28 | implementation fold-back (Step 8, NOT a review loop) | - | - | - | - | **Contract corrected by building it.** Implementation proved INV-24-7's "existing Spec 09/10 tests pass unmodified" too strong: `render_report`'s success path IS unchanged, but two atomic-pair recovery tests (`test_TC_10_26_artist_only_on_disk_half_pair_is_repaired`, `test_TC_09_30_artist_variant_recovery_independent_of_full`) asserted a lone `.html` with no `.tmp` is *deleted* - the exact state §4.3(c) now *keeps* as a complete single-file report. Their fixtures were updated to carry the `pdf.tmp` a genuine interrupted pair always leaves (still testing crash-recovery); INV-24-7 + §7 corrected to scope "unmodified" to the render path. Full pytest suite green (exit 0). Re-gated at loop 4. |
+| 4 | 2026-07-28 | 1 cold (re-gate of the Step-8 fold-back amendment) | 0 | 0 | 0 | 2 | **Polish-converged.** The cold lane confirmed the amended INV-24-7 + §7 note match the real tests (both updated recovery tests now carry a `pdf.tmp`; the 3 new TC-24 tests exist and lock their contracts; the §4.3(c) keep-branch matches `atomic_pair.py` Branch 2b before Branch 3). **LOW:** §5 mislabelled both updated tests "Spec 10" (TC-09-30 is Spec 09) -> "one Spec 10, one Spec 09"; §11 cited placeholder test-function names -> corrected to the real `test_TC_24_0N_*` names. No substantive findings; the amendment is coherent with the shipped code. |

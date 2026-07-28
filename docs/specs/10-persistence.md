@@ -113,6 +113,8 @@ def scan_reports_dir(reports_dir, *, sanitised_name):
 
 The scan is idempotent: a clean `reports/` (both finals of both variants, no tmps) is a no-op.
 
+> **Spec 24 amendment (§4.3c / INV-24-6).** A lone `.html` with **no** `.pdf` and **no** `.tmp` sibling is also a complete report - the single-file PDF-less state `render_report` writes when the PDF cannot be produced. It is kept and counted `pairs_completed`, not deleted as a half-pair. An interrupted pair always leaves a `pdf.tmp` (both tmps are written before either rename), so a no-tmp lone `.html` is unambiguously deliberate, not a crash artifact. The `TC-10-26` / `TC-09-30` recovery fixtures were updated to carry a `pdf.tmp` so they still exercise a genuine half-pair.
+
 For PDF/HTML cleanup specifically, the load-time scan operates at the directory level and does **not** rely on `json.load`-style parse checks; the JSON-shape sanity check in §Errors & edge cases applies to JSON files only.
 
 ## Debounce
