@@ -10,5 +10,4 @@ Terminal=false
 Categories=AudioVideo;Audio;Music;Qt;
 StartupWMClass=album-builder
 StartupNotify=true
-SingleMainWindow=true
 Keywords=album;music;curate;tracks;

@@ -34,9 +34,21 @@ if [ "${_ALBUM_BUILDER_IN_CONTAINER:-}" != "1" ]; then
         exit 1
     fi
     mkdir -p "$REPO_ROOT/dist"
-    echo "build-appimage: building inside $BASE_IMAGE via $runtime ..."
+    # Chown the output back to the invoking user ONLY when the container runs as
+    # real root (rootful, e.g. Docker on CI) - there the artifact would otherwise
+    # be root-owned. Under ROOTLESS podman the userns already maps container-root
+    # to the host user, so the file is correctly owned and a chown would push it
+    # to an unusable subordinate uid. Detect rootless and skip the chown then.
+    chown_output=1
+    [ "$("$runtime" info --format '{{.Host.Security.Rootless}}' 2>/dev/null)" = "true" ] && chown_output=0
+    echo "build-appimage: building inside $BASE_IMAGE via $runtime (rootless-skip-chown=$([ "$chown_output" = 0 ] && echo yes || echo no)) ..."
+    # label=disable lets the container read the bind-mounted repo without a
+    # recursive SELinux relabel of the host files (needed for rootless podman on
+    # SELinux-labelled hosts; a harmless no-op on the CI runner).
     exec "$runtime" run --rm \
+        --security-opt label=disable \
         -e _ALBUM_BUILDER_IN_CONTAINER=1 \
+        -e CHOWN_OUTPUT="$chown_output" \
         -e HOST_UID="$(id -u)" \
         -e HOST_GID="$(id -g)" \
         -e PYTHON_APPIMAGE_TAG="$PYTHON_APPIMAGE_TAG" \
@@ -45,7 +57,7 @@ if [ "${_ALBUM_BUILDER_IN_CONTAINER:-}" != "1" ]; then
         -v "$REPO_ROOT:/src:ro" \
         -v "$REPO_ROOT/dist:/out:rw" \
         "$BASE_IMAGE" \
-        /src/packaging/build-appimage.sh
+        bash /src/packaging/build-appimage.sh
 fi
 
 # =============================================================================
@@ -79,27 +91,45 @@ wget -q "https://github.com/niess/python-appimage/releases/download/${PYTHON_APP
 chmod +x "$BUILD/python.AppImage"
 ( cd "$BUILD" && ./python.AppImage --appimage-extract >/dev/null )
 mv "$BUILD/squashfs-root" "$APPDIR"
-PYBIN="$(echo "$APPDIR"/opt/python*/bin/python3)"
-[ -x "$PYBIN" ] || { echo "stage 2: no interpreter in the extracted AppDir" >&2; exit 1; }
+# The interpreter is bin/python3.<minor> (e.g. python3.13), not a bare python3.
+PYBIN=""
+for _p in "$APPDIR"/opt/python*/bin/python3.*; do
+    case "$_p" in *-config) continue ;; esac
+    [ -x "$_p" ] && { PYBIN="$_p"; break; }
+done
+[ -n "$PYBIN" ] && [ -x "$PYBIN" ] || { echo "stage 2: no interpreter in the extracted AppDir" >&2; exit 1; }
 
-# --- Stage 3: pip install the app + requirements (installs the PACKAGE, not the
-# repo checkout, so no pyproject.toml lands beside it - INV-23-4). ---------------
-echo "stage 3: pip install"
+# --- Stage 3: install deps as wheels, then drop the pure-Python album_builder
+# package into site-packages. We do NOT `pip install "$SRC"`: /src is read-only
+# and a legacy setuptools build (no [build-system]) writes egg-info into it; the
+# package is pure Python with no entry points, so a copy IS a complete install.
+# Copying only the package - not the checkout - means no pyproject.toml lands
+# beside it (INV-23-4). ---------------------------------------------------------
+echo "stage 3: pip install deps + copy package"
 "$PYBIN" -m pip install --no-warn-script-location -q --upgrade pip
 "$PYBIN" -m pip install --no-warn-script-location -q -r "$SRC/requirements.txt"
-"$PYBIN" -m pip install --no-warn-script-location -q "$SRC"
+SITE="$("$PYBIN" -c 'import site; print(site.getsitepackages()[0])')"
+cp -a "$SRC/src/album_builder" "$SITE/"
 
 # --- Stage 4: bundle WeasyPrint's native library closure + font (INV-23-2). -----
 echo "stage 4: bundling native libraries"
 mkdir -p "$APPDIR/usr/lib"
-weasy_libs="libgobject-2.0.so.0 libpango-1.0.so.0 libpangoft2-1.0.so.0 \
-libharfbuzz.so.0 libharfbuzz-subset.so.0 libfontconfig.so.1"
+# The five libraries WeasyPrint requires, plus libharfbuzz-subset.so.0 which it
+# loads with allow_fail=True (font subsetting; PDFs still render without it) and
+# which ubuntu:22.04's harfbuzz 2.7.4 does not ship - so it is bundled if present,
+# skipped if not (INV-23-2).
+weasy_libs_required="libgobject-2.0.so.0 libpango-1.0.so.0 libpangoft2-1.0.so.0 \
+libharfbuzz.so.0 libfontconfig.so.1"
+weasy_libs_optional="libharfbuzz-subset.so.0"
 # Copy each named soname plus its ldd closure, minus the driver/core libraries
 # that must come from the host (libGL is driver-coupled; libc/ld are the base).
 copy_with_closure() {
-    local soname="$1" src
+    local soname="$1" optional="${2:-}" src
     src="$(ldconfig -p | awk -v n="$soname" '$1==n {print $NF; exit}')"
-    [ -n "$src" ] || { echo "stage 4: $soname not found after apt-get" >&2; exit 1; }
+    if [ -z "$src" ]; then
+        [ -n "$optional" ] && { echo "stage 4: $soname absent (optional) - skipping" >&2; return 0; }
+        echo "stage 4: $soname not found after apt-get" >&2; exit 1
+    fi
     cp -uL "$src" "$APPDIR/usr/lib/"
     ldd "$src" | awk '/=> \//{print $3}' | while read -r dep; do
         case "$(basename "$dep")" in
@@ -109,7 +139,8 @@ copy_with_closure() {
         cp -uL "$dep" "$APPDIR/usr/lib/"
     done
 }
-for lib in $weasy_libs; do copy_with_closure "$lib"; done
+for lib in $weasy_libs_required; do copy_with_closure "$lib"; done
+for lib in $weasy_libs_optional; do copy_with_closure "$lib" optional; done
 # Font + a minimal fontconfig config at the exact path AppRun sets (Section 4.3).
 mkdir -p "$APPDIR/usr/share/fonts" "$APPDIR/etc/fonts"
 cp -uL /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf "$APPDIR/usr/share/fonts/"
@@ -133,9 +164,13 @@ export APPDIR="${APPDIR:-$HERE}"
 export LD_LIBRARY_PATH="$APPDIR/usr/lib:$LD_LIBRARY_PATH"
 export FONTCONFIG_FILE="$APPDIR/etc/fonts/fonts.conf"
 # Resolve the bundled interpreter WITHOUT a quoted glob (a glob does not expand
-# in double quotes, so "$APPDIR/opt/python*/..." would reach exec literally).
-for _py in "$APPDIR"/opt/python*/bin/python3; do PYTHON="$_py"; break; done
-[ -x "$PYTHON" ] || { echo "AppRun: bundled interpreter missing under $APPDIR/opt" >&2; exit 1; }
+# in double quotes). The binary is bin/python3.<minor> (e.g. python3.13).
+PYTHON=
+for _py in "$APPDIR"/opt/python*/bin/python3.*; do
+    case "$_py" in *-config) continue ;; esac
+    [ -x "$_py" ] && { PYTHON="$_py"; break; }
+done
+[ -n "$PYTHON" ] && [ -x "$PYTHON" ] || { echo "AppRun: bundled interpreter missing under $APPDIR/opt" >&2; exit 1; }
 exec "$PYTHON" -m album_builder "$@"
 APPRUN
 chmod +x "$APPDIR/AppRun"
@@ -160,6 +195,8 @@ chmod +x "$BUILD/appimagetool.AppImage"
 OUT="/out/AlbumBuilder-${VERSION}-x86_64.AppImage"
 ARCH=x86_64 "$BUILD/squashfs-root/AppRun" "$APPDIR" "$OUT"
 
-# Hand the artifact back to the invoking user, not root (Spec 23 Section 6).
-chown "${HOST_UID:-0}:${HOST_GID:-0}" "$OUT"
+# Hand the artifact back to the invoking user when the container ran as real root
+# (rootful, e.g. Docker); under rootless podman it is already user-owned, so a
+# chown would break it (Spec 23 Section 6).
+[ "${CHOWN_OUTPUT:-1}" = "1" ] && chown "${HOST_UID:-0}:${HOST_GID:-0}" "$OUT"
 echo "done: $OUT"

@@ -58,9 +58,11 @@ jobs:
           ! grep -q ALBUM_BUILDER_DEV_MODE "$root/AppRun"
           # INV-23-5: the heavy ML stack is absent.
           test -z "$(find "$root" -maxdepth 6 \( -name torch -o -name whisperx \))"
-          # INV-23-2 (real bundle): the six sonames + a font + fonts.conf are present.
+          # INV-23-2 (real bundle): the five required sonames + a font + fonts.conf.
+          # libharfbuzz-subset.so.0 is optional (WeasyPrint allow_fail; absent on
+          # ubuntu:22.04) so it is not required here.
           for so in libgobject-2.0.so.0 libpango-1.0.so.0 libpangoft2-1.0.so.0 \
-                    libharfbuzz.so.0 libharfbuzz-subset.so.0 libfontconfig.so.1; do
+                    libharfbuzz.so.0 libfontconfig.so.1; do
             test -e "$root/usr/lib/$so" || { echo "missing bundled lib: $so"; exit 1; }
           done
           test -e "$root/etc/fonts/fonts.conf"

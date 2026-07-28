@@ -98,10 +98,14 @@ or by CI (§4.5 calls the identical script), that produces
 `dist/AlbumBuilder-<version>-x86_64.AppImage`.
 
 The script executes stages 1-6 **inside a digest-pinned `ubuntu:22.04` container**
-(`docker`/`podman run` **as root** - stage 4's `apt-get` requires it - with the
-repo bind-mounted read-only and a separate writable mount for `dist/`; the
-finished AppImage is `chown`ed to the invoking user's `HOST_UID`/`HOST_GID` as
-the last step so a local build never leaves a root-owned `dist/`), so
+(`docker`/`podman run` **as root** - stage 4's `apt-get` requires it - with
+`--security-opt label=disable` so the container can read the bind-mounted repo
+without a recursive SELinux relabel of the host files, the repo mounted read-only
+and a separate writable mount for `dist/`; on a **rootful** runtime, e.g. Docker
+on CI, the finished AppImage is `chown`ed to `HOST_UID`/`HOST_GID` so it is not
+left root-owned - under **rootless** podman the userns already maps it to the
+invoking user, detected via `<runtime> info ... Rootless` and the chown skipped,
+§6), so
 the glibc floor and every bundled native library are the container's, not the
 build host's - a local run on openSUSE Tumbleweed and a CI run on any Ubuntu
 runner produce the same broadly-compatible artifact: identical glibc floor and
@@ -118,11 +122,14 @@ container):
    at **pinned** versions, not floating `latest` (INV-23-10) - the artifact is
    run unsandboxed on user machines, so the build's own supply chain is a trust
    boundary.
-3. `pip install` the app and `requirements.txt` into that interpreter
-   (`AppDir/opt/python*/`). This carries PyQt6 (Qt libraries + platform +
-   multimedia/FFmpeg plugins), Jinja2, WeasyPrint (Python), Pillow, mutagen,
-   platformdirs. The `src/album_builder/` package is installed, **not** the repo
-   checkout - so no `pyproject.toml` lands where `_running_from_source_tree()`
+3. `pip install` the `requirements.txt` deps (wheels: PyQt6 with Qt + platform +
+   multimedia/FFmpeg plugins, Jinja2, WeasyPrint, Pillow, mutagen, platformdirs)
+   into the interpreter, then **copy** the pure-Python `src/album_builder/`
+   package into its `site-packages`. A copy, not `pip install "$SRC"`: the repo is
+   mounted read-only and a legacy setuptools build (no `[build-system]`) would
+   write `egg-info` into it, and the package has no compiled parts or entry
+   points, so a copy is a complete install. Copying only the package - not the
+   checkout - means no `pyproject.toml` lands where `_running_from_source_tree()`
    looks (INV-23-4).
 4. Bundle WeasyPrint's native library closure (§4.2) into `AppDir/usr/lib`.
 5. Install the AppRun launcher (§4.3), the `.desktop` file and icon (§4.6).
@@ -133,22 +140,25 @@ container):
 
 ### 4.2 WeasyPrint native library bundling
 
-`weasyprint/text/ffi.py` dlopens exactly six shared objects on Linux, verified
-against the installed WeasyPrint 69.0:
+`weasyprint/text/ffi.py` dlopens these shared objects on Linux, verified against
+the installed WeasyPrint 69.0 - **five required** plus one optional:
 
 ```
-libgobject-2.0.so.0
-libpango-1.0.so.0
-libpangoft2-1.0.so.0
-libharfbuzz.so.0
-libharfbuzz-subset.so.0
-libfontconfig.so.1
+libgobject-2.0.so.0        # required
+libpango-1.0.so.0          # required
+libpangoft2-1.0.so.0       # required
+libharfbuzz.so.0           # required
+libfontconfig.so.1         # required
+libharfbuzz-subset.so.0    # OPTIONAL - WeasyPrint loads it allow_fail=True (font
+                           #   subsetting); ubuntu:22.04's harfbuzz 2.7.4 does not
+                           #   ship it, so it is bundled if present, skipped if not
 ```
 
 WeasyPrint 69 does **not** load Cairo or GDK-PixBuf (it renders PDF itself); the
 roadmap's "Cairo / GDK-PixBuf" entries are stale and are not bundled. Inside the
 `ubuntu:22.04` container (§4.1), the build `apt-get install`s the packages that
-provide these six, copies each
+provide the five required libraries (`libharfbuzz-subset0` is not a 22.04
+package), copies each
 `.so` plus its transitive ELF dependency closure (resolved with `ldd`) into
 `AppDir/usr/lib`, and bundles a font (`fonts-dejavu-core`) plus a minimal
 fontconfig config written to `AppDir/etc/fonts/fonts.conf` - the exact path
@@ -248,7 +258,7 @@ prints `__version__`, and that the printed value equals the `<version>` field in
 the produced filename - INV-23-3) and `--selftest` (asserts exit 0); extract the
 AppDir with `--appimage-extract` and assert over `squashfs-root`: no
 `pyproject.toml` and no `ALBUM_BUILDER_DEV_MODE` in `AppRun` (INV-23-4), no
-`torch`/`whisperx` directory (INV-23-5), and all six §4.2 sonames in `usr/lib`
+`torch`/`whisperx` directory (INV-23-5), and the five required §4.2 sonames in `usr/lib`
 plus `etc/fonts/fonts.conf` and a bundled font (INV-23-2 real-bundle presence
 check). INV-23-6's real-bundle `desktop-file-validate` runs inside the build
 script at stage 5, not here. Then a **clean-container compatibility test** (the
@@ -273,6 +283,9 @@ The AppImage carries a top-level `album-builder.desktop` and the app icon, so
 file managers and "AppImage integration" tools show a name and icon. The
 `.desktop` reuses `packaging/album-builder.desktop.in` with `Exec=AppRun`
 substituted for the `@@LAUNCHER@@` token; the icon is `assets/album-builder.svg`.
+(The template's `SingleMainWindow` key was dropped: it trips `desktop-file-validate`
+on ubuntu:22.04's older `desktop-file-utils` and is redundant with the app's own
+`QSharedMemory` single-instance lock - INV-23-6 validates the shipped `.desktop`.)
 An **AppStream metainfo** file is deferred to Dist-4 (Flatpak/Flathub, which
 requires it) - see §9.
 
@@ -287,17 +300,17 @@ requires it) - see §9.
   checks, because `--selftest` alone is gameable (WeasyPrint dlopens by soname, so
   a bundle missing a lib can fall back to a system copy on the runner and still
   pass): (a) `./dist/AlbumBuilder-<version>-x86_64.AppImage --selftest` -> exits 0
-  after a non-empty PDF; (b) the extracted `squashfs-root/usr/lib` contains all six
-  §4.2 sonames; AND (c) `squashfs-root/etc/fonts/fonts.conf` plus at least one
-  bundled font file exist - the font half, because `--selftest` can render with a
-  *system* font (verified: WeasyPrint writes a non-empty PDF with no bundled font),
-  so its pass alone does not prove the bundle's font is present. (b) and (c) are
-  structural checks no system fallback can mask; AND (d) the workflow re-runs
-  `--selftest` inside a **clean `ubuntu:22.04`** with no WeasyPrint/Pango stack
-  installed (§4.5) - the definitive dynamic proof, since there a missing bundled
-  lib or font has no system copy to borrow. *Breaks when:* any of the six §4.2
-  libraries or its transitive closure is missing from `AppDir/usr/lib`, or the
-  bundled font / `fonts.conf` is absent.
+  after a non-empty PDF; (b) the extracted `squashfs-root/usr/lib` contains the
+  five required §4.2 sonames; AND (c) `squashfs-root/etc/fonts/fonts.conf` plus at
+  least one bundled font file exist - the font half, because `--selftest` can
+  render with a *system* font (verified: WeasyPrint writes a non-empty PDF with no
+  bundled font), so its pass alone does not prove the bundle's font is present.
+  (b) and (c) are structural checks no system fallback can mask; AND (d) the
+  workflow re-runs `--selftest` inside a **clean `ubuntu:22.04`** with no
+  WeasyPrint/Pango stack installed (§4.5) - the definitive dynamic proof, since
+  there a missing bundled lib or font has no system copy to borrow. *Breaks when:*
+  any of the five required §4.2 libraries or its transitive closure is missing
+  from `AppDir/usr/lib`, or the bundled font / `fonts.conf` is absent.
 - **INV-23-3** - The AppImage version matches the runtime single source. *Test:*
   both - (a) the `--version` output equals the `<version>` field of the produced
   filename (catches a hardcoded/mismatched version), AND (b) stage 1 of
@@ -315,9 +328,9 @@ requires it) - see §9.
   `grep -c ... -> 0` - the latter exits 1 on zero matches and would abort a
   `set -e` step, verified), so `app._running_from_source_tree()` returns False and
   no dev-mode override fires inside the mount; paths fall back to `~` per Spec 22.
-  *Breaks when:* the build copies the repo checkout (with `pyproject.toml`)
-  instead of `pip install`ing the package, or AppRun exports
-  `ALBUM_BUILDER_DEV_MODE=1`.
+  *Breaks when:* the build copies the whole repo checkout (which includes
+  `pyproject.toml`) instead of only the `album_builder` package directory, or
+  AppRun exports `ALBUM_BUILDER_DEV_MODE=1`.
 - **INV-23-5** - The heavy ML stack is absent. *Test:*
   `find <extracted AppDir> -maxdepth 6 \( -name 'torch' -o -name 'whisperx' \)` ->
   empty (the parens bind the `-o` so `-maxdepth` applies to both names).
@@ -385,11 +398,13 @@ requires it) - see §9.
   and loudly, before producing an artifact. A build-time failure only - never a
   shipped-broken artifact.
 - **Root-owned `dist/` after a local build.** The container runs as root (stage
-  4's `apt-get` requires it), so a naive build would leave the output owned by
-  root and the developer could not overwrite it without `sudo`. Prevented by
-  `chown`ing the output artifact to the invoking user's `HOST_UID`/`HOST_GID` as
-  the final build step (§4.1); a `--user`-mapped run is not usable here because it
-  cannot `apt-get`.
+  4's `apt-get` requires it). On a **rootful** runtime (Docker) the output would
+  be root-owned, so the script `chown`s it to `HOST_UID`/`HOST_GID` as the final
+  step. On **rootless** podman the opposite hazard applies: the userns already maps
+  the file to the invoking user, and chowning it there would push it to an
+  unusable subordinate uid - so the script detects rootless (`<runtime> info`) and
+  skips the chown (§4.1). A `--user`-mapped run is not usable in either case
+  because it cannot `apt-get`.
 - **The build host has no Docker or Podman.** `build-appimage.sh` exits
   immediately with a clear prerequisite message - it cannot pin the build
   environment without a container runtime, and a native host build is rejected
@@ -508,7 +523,7 @@ only this catcher.
 | INV-23-1 (arg path) | `tests/test_TC_23_appimage.py::test_version_flag` (TC-23-01) |
 | INV-23-1 (real bundle) | `appimage.yml` `--version` on the runner + inside a clean `ubuntu:22.04` (CI-only; a real build is too heavy for the unit suite) |
 | INV-23-2 (render probe) | `test_TC_23_appimage.py::test_selftest` (TC-23-02, `slow`) |
-| INV-23-2 (real bundle libs + font) | `appimage.yml`: `--selftest` + structural presence of the six `usr/lib` sonames + `etc/fonts/fonts.conf` + a font, AND `--selftest` inside a clean `ubuntu:22.04` with no Pango stack (the definitive check - no system copy to borrow) |
+| INV-23-2 (real bundle libs + font) | `appimage.yml`: `--selftest` + structural presence of the five required `usr/lib` sonames + `etc/fonts/fonts.conf` + a font, AND `--selftest` inside a clean `ubuntu:22.04` with no Pango stack (the definitive check - no system copy to borrow) |
 | INV-23-3 | `appimage.yml` filename-vs-`--version` assertion + a static grep that stage 1 reads `version.py` (CI-only) |
 | INV-23-4 | `appimage.yml` `find ... pyproject.toml` + `! grep -q ALBUM_BUILDER_DEV_MODE AppRun` over the extracted AppDir - **CI-only** |
 | INV-23-5 | `appimage.yml` `find ... torch/whisperx` over the extracted AppDir - **CI-only** |
