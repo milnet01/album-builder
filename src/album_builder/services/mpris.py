@@ -68,7 +68,7 @@ _PLAYER_IFACE = "org.mpris.MediaPlayer2.Player"
 # OpenUri is a no-op, so this just declares what the app *could* accept.
 _SUPPORTED_MIME_TYPES = [
     "audio/mpeg", "audio/mp4", "audio/flac", "audio/ogg", "audio/opus",
-    "audio/x-wav",
+    "audio/x-wav", "audio/aac", "audio/x-aiff", "audio/x-ms-wma",
 ]
 
 # Cover-art temp-file suffix per image MIME. A recognisable extension helps

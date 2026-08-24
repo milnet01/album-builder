@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from album_builder.domain.library import Library, SortKey
+from album_builder.domain.library import SUPPORTED_EXTENSIONS, Library, SortKey
 
 
 # Spec: TC-01-02
@@ -192,3 +192,72 @@ def test_library_search_uses_casefold_not_lower() -> None:
     lib = Library(folder=Path("/x"), tracks=(fake_track,))
     assert lib.search("ss") == [fake_track]
     assert lib.search("strasse") == [fake_track]
+
+
+# Spec: TC-01-01 — the suffix gate accepts every extension in the supported set.
+def test_library_scan_accepts_every_supported_extension(tmp_path: Path) -> None:
+    """One file per supported extension; every one is scanned.
+
+    The bytes are deliberately identical across all twelve — this pins the
+    *suffix gate* (`entry.suffix.lower() in SUPPORTED_EXTENSIONS`), which is
+    what TC-01-01 asserts, not per-container decoding.
+    """
+    import shutil
+
+    from tests.conftest import SILENT_MP3
+
+    for ext in sorted(SUPPORTED_EXTENSIONS):
+        shutil.copy(SILENT_MP3, tmp_path / f"sample{ext}")
+
+    lib = Library.scan(tmp_path)
+
+    # Pin the literal set as well as the derived one: asserting only against
+    # SUPPORTED_EXTENSIONS is self-referential and would still pass if someone
+    # dropped an extension from it.
+    assert SUPPORTED_EXTENSIONS == {
+        ".mp3", ".mpeg", ".m4a", ".flac", ".ogg", ".opus", ".wav",
+        ".aac", ".aiff", ".aif", ".oga", ".wma",
+    }
+    assert len(lib.tracks) == 12
+    assert {t.path.suffix for t in lib.tracks} == set(SUPPORTED_EXTENSIONS)
+
+
+# Spec: TC-01-01 — suffix matching is case-insensitive.
+def test_library_scan_suffix_match_is_case_insensitive(tmp_path: Path) -> None:
+    import shutil
+
+    from tests.conftest import SILENT_MP3
+
+    shutil.copy(SILENT_MP3, tmp_path / "SHOUTY.MP3")
+    shutil.copy(SILENT_MP3, tmp_path / "mixed.FlAc")
+
+    lib = Library.scan(tmp_path)
+
+    assert len(lib.tracks) == 2
+
+
+# Spec: TC-01-16 — a tagless .aac is listed with placeholders, not skipped.
+def test_library_scan_includes_tagless_aac(tmp_path: Path) -> None:
+    """A real ADTS stream, which can carry no tags at all.
+
+    Reading it makes `mutagen.id3.ID3()` raise `ID3NoHeaderError`; `_open_tags`
+    returns None for it rather than propagating, so the scan must LIST the file
+    with TC-01-05 placeholders rather than skip it. (`AACError` is not on this
+    path — it is only raised when *writing* tags, which the app never does.)
+    """
+    import shutil
+
+    from tests.conftest import SILENT_AAC
+
+    target = tmp_path / "no-tags.aac"
+    shutil.copy(SILENT_AAC, target)
+
+    lib = Library.scan(tmp_path)
+
+    assert len(lib.tracks) == 1
+    track = lib.tracks[0]
+    assert track.path == target.resolve()
+    assert track.title == "no-tags.aac"
+    assert track.artist == "Unknown artist"
+    assert track.lyrics_text is None
+    assert track.cover_data is None

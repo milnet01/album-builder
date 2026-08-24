@@ -12,6 +12,7 @@ from album_builder.domain.track import Track
 
 SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({
     ".mp3", ".mpeg", ".m4a", ".flac", ".ogg", ".opus", ".wav",
+    ".aac", ".aiff", ".aif", ".oga", ".wma",
 })
 
 

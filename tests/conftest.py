@@ -21,6 +21,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 SILENT_MP3 = FIXTURES_DIR / "silent_1s.mp3"
+# A genuinely tagless container: raw ADTS has no tag block at all, so this
+# fixture is the only way to exercise the TC-01-16 placeholder path for real
+# rather than by faking an unreadable file.
+SILENT_AAC = FIXTURES_DIR / "silent_1s.aac"
 
 DEFAULT_TAGS = {
     "title": "something more (calm)",

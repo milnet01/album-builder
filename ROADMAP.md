@@ -53,7 +53,7 @@ The library scan accepted seven extensions (.mp3, .mpeg, .m4a, .flac, .ogg,
 also contains. Tag reading is unchanged - mutagen sniffs by content, so the
 extension set was the only gate.
 
-- 🚧 [MUSI-0358] **Widen SUPPORTED_EXTENSIONS to include .aac, .aiff, .aif, .oga and .wma.**
+- ✅ [MUSI-0358] **Widen SUPPORTED_EXTENSIONS to include .aac, .aiff, .aif, .oga and .wma.**
   Spec 01 pins the accepted set in prose and in TC-01-01, so this is a
   contract amendment rather than a code-only change; Spec 08's symlink
   extension rule and Spec 20's advisory MPRIS MIME list cite the same
@@ -72,6 +72,30 @@ extension set was the only gate.
 
   Sibling .lrc lyrics are unaffected: lrc_io keys off the audio path's
   stem, not its container.
+  Resolved (2026-08-24): SUPPORTED_EXTENSIONS widened to twelve in
+  domain/library.py; services/mpris.py's advisory MIME list gained
+  audio/aac, audio/x-aiff and audio/x-ms-wma. services/export.py needed no
+  change - _ext_for_symlink already passes every suffix through except the
+  .mpeg -> .mp3 rewrite.
+
+  Tests: test_library_scan_accepts_every_supported_extension (pins the
+  literal twelve, so shrinking the set fails),
+  test_library_scan_suffix_match_is_case_insensitive, and
+  test_library_scan_includes_tagless_aac against a new committed
+  tests/fixtures/silent_1s.aac (512 B, genuinely tagless). Both new
+  extension tests were confirmed to FAIL with the widening reverted.
+
+  Gate: review-contract, 2 loops, 4 cold lanes, 11 verified findings fixed.
+  Cap reached and it was a VIOLENT cap - 5 of loop 2's 6 findings landed on
+  text the run itself had written - so the document was routed to
+  implementation rather than a third cold read.
+
+  Caveat the gate established: nine of the twelve extensions read no tags
+  at all, because from_path routes every field through mutagen.id3.ID3().
+  Five of those nine already shipped. Filed as MUSI-0359; the untagged-file
+  zero-duration defect is MUSI-0360. Neither is fixed by this item.
+
+  local-CI green: 847 passed, 13 skipped.
   **Layman:** The app now finds more kinds of music files in your Tracks folder, not just the seven it knew before.
   Kind: feature.
   Source: user-request-2026-08-24.
