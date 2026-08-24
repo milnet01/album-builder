@@ -227,9 +227,11 @@ the `QApplication` (for Quit). Members:
   `HasTrackList=False`, `Identity="Album Builder"` (from `QApplication.applicationName`),
   `DesktopEntry="album-builder"` (matches `app.setDesktopFileName`), `SupportedUriSchemes=["file"]`,
   `SupportedMimeTypes=["audio/mpeg", "audio/mp4", "audio/flac", "audio/ogg",
-  "audio/opus", "audio/x-wav"]` (covering the library's scan extensions
-  `.mp3/.mpeg/.m4a/.flac/.ogg/.opus/.wav` per `domain/library.py` — advisory only,
-  since `OpenUri` is a no-op). `Fullscreen` / `CanSetFullscreen` are **omitted**
+  "audio/opus", "audio/x-wav", "audio/aac", "audio/x-aiff", "audio/x-ms-wma"]`
+  (covering the library's scan extensions
+  `.mp3/.mpeg/.m4a/.flac/.ogg/.opus/.wav/.aac/.aiff/.aif/.oga/.wma` per
+  `domain/library.py` — advisory only, since `OpenUri` is a no-op; `.oga` is
+  already covered by `audio/ogg`). `Fullscreen` / `CanSetFullscreen` are **omitted**
   (optional in MPRIS; the app has no fullscreen mode).
 
 ### `services/mpris.py` — `MediaPlayer2PlayerAdaptor` (player interface)

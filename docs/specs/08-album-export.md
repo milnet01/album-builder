@@ -89,7 +89,7 @@ UTF-8, BOM-less, LF line endings. Format:
 - `ext`: chosen for portability:
   - source `.mpeg` → symlink ends in `.mp3` (the actual codec, more compatible with players)
   - source `.mp3` → `.mp3`
-  - source `.flac` / `.ogg` / `.opus` / `.m4a` / `.wav` → keep original extension
+  - every other supported source (`.flac` / `.ogg` / `.opus` / `.m4a` / `.wav` / `.aac` / `.aiff` / `.aif` / `.oga` / `.wma`) → keep original extension
 
 Why rename `.mpeg → .mp3`: many players (notably some firmware-level music players, car stereos) won't recognise `.mpeg` even though the content is identical MP3. The symlink renaming is a zero-cost portability win.
 

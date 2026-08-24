@@ -84,9 +84,23 @@ What *is* persisted: the `lrc_path` sibling files (see Spec 07) and album JSON f
 | Symlink loop in `Tracks/` (a symlink that points back at its parent or grandparent) | The flat-scan rule (`folder.iterdir()` + filter by suffix) does not recurse, so cyclic links produce at most one file entry; mutagen reads it once. If `iterdir()` itself raises on a malformed link, the entry is skipped silently with a one-shot warning toast. The library does not crash. |
 | `.txt` file with the same stem next to an audio file | **Ignored in v1.** The library reads lyrics only from the `lyrics-eng` ID3 USLT tag (Spec 07 §lyrics tracker). Sidecar `.txt` lyrics were considered and dropped — the user's tagging pipeline already provides USLT, and sidecar handling adds two failure modes (which file wins, what charset) for a feature with no incremental benefit. |
 
-## Supported file extensions (v1)
+## Supported file extensions
 
-`.mp3`, `.mpeg` (the WhatsApp output, MP3 inside), `.m4a`, `.flac`, `.ogg`, `.opus`, `.wav`. Anything else is ignored.
+`.mp3`, `.mpeg` (the WhatsApp output, MP3 inside), `.m4a`, `.flac`, `.ogg`, `.opus`, `.wav`,
+`.aac`, `.aiff`, `.aif`, `.oga`, `.wma`. Anything else is ignored.
+
+The last five were added on 2026-08-24 (MUSI-0358) to cover the mainstream formats a
+normal music folder also contains. Tag reading did not change: `Track.from_path` opens
+the file with `mutagen.File`, which sniffs by content rather than by extension, so this
+set is the only gate on what the scan accepts.
+
+**`.aac` carries no tags, by construction.** A raw ADTS `.aac` stream has nowhere to put
+them - mutagen reads its duration but raises `AACError: doesn't support tags` on any
+attempt to read or write a tag block. Every `.aac` track therefore takes the TC-01-05
+placeholder path: `title = path.name`, `artist = "Unknown artist"`, no cover, no USLT
+lyrics. This is accepted rather than worked around; AAC audio that carries tags lives in
+an `.m4a` container, which this list already covers. Sidecar `.lrc` lyrics still work for
+`.aac`, because `lrc_io` keys off the audio path's stem and not its container.
 
 ## Test contract
 
@@ -97,7 +111,7 @@ how reviewers confirm coverage validates the spec, not the implementation.
 
 ### Phase 1 (shipped) clauses
 
-- **TC-01-01** — `Library.scan(folder)` returns a `Library` with one `Track` per file in `folder` whose suffix is in `{.mp3, .mpeg, .m4a, .flac, .ogg, .opus, .wav}`.
+- **TC-01-01** — `Library.scan(folder)` returns a `Library` with one `Track` per file in `folder` whose suffix is in `{.mp3, .mpeg, .m4a, .flac, .ogg, .opus, .wav, .aac, .aiff, .aif, .oga, .wma}`. Suffix matching is case-insensitive (`.MP3` is accepted).
 - **TC-01-02** — `Library.scan(nonexistent)` returns `Library(tracks=())`. Same for an unreadable folder (`PermissionError` on `iterdir`).
 - **TC-01-03** — Files with unsupported extensions are silently skipped by the scan.
 - **TC-01-04** — `Track.from_path(audio)` parses ID3v2 tags: `TIT2→title`, `TPE1→artist`, `TPE2→album_artist`, `TALB→album`, `TCOM→composer`, `COMM→comment`, `USLT→lyrics_text`, `APIC (image/*)→cover_data + cover_mime`.
