@@ -12,13 +12,15 @@ Discover the audio files in `Tracks/`, parse their metadata, and present a live,
 - Each row shows: title, artist, album, composer, duration. Cover thumbnail is loaded lazily for the now-playing pane (not the library row, to keep the list compact).
 - A search box at the top of the library pane filters rows by case-insensitive substring match against title, artist, album_artist, composer, and album.
 - Column headers are click-to-sort (Title, Artist, Album, Composer, Duration). Default sort: Title ascending. Clicking the same header toggles direction.
-- *(Phase 2)* New files dropped into `Tracks/` appear within ~2 seconds without restarting; files removed from `Tracks/` are marked **missing** in the library (greyed out, excluded from search by default, unselectable for new albums). Albums that already reference a missing file show the gap and warn at approve time.
+- *(Phase 2)* New files dropped into `Tracks/` appear within ~2 seconds without restarting; the removal half - marking files **missing**, greying them out and excluding them from search - remains **deferred** (TC-01-P2-03/04), so a removed file currently just disappears on the next scan.
 - Duration is shown as `m:ss` for under an hour, `h:mm:ss` otherwise.
 
 ## Inputs
 
 - The configured tracks folder (default: `Tracks/` relative to project root; configurable in Settings, persisted in `~/.config/album-builder/settings.json`).
-- Per-file ID3v2 tags via `mutagen.File()`:
+- Per-file **ID3v2** tags, read with `mutagen.id3.ID3(path)`. Duration alone comes
+  from the generic `mutagen.File(path)` reader, which is why it is available for every
+  supported container while the fields below are not:
   - `TIT2` → title
   - `TPE1` → artist
   - `TPE2` → album_artist
@@ -42,7 +44,7 @@ Discover the audio files in `Tracks/`, parse their metadata, and present a live,
 @dataclass(frozen=True)
 class Track:
     path: Path                          # absolute, identity key
-    title: str                          # "Unknown title" if missing
+    title: str                          # falls back to path.name if missing (TC-01-05)
     artist: str                         # "Unknown artist" if missing
     album_artist: str                   # falls back to artist if missing
     composer: str                       # "" if missing
@@ -74,14 +76,14 @@ What *is* persisted: the `lrc_path` sibling files (see Spec 07) and album JSON f
 |---|---|
 | `Tracks/` does not exist | Show "Configure tracks folder" empty state with a button; do not crash. |
 | File exists but is not audio (e.g., `.txt`) | Silently skip — the scan filters to known audio extensions. |
-| Audio file with no readable tags | Use placeholder strings (`"Unknown title"`, etc.); the file is still playable. |
+| Audio file with no readable tags | Use the TC-01-05 placeholders (`title = path.name`, `artist = "Unknown artist"`); the file is still playable. |
 | Duplicate file paths | Cannot happen (filesystem invariant). |
 | Two files with identical title+artist | Both shown. Album Builder treats `path` as identity, never `(title, artist)`. |
 | Cover image of non-image mime inside APIC frame (e.g. `application/octet-stream`) | `cover_data` and `cover_mime` are both `None`; the now-playing pane shows the default cover placeholder. Common image mimes (PNG, JPEG, WebP, GIF) all pass through. |
 | File replaced (same name, different content) | `QFileSystemWatcher` emits the change; library re-parses that single file. |
 | File renamed | Treated as remove + add. Albums referencing the old path mark it missing. (Improvement: detect renames by `(file_size, duration, title)` hash — deferred to roadmap.) |
 | Very large library (>500 files) | Acceptable degradation: scan time ~2 s, search remains responsive (in-memory list). Beyond 5000 files we'd need indexing — not v1. |
-| Symlink loop in `Tracks/` (a symlink that points back at its parent or grandparent) | The flat-scan rule (`folder.iterdir()` + filter by suffix) does not recurse, so cyclic links produce at most one file entry; mutagen reads it once. If `iterdir()` itself raises on a malformed link, the entry is skipped silently with a one-shot warning toast. The library does not crash. |
+| Symlink loop in `Tracks/` (a symlink that points back at its parent or grandparent) | The flat-scan rule (`folder.iterdir()` + filter by suffix) does not recurse, so cyclic links produce at most one file entry; mutagen reads it once. If `iterdir()` itself raises, that is folder-level: the scan returns `Library(tracks=())` per TC-01-02. The library does not crash. |
 | `.txt` file with the same stem next to an audio file | **Ignored in v1.** The library reads lyrics only from the `lyrics-eng` ID3 USLT tag (Spec 07 §lyrics tracker). Sidecar `.txt` lyrics were considered and dropped — the user's tagging pipeline already provides USLT, and sidecar handling adds two failure modes (which file wins, what charset) for a feature with no incremental benefit. |
 
 ## Supported file extensions
@@ -94,13 +96,34 @@ normal music folder also contains. Tag reading did not change: `Track.from_path`
 the file with `mutagen.File`, which sniffs by content rather than by extension, so this
 set is the only gate on what the scan accepts.
 
-**`.aac` carries no tags, by construction.** A raw ADTS `.aac` stream has nowhere to put
-them - mutagen reads its duration but raises `AACError: doesn't support tags` on any
-attempt to read or write a tag block. Every `.aac` track therefore takes the TC-01-05
-placeholder path: `title = path.name`, `artist = "Unknown artist"`, no cover, no USLT
-lyrics. This is accepted rather than worked around; AAC audio that carries tags lives in
-an `.m4a` container, which this list already covers. Sidecar `.lrc` lyrics still work for
-`.aac`, because `lrc_io` keys off the audio path's stem and not its container.
+**Only `.mp3` and `.mpeg` currently yield tags, and that predates this amendment.**
+`Track.from_path` reads every metadata field through `mutagen.id3.ID3(path)`, so a
+container that does not carry an ID3 block returns nothing to read. Measured 2026-08-24
+against the shipped code, with tagged files generated by ffmpeg:
+
+| Extension | Duration | Tags read | Tag family the container actually uses |
+|---|---|---|---|
+| `.mp3`, `.mpeg` | yes | **yes** | ID3v2 |
+| `.wav`, `.aiff`, `.aif` | yes | no | ID3v2 chunk (readable, not read) |
+| `.flac`, `.ogg`, `.oga`, `.opus` | yes | no | Vorbis comments |
+| `.m4a` | yes | no | MP4 atoms |
+| `.wma` | yes | no | ASF attributes |
+| `.aac` | yes | **never possible** | none - ADTS has no tag block |
+
+So every extension except `.mp3`/`.mpeg` takes the TC-01-05 placeholder path today:
+`title = path.name`, `artist = "Unknown artist"`, no cover, no USLT lyrics. **The five
+new extensions therefore behave exactly like the four non-MP3 extensions that already
+shipped** - this amendment widens what the scan accepts and changes nothing about tag
+reading.
+
+`.aac` is the only one of the twelve where this is permanent: a raw ADTS stream has
+nowhere to put tags, and mutagen raises `AACError: doesn't support tags` on any attempt.
+That error is swallowed by `_open_tags`, so `.aac` files are listed with placeholders
+rather than skipped (verified 2026-08-24). Reading the other containers' native tag
+families is a **separate, unfiled defect** - see § Out of scope.
+
+Sidecar `.lrc` lyrics work for every extension, because `lrc_io.lrc_path_for` keys off the
+audio path's stem and not its container.
 
 ## Test contract
 
@@ -114,6 +137,7 @@ how reviewers confirm coverage validates the spec, not the implementation.
 - **TC-01-01** — `Library.scan(folder)` returns a `Library` with one `Track` per file in `folder` whose suffix is in `{.mp3, .mpeg, .m4a, .flac, .ogg, .opus, .wav, .aac, .aiff, .aif, .oga, .wma}`. Suffix matching is case-insensitive (`.MP3` is accepted).
 - **TC-01-02** — `Library.scan(nonexistent)` returns `Library(tracks=())`. Same for an unreadable folder (`PermissionError` on `iterdir`).
 - **TC-01-03** — Files with unsupported extensions are silently skipped by the scan.
+- **TC-01-16** — `Library.scan(folder)` returns one `Track` per file for a folder holding one file of **each** supported extension; none is skipped. In particular a `.aac` file is present in the result (its `AACError` is swallowed, not propagated) and carries `title = path.name`, `artist = "Unknown artist"`.
 - **TC-01-04** — `Track.from_path(audio)` parses ID3v2 tags: `TIT2→title`, `TPE1→artist`, `TPE2→album_artist`, `TALB→album`, `TCOM→composer`, `COMM→comment`, `USLT→lyrics_text`, `APIC (image/*)→cover_data + cover_mime`.
 - **TC-01-05** — When tags are absent, `Track.from_path` populates placeholders: `title = path.name`, `artist = "Unknown artist"`, `album_artist` cascades from `artist`, `album/composer/comment = ""`, `lyrics_text/cover_data/cover_mime = None`, and (Spec 21) `replaygain_track_gain/replaygain_album_gain = None`.
 - **TC-01-06** — `Track.album_artist` falls back to `Track.artist` when `TPE2` is missing.
@@ -140,7 +164,8 @@ The watcher mechanism (TC-01-P2-01, TC-01-P2-02) ships in Phase 2 via the `Libra
 
 | TC | Test(s) |
 |---|---|
-| 01-01 | `tests/domain/test_library.py::test_library_scan_finds_three_tracks` |
+| 01-01 | `tests/domain/test_library.py::test_library_scan_finds_three_tracks`, `test_library_scan_accepts_every_supported_extension` |
+| 01-16 | `tests/domain/test_library.py::test_library_scan_accepts_every_supported_extension`, `test_library_scan_includes_tagless_aac` |
 | 01-02 | `test_library_scan_empty_dir`, `test_library_scan_unreadable_dir_returns_empty` |
 | 01-03 | `test_library_skips_unsupported_files` |
 | 01-04 | `tests/domain/test_track.py::test_track_from_path_parses_tags`, `test_track_with_embedded_png_cover` |
@@ -162,3 +187,21 @@ The watcher mechanism (TC-01-P2-01, TC-01-P2-02) ships in Phase 2 via the `Libra
 - Duplicate detection by audio fingerprint.
 - ReplayGain loudness *analysis* / scanning. (Reading pre-existing ReplayGain **tags** is in scope per Spec 21; computing/writing them is not.)
 - Writing tags back to files.
+
+## Known defects surfaced but not fixed here (2026-08-24)
+
+Both were found by the `review-contract` gate on this amendment, both predate it,
+and both are code rather than contract - so this document records them and changes
+nothing about them.
+
+- **Non-ID3 tag families are not read.** `Track.from_path` routes every field through
+  `mutagen.id3.ID3(path)`, so `.flac` / `.ogg` / `.oga` / `.opus` (Vorbis comments),
+  `.m4a` (MP4 atoms), `.wma` (ASF) and `.wav` / `.aiff` / `.aif` (ID3 chunk) all return
+  placeholders even when the file is fully tagged. Four of these shipped before this
+  amendment. Fixing it means a per-container key mapping onto the same `Track` fields.
+- **Untagged files report `duration_seconds = 0.0`.** `from_path` computes
+  `float(mf.info.length) if mf and mf.info else 0.0`, and `mf` is a mutagen `FileType`,
+  which is dict-like - so a file with **zero tags** is falsy and the duration is
+  discarded even though `mf.info.length` is correct. Affects any untagged file of any
+  format, `.mp3` included, and propagates to `#EXTINF` in exported M3Us (Spec 08) and to
+  duration sorting. The guard should test `mf is not None`.
