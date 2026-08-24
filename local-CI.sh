@@ -17,10 +17,19 @@ cd "$(dirname "$0")"
 
 PY=.venv/bin/python
 if [[ ! -x "$PY" ]]; then
-  echo "error: $PY not found." >&2
-  echo "Create it with:" >&2
-  echo "    python -m venv .venv && .venv/bin/python -m pip install -r requirements-dev.txt" >&2
-  exit 1
+  # The pre-push hook gates a commit in a detached worktree, and `.venv/` is
+  # gitignored -- so it is absent there even though the checkout is fine. Fall
+  # back to the main worktree's venv, which is the same interpreter CI builds.
+  main_worktree=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" 2>/dev/null || true)
+  if [[ -n "$main_worktree" && -x "$main_worktree/.venv/bin/python" ]]; then
+    PY="$main_worktree/.venv/bin/python"
+    echo "note: no ./.venv here; using $PY" >&2
+  else
+    echo "error: .venv/bin/python not found." >&2
+    echo "Create it with:" >&2
+    echo "    python -m venv .venv && .venv/bin/python -m pip install -r requirements-dev.txt" >&2
+    exit 1
+  fi
 fi
 
 echo "== environment =="
