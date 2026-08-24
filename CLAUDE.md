@@ -24,8 +24,16 @@ The repo ships a `.venv/` with all deps. Always use it:
 .venv/bin/pytest tests/domain/ -v         # one package
 .venv/bin/pytest -k test_album_create -v  # one test by name
 .venv/bin/ruff check src/ tests/          # lint (must be clean)
-.venv/bin/python -m album_builder         # run the app
+PYTHONPATH=src .venv/bin/python -m album_builder   # run the app
+~/.local/bin/album-builder                # ...or the installed launcher (same thing)
 ```
+
+`PYTHONPATH=src` is required: the venv has **no** editable install of the package, and
+`.venv/bin/python -m album_builder` alone fails with `No module named album_builder`.
+`~/.local/bin/album-builder` is a two-line shim that sets the same `PYTHONPATH` and runs
+the live checkout, so the K Menu entry and a terminal run execute identical code. Don't
+"fix" this by `pip install -e .` into `.venv/` — the launcher would then shadow the
+checkout it is meant to run.
 
 bandit / pyright / shellcheck / semgrep / gitleaks / trivy are installed (see `/audit`).
 
