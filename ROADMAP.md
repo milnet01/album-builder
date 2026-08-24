@@ -1,3 +1,5 @@
+<!-- ants-roadmap-format: 1 -->
+
 # Album Builder — Roadmap
 
 Working roadmap for the Album Builder app. Tracks completed phases, in-flight findings, and upcoming work.
@@ -75,10 +77,21 @@ Maintenance release rolling up the seven commits after the v0.6.0 ship plus a `/
 
 Docs reviewed: 22 (CLAUDE.md, README.md, ROADMAP.md, 14 specs, 5 historical plans). Loops to clean: 1. Findings fixed inline: 70+ (mix of HIGH/MEDIUM/LOW; severities flattened — every verified finding gets fixed). 8 reviewer lanes ran in parallel against doc files + cited code; per-lane outputs verified against current `src/` before edit.
 
-- ✅ **MEDIUM — Add `# Spec: TC-NN-MM` markers to test files lacking them.** `tests/ui/test_theme.py` (TC-11-01/02/04), `tests/services/test_player.py` (TC-06-03, TC-06-06), `tests/test_main_window.py` / `tests/test_app.py` (TC-12-06 single-instance). Code-side debt; tracked here so future audits can cross-reference. Surfaced by Lane E + Lane G. **Resolved (2026-06-10, `87c8f2e`):** markers added — `test_theme.py` (TC-11-01/02/04), `test_player.py` (TC-06-06) plus a new TC-06-03 seek-granularity integration test, `test_app.py` single-instance tests (TC-12-06). (No `tests/test_main_window.py` exists; single-instance lives only in `test_app.py`.)
-- ✅ **MEDIUM — Spec 02 §Errors `Crash mid-rename` self-heal not implemented.** Spec promises a "folder slug wins + reverse-derive `name`" self-heal; `services/album_store.py:rescan` + `persistence/album_io.load_album` do not implement reverse-derivation (in-JSON `name` always wins). Two reasonable fixes: (a) implement the spec'd self-heal in `load_album`, or (b) amend Spec 02 to "the in-JSON `name` wins; the slug is informational" (safer default). Surfaced by Lane C. **Resolved (2026-06-10, `87c8f2e`):** chose (a) — implemented the spec'd self-heal in `load_album` (folder slug wins, reverse-derive `name`). Unique-slug ` (N)` suffix stripped before compare + derive so no false-heal / no reload loop. Spec 02 gains TC-02-21 + three tests.
-- ✅ **MEDIUM — Installer hardening (Spec 12 TC-12-07/08).** Auto-wipe `.venv/` on failed `pip install` + wiki-link troubleshooting surface are aspirational; current installer relies on `set -euo pipefail` only. Spec amended to mark TC-12-07/08 as deferred; the implementation is queued here. **Resolved (2026-06-10, `87c8f2e`):** `install.sh` wraps the venv-build block in an `ERR` trap that wipes the partial `.venv/` and exits non-zero; the requirements cache is written only on success so TC-12-08 resumability holds. Spec 12 flips TC-12-07/08 to implemented; `shellcheck` clean. (The wiki-link troubleshooting surface remains aspirational — out of scope for this fix.)
-- ✅ **LOW — Spec 09 `_filename_for` vs `report_filenames_for` artist_view kwarg.** `report.py` exposes a public `report_filenames_for(album, today)` that does not accept `artist_view`. A caller wanting the artist-variant filename must reach for the private `_filename_for`. Either elevate the kwarg to the public helper or pin "private-only for the variant" explicitly. Surfaced by Lane F. **Resolved (2026-06-10, `87c8f2e`):** elevated the kwarg — `report_filenames_for(album, today, *, artist_view=False)` now exposes the artist-variant filename publicly; callers no longer reach for private `_filename_for`.
+- ✅ [MUSI-0001] **MEDIUM — Add `# Spec: TC-NN-MM` markers to test files lacking them.**
+  `tests/ui/test_theme.py` (TC-11-01/02/04), `tests/services/test_player.py` (TC-06-03, TC-06-06), `tests/test_main_window.py` / `tests/test_app.py` (TC-12-06 single-instance). Code-side debt; tracked here so future audits can cross-reference. Surfaced by Lane E + Lane G. **Resolved (2026-06-10, `87c8f2e`):** markers added — `test_theme.py` (TC-11-01/02/04), `test_player.py` (TC-06-06) plus a new TC-06-03 seek-granularity integration test, `test_app.py` single-instance tests (TC-12-06). (No `tests/test_main_window.py` exists; single-instance lives only in `test_app.py`.)
+  Kind: implement.
+
+- ✅ [MUSI-0002] **MEDIUM — Spec 02 §Errors `Crash mid-rename` self-heal not implemented.**
+  Spec promises a "folder slug wins + reverse-derive `name`" self-heal; `services/album_store.py:rescan` + `persistence/album_io.load_album` do not implement reverse-derivation (in-JSON `name` always wins). Two reasonable fixes: (a) implement the spec'd self-heal in `load_album`, or (b) amend Spec 02 to "the in-JSON `name` wins; the slug is informational" (safer default). Surfaced by Lane C. **Resolved (2026-06-10, `87c8f2e`):** chose (a) — implemented the spec'd self-heal in `load_album` (folder slug wins, reverse-derive `name`). Unique-slug ` (N)` suffix stripped before compare + derive so no false-heal / no reload loop. Spec 02 gains TC-02-21 + three tests.
+  Kind: implement.
+
+- ✅ [MUSI-0003] **MEDIUM — Installer hardening (Spec 12 TC-12-07/08).**
+  Auto-wipe `.venv/` on failed `pip install` + wiki-link troubleshooting surface are aspirational; current installer relies on `set -euo pipefail` only. Spec amended to mark TC-12-07/08 as deferred; the implementation is queued here. **Resolved (2026-06-10, `87c8f2e`):** `install.sh` wraps the venv-build block in an `ERR` trap that wipes the partial `.venv/` and exits non-zero; the requirements cache is written only on success so TC-12-08 resumability holds. Spec 12 flips TC-12-07/08 to implemented; `shellcheck` clean. (The wiki-link troubleshooting surface remains aspirational — out of scope for this fix.)
+  Kind: implement.
+
+- ✅ [MUSI-0004] **LOW — Spec 09 `_filename_for` vs `report_filenames_for` artist_view kwarg.**
+  `report.py` exposes a public `report_filenames_for(album, today)` that does not accept `artist_view`. A caller wanting the artist-variant filename must reach for the private `_filename_for`. Either elevate the kwarg to the public helper or pin "private-only for the variant" explicitly. Surfaced by Lane F. **Resolved (2026-06-10, `87c8f2e`):** elevated the kwarg — `report_filenames_for(album, today, *, artist_view=False)` now exposes the artist-variant filename publicly; callers no longer reach for private `_filename_for`.
+  Kind: implement.
 
 ---
 
@@ -169,8 +182,11 @@ User-reported UX gaps spotted on the v0.5.1 build:
 **Shipped:**
 
 - ✅ Step 3 — failing tests for TC-06-17/18/19 + TC-07-16 (10 of 11 red on the implementation-side, 1 already passing as the existing cross-row case).
+
 - ✅ Step 4 — implementation (lifted `setFixedHeight(150)` → `setMinimumHeight(150)`, dropped competing `addStretch` after the lyrics panel, added `LibraryPane.set_active_play_state` + `AlbumOrderPane.set_active_play_state`, routed `Player.state_changed` + source-swap into both panes from `MainWindow`, added load-or-toggle dispatch in `_on_preview_play`).
+
 - ✅ Step 5/6 — `/audit` + `/indie-review` in parallel (1 audit + 5 review findings, all L). Round 1 folded inline: pyright `None`-guard on `album_order_pane.py:173`, spec-06 PAUSED-vs-STOPPED split (PAUSED→toggle, STOPPED→fresh-load+restart), TC-06-15 marker disambiguation on the v0.4.0 test, and 2 new TC-06-19 tests for the album-order pane (set_album re-render preservation + set_active call-count observable). Round 2 convergence confirmed clean.
+
 - ✅ Step 8/9 — flipped status to ✅; commit pending; push pending user OK.
 
 **Convergence trace:** spec amendments 1-pass cold-eyes review (7 → 0 findings), implementation, post-implementation `/audit` + `/indie-review` (6 → 0 findings). 471 → 484 passing tests (+13: 11 new TC-06-17/18/19 + TC-07-16 contracts and 2 round-1-fold-out additions). Ruff clean. Manual smoke-launch on the `Tracks/` corpus completed without error.
@@ -223,60 +239,191 @@ Pre-implementation cold-eyes review of the Phase 4 surface (Specs 02 §approve/�
 
 **Priority A — design / contract (BLOCKER + HIGH):**
 
-- ✅ **A1 — `_commit_export` is not actually atomic at the per-symlink granularity.** Spec 08 §Generation algorithm L77 promises "the staging-then-replace sequence"; §`_commit_export` L115–118 wipes live symlinks then per-link-replaces from staging — a kill between step 1 (wipe) and step 2 (first move) leaves zero symlinks + a stale M3U. Fix: rewrite the §`_commit_export` contract as "eventually consistent within bounded time" — explicit recovery rule "on launch OR before next mutation, count(live symlinks where is_symlink) ≠ count(track_paths) ⇒ trigger regeneration." Document the kill-9 window as a known short-window race that the next pass repairs. (Lane A BLOCKER.)
-- ✅ **A2 — Atomic-pair cleanup for half-rendered reports has no defined trigger.** Spec 09 §canonical approve sequence row "3c/3d" says half-pair → delete both on next launch, but no spec names *who* runs that scan. Spec 10 §Errors stale-`.tmp` rule covers JSON only. Fix: extend Spec 10 §Errors to walk `Albums/<slug>/reports/`, deleting both members of any pair where exactly one of `(html, pdf)` for a given date stem exists; cross-link from Spec 09. (Lanes B + C BLOCKER.)
-- ✅ **A3 — `#EXTINF` artist-title rendering rule unspecified.** Spec 08 §Outputs L59 shows `#EXTINF:281,18 Down - something more (calm)` by example. Null-artist handling, embedded ` - ` in title, missing-duration fallback are silent. Fix: explicit format rule + null-artist path + duration fallback (0 if mutagen returns None). (Lane A HIGH.)
-- ✅ **A4 — Symlink filename "100 chars" is codepoints vs bytes ambiguous.** Spec 08 §Symlink filenames L65. UTF-8 multi-byte titles will hit ext4 `NAME_MAX=255` at a different point than 100 codepoints. Fix: "100 Unicode codepoints, then verify UTF-8 byte length ≤ 255 and shorten further if needed." (Lane A HIGH.)
-- ✅ **A5 — `track_path` str-vs-Path coercion ambiguous in algorithm body.** Spec 08 §Generation algorithm L97 calls `.suffix.lower()` on the loop var; `album.track_paths` are strings per Spec 10. Fix: explicit `Path(p)` coercion in the pseudocode. (Lane A HIGH.)
-- ✅ **A6 — Stale `.export.new` on launch has no trigger.** Spec 08 §Behavior rules L128 says "wipe as the first step of the next export pass." Nothing triggers an export pass on launch if the user opens the app and quits without mutating. Fix: add `AlbumStore.load()`-time bullet "if `.export.new` exists, schedule a regeneration; if no mutation occurs, wipe `.export.new` unconditionally on the next clean shutdown." (Lane A HIGH.)
-- ✅ **A7 — Cross-filesystem `os.replace` rule for staging missing.** Spec 08 §`_commit_export` L118: `os.replace(staging/"playlist.m3u8", folder/"playlist.m3u8")` is atomic only when source + dest share a filesystem. Fix: assert "staging MUST be a sibling under the same album folder" with a TC. (Lane A HIGH.)
-- ✅ **A8 — Spec 10 atomic-write contract carve-out for staging not explicit on either side.** Spec 08 §Generation algorithm L104 uses bare `.write_text` for the staging M3U; Spec 10 §Atomic write protocol L37 is unconditional. Fix: add a `§Atomic write — staging-folder exception` paragraph to Spec 10 stating that writes inside a transactional staging dir that itself promotes atomically are exempt; cross-link from Spec 08. (Lane A HIGH.)
-- ✅ **A9 — Empty album (`track_paths == []`) export behavior silent.** Spec 08 doesn't say whether export still generates an empty M3U + zero symlinks, or skips the regeneration entirely. Fix: explicit §Behavior rules clause — empty album writes a one-line `#EXTM3U` file and zero symlinks; no warnings. (Lane A HIGH.)
-- ✅ **A10 — `>99` tracks numbering format silent.** Spec 08 §Symlink filenames says `{NN:02d}`. Spec 10 §`album.json` schema caps `target_count` at 99 (Spec 04 enforces UI), but `track_paths` self-heal can raise `target_count` above the cap. Fix: clamp at 99 with a warning, OR widen format to `{i:03d}` when `len > 99`. Pick one and add §Errors row + TC. (Lane A HIGH.)
-- ✅ **A11 — `_v2` suffix path is unreachable as written.** Spec 09 §File naming L134 + TC-09-04/11 assume same-day re-approve finds prior reports. But Spec 02 §unapprove step 2.i deletes `reports/` recursively, so re-approve always finds an empty directory. Fix: drop the `_vN` rule + delete TC-09-04 and TC-09-11; document "re-approve overwrites within the empty reports/ dir; date-only filename." (Lane B HIGH.)
-- ✅ **A12 — Approve race-window vs Spec 08 skip-with-warning contradiction.** Spec 02 §approve says missing tracks are an error, never a skip. Spec 09 step 2 calls Spec 08 export, which has a unconditional skip-with-warning rule. Fix: Spec 09 step 2 must call Spec 08 in *strict mode* (any missing path raises and aborts the sequence). Spec 08 §Errors row gets a one-line carve-out: "Approve gates this earlier; the skip path is for draft live re-export only." (Lanes B + C HIGH.)
-- ✅ **A13 — Spec 02 §approve §Behavior step 1 wording suggests double-verification.** Step 1 reads "Re-verify all `track_paths` exist (race-window check)" implying preconditions ran a *prior* check. Spec 09 has only one verification (canonical step 1). Fix: align Spec 02 step 1 to "Verify all `track_paths` exist — single check, per Spec 09 §canonical approve sequence step 1; preconditions snapshot the count, this re-checks existence." (Lane C HIGH.)
-- ✅ **A14 — Spec 09 hardcodes glyph codepoints inline (Theme J recurrence).** §The approve flow uses literal `✓` and prose "small lock icon"; Spec 11 §Glyphs canonicalises both as `Glyphs.CHECK` / `Glyphs.LOCK`. Fix: Spec 09 references `Glyphs.CHECK (Spec 11 §Glyphs)` and `Glyphs.LOCK (Spec 11 §Glyphs)` instead of literal codepoints. (Lane C HIGH.)
-- ✅ **A15 — `Albums/<slug>/` source-of-truth not pinned in Spec 02 §create.** Step 3 uses relative `Albums/`; doesn't say "resolve against `settings.albums_folder`." A reader could implement against CWD. Fix: change to "the album folder is created at `<settings.albums_folder>/<slug>/` (Spec 10 §`settings.json`)." (Lane C HIGH.)
+- ✅ [MUSI-0005] **A1 — `_commit_export` is not actually atomic at the per-symlink granularity.**
+  Spec 08 §Generation algorithm L77 promises "the staging-then-replace sequence"; §`_commit_export` L115–118 wipes live symlinks then per-link-replaces from staging — a kill between step 1 (wipe) and step 2 (first move) leaves zero symlinks + a stale M3U. Fix: rewrite the §`_commit_export` contract as "eventually consistent within bounded time" — explicit recovery rule "on launch OR before next mutation, count(live symlinks where is_symlink) ≠ count(track_paths) ⇒ trigger regeneration." Document the kill-9 window as a known short-window race that the next pass repairs. (Lane A BLOCKER.)
+  Kind: implement.
+
+- ✅ [MUSI-0006] **A2 — Atomic-pair cleanup for half-rendered reports has no defined trigger.**
+  Spec 09 §canonical approve sequence row "3c/3d" says half-pair → delete both on next launch, but no spec names *who* runs that scan. Spec 10 §Errors stale-`.tmp` rule covers JSON only. Fix: extend Spec 10 §Errors to walk `Albums/<slug>/reports/`, deleting both members of any pair where exactly one of `(html, pdf)` for a given date stem exists; cross-link from Spec 09. (Lanes B + C BLOCKER.)
+  Kind: implement.
+
+- ✅ [MUSI-0007] **A3 — `#EXTINF` artist-title rendering rule unspecified.**
+  Spec 08 §Outputs L59 shows `#EXTINF:281,18 Down - something more (calm)` by example. Null-artist handling, embedded ` - ` in title, missing-duration fallback are silent. Fix: explicit format rule + null-artist path + duration fallback (0 if mutagen returns None). (Lane A HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0008] **A4 — Symlink filename "100 chars" is codepoints vs bytes ambiguous.**
+  Spec 08 §Symlink filenames L65. UTF-8 multi-byte titles will hit ext4 `NAME_MAX=255` at a different point than 100 codepoints. Fix: "100 Unicode codepoints, then verify UTF-8 byte length ≤ 255 and shorten further if needed." (Lane A HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0009] **A5 — `track_path` str-vs-Path coercion ambiguous in algorithm body.**
+  Spec 08 §Generation algorithm L97 calls `.suffix.lower()` on the loop var; `album.track_paths` are strings per Spec 10. Fix: explicit `Path(p)` coercion in the pseudocode. (Lane A HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0010] **A6 — Stale `.export.new` on launch has no trigger.**
+  Spec 08 §Behavior rules L128 says "wipe as the first step of the next export pass." Nothing triggers an export pass on launch if the user opens the app and quits without mutating. Fix: add `AlbumStore.load()`-time bullet "if `.export.new` exists, schedule a regeneration; if no mutation occurs, wipe `.export.new` unconditionally on the next clean shutdown." (Lane A HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0011] **A7 — Cross-filesystem `os.replace` rule for staging missing.**
+  Spec 08 §`_commit_export` L118: `os.replace(staging/"playlist.m3u8", folder/"playlist.m3u8")` is atomic only when source + dest share a filesystem. Fix: assert "staging MUST be a sibling under the same album folder" with a TC. (Lane A HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0012] **A8 — Spec 10 atomic-write contract carve-out for staging not explicit on either side.**
+  Spec 08 §Generation algorithm L104 uses bare `.write_text` for the staging M3U; Spec 10 §Atomic write protocol L37 is unconditional. Fix: add a `§Atomic write — staging-folder exception` paragraph to Spec 10 stating that writes inside a transactional staging dir that itself promotes atomically are exempt; cross-link from Spec 08. (Lane A HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0013] **A9 — Empty album (`track_paths == []`) export behavior silent.**
+  Spec 08 doesn't say whether export still generates an empty M3U + zero symlinks, or skips the regeneration entirely. Fix: explicit §Behavior rules clause — empty album writes a one-line `#EXTM3U` file and zero symlinks; no warnings. (Lane A HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0014] **A10 — `>99` tracks numbering format silent.**
+  Spec 08 §Symlink filenames says `{NN:02d}`. Spec 10 §`album.json` schema caps `target_count` at 99 (Spec 04 enforces UI), but `track_paths` self-heal can raise `target_count` above the cap. Fix: clamp at 99 with a warning, OR widen format to `{i:03d}` when `len > 99`. Pick one and add §Errors row + TC. (Lane A HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0015] **A11 — `_v2` suffix path is unreachable as written.**
+  Spec 09 §File naming L134 + TC-09-04/11 assume same-day re-approve finds prior reports. But Spec 02 §unapprove step 2.i deletes `reports/` recursively, so re-approve always finds an empty directory. Fix: drop the `_vN` rule + delete TC-09-04 and TC-09-11; document "re-approve overwrites within the empty reports/ dir; date-only filename." (Lane B HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0016] **A12 — Approve race-window vs Spec 08 skip-with-warning contradiction.**
+  Spec 02 §approve says missing tracks are an error, never a skip. Spec 09 step 2 calls Spec 08 export, which has a unconditional skip-with-warning rule. Fix: Spec 09 step 2 must call Spec 08 in *strict mode* (any missing path raises and aborts the sequence). Spec 08 §Errors row gets a one-line carve-out: "Approve gates this earlier; the skip path is for draft live re-export only." (Lanes B + C HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0017] **A13 — Spec 02 §approve §Behavior step 1 wording suggests double-verification.**
+  Step 1 reads "Re-verify all `track_paths` exist (race-window check)" implying preconditions ran a *prior* check. Spec 09 has only one verification (canonical step 1). Fix: align Spec 02 step 1 to "Verify all `track_paths` exist — single check, per Spec 09 §canonical approve sequence step 1; preconditions snapshot the count, this re-checks existence." (Lane C HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0018] **A14 — Spec 09 hardcodes glyph codepoints inline (Theme J recurrence).**
+  §The approve flow uses literal `✓` and prose "small lock icon"; Spec 11 §Glyphs canonicalises both as `Glyphs.CHECK` / `Glyphs.LOCK`. Fix: Spec 09 references `Glyphs.CHECK (Spec 11 §Glyphs)` and `Glyphs.LOCK (Spec 11 §Glyphs)` instead of literal codepoints. (Lane C HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0019] **A15 — `Albums/<slug>/` source-of-truth not pinned in Spec 02 §create.**
+  Step 3 uses relative `Albums/`; doesn't say "resolve against `settings.albums_folder`." A reader could implement against CWD. Fix: change to "the album folder is created at `<settings.albums_folder>/<slug>/` (Spec 10 §`settings.json`)." (Lane C HIGH.)
+  Kind: implement.
 
 **Priority B — missing test contracts (HIGH):**
 
-- ✅ **A16 — Split TC-08-10 into 10a (hardlink fallback) + 10b (copy fallback).** Different UX semantics (suppressed dialog vs required dialog with default-no). Currently one TC line conflates both. (Lane D HIGH.)
-- ✅ **A17 — Add TC-08-14 — `library.refresh()` precedes every export pass.** Spec 08 §Disk-read checks line is prose-only. (Lane D HIGH.)
-- ✅ **A18 — Add TC-08-15 — symlink 64-byte sanity check after creation.** Spec 08 §Disk-read checks line is prose-only. (Lane D HIGH.)
-- ✅ **A19 — Add TC-08-16 — `.export-log` rotation (last 10 runs).** Spec 08 §Disk-read checks line is prose-only. (Lane D HIGH.)
-- ✅ **A20 — Add TC-09-18 — `xdg-open reports/` is gated on `settings.ui.open_report_folder_on_approve`.** Spec 09 §approve flow step 6. (Lane D HIGH.)
-- ✅ **A21 — Add TC-09-20 — Reopen confirm dialog text, default-button "Cancel."** Spec 09 §The reopen flow step 2. (Lane D HIGH.)
-- ✅ **A22 — Add TC-09-22 — Per-track section page-break CSS (`break-inside: avoid`).** Spec 09 §Per-track sections. (Lane D HIGH.)
-- ✅ **A23 — Add TC-09-24 — 50-track render <5 s + ">50 tracks: rendering may take a moment" hint.** Spec 09 §Performance budget. (Lane D HIGH.)
-- ✅ **A24 — Add TC-09-26 — long-line lyrics word-wrap, no overflow.** Spec 09 §Errors row. (Lane D HIGH.)
-- ✅ **A25 — Add TC-09-27 — approve serialises with in-flight export (queue or lock).** Spec 09 §Errors row. (Lane D HIGH.)
+- ✅ [MUSI-0020] **A16 — Split TC-08-10 into 10a (hardlink fallback) + 10b (copy fallback).**
+  Different UX semantics (suppressed dialog vs required dialog with default-no). Currently one TC line conflates both. (Lane D HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0021] **A17 — Add TC-08-14 — `library.refresh()` precedes every export pass.**
+  Spec 08 §Disk-read checks line is prose-only. (Lane D HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0022] **A18 — Add TC-08-15 — symlink 64-byte sanity check after creation.**
+  Spec 08 §Disk-read checks line is prose-only. (Lane D HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0023] **A19 — Add TC-08-16 — `.export-log` rotation (last 10 runs).**
+  Spec 08 §Disk-read checks line is prose-only. (Lane D HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0024] **A20 — Add TC-09-18 — `xdg-open reports/` is gated on `settings.ui.open_report_folder_on_approve`.**
+  Spec 09 §approve flow step 6. (Lane D HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0025] **A21 — Add TC-09-20 — Reopen confirm dialog text, default-button "Cancel."**
+  Spec 09 §The reopen flow step 2. (Lane D HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0026] **A22 — Add TC-09-22 — Per-track section page-break CSS (`break-inside: avoid`).**
+  Spec 09 §Per-track sections. (Lane D HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0027] **A23 — Add TC-09-24 — 50-track render <5 s + ">50 tracks: rendering may take a moment" hint.**
+  Spec 09 §Performance budget. (Lane D HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0028] **A24 — Add TC-09-26 — long-line lyrics word-wrap, no overflow.**
+  Spec 09 §Errors row. (Lane D HIGH.)
+  Kind: implement.
+
+- ✅ [MUSI-0029] **A25 — Add TC-09-27 — approve serialises with in-flight export (queue or lock).**
+  Spec 09 §Errors row. (Lane D HIGH.)
+  Kind: implement.
 
 **Priority C — clarifications + edge cases (MEDIUM):**
 
-- ✅ **A26 — Spec 08 §Symlink filenames trim order specified.** "Trim leading/trailing whitespace AND dots — repeat until stable." (Lane A MEDIUM.)
-- ✅ **A27 — Spec 08 §Outputs `#PLAYLIST:` / `#EXTART:` emit predicate.** Emit `#PLAYLIST:` iff `album.name` non-empty; emit `#EXTART:` iff all tracks share an artist. (Lane A MEDIUM.)
-- ✅ **A28 — Spec 08 §Robustness collision dedup placement.** `track A.mp3` vs `track A (2).mp3` — show explicit example with extension. (Lane A MEDIUM.)
-- ✅ **A29 — Spec 08 §Errors no-mutagen-readable-title fallback.** Distinct from post-sanitisation empty (which uses `track-{NN}`). (Lane A MEDIUM.)
-- ✅ **A30 — Spec 08 §Errors album-folder-deleted-mid-session.** `mkdir(exist_ok=True)` recreates silently — Spec 02's deletion semantics mean the folder is in `.trash/`; export should detect deletion and abort with a toast, not silently recreate. (Lane A MEDIUM.)
-- ✅ **A31 — Spec 09 `version_string()` `ImportError` fallback.** Return `'unknown'` on import failure; never abort render. Tighten TC-09-02 accordingly. (Lane B MEDIUM.)
-- ✅ **A32 — Spec 09 §Technology single-string-for-both-outputs claim clarified.** Confirm (or amend): rendered HTML string is identical for both writes; print-only CSS is gated behind `@media print` so HTML displays correctly in browsers. (Lane B MEDIUM.)
-- ✅ **A33 — Spec 09 §Errors partial-composer-column case.** Some tracks have a composer, some don't — currently §Track listing only handles "all share." Fix: composer column shown in full when ≥1 track has a composer; missing entries render as em-dash. (Lane B MEDIUM.)
-- ✅ **A34 — Spec 09 §Errors lyrics block size cap.** 100 KB single-track lyrics inflates the PDF. Fix: cap rendered block at e.g. 32 KB with "(... truncated)" suffix; full text remains in source LRC. (Lane B MEDIUM.)
-- ✅ **A35 — Spec 09 §Errors re-entrant approve.** Approve clicked while a previous approve worker is still rendering. Fix: button disables for the duration; queued click is dropped. (Lane B MEDIUM.)
-- ✅ **A36 — Spec 10 §Atomic write protocol gets a `§Atomic pair (multi-file transactions)` subsection.** Names the invariant Spec 09 step 3 enforces; recovery rule lives here, not buried in Spec 09 prose. (Lane C MEDIUM.)
-- ✅ **A37 — Spec 09 §canonical approve sequence step references switch from numeric to named anchors.** `step:verify-paths`, `step:export-staging`, `step:export-commit`, `step:render-tmp`, `step:render-rename-html`, `step:render-rename-pdf`, `step:write-marker`, `step:flip-status`. The crash-recovery table cites the named anchors. Future renumbering can't silently invalidate the recovery contract. (Lane C MEDIUM.)
-- ✅ **A38 — Sharpen TC-02-13 + TC-02-19.** Enumerate the four artefacts (`playlist.m3u8`, symlink set, PDF, HTML, marker) with non-zero size assertion; enumerate three crash points (post-step-2b, post-step-3d, post-step-4) for idempotency. (Lane D MEDIUM.)
-- ✅ **A39 — Sharpen TC-09-08 (cover resize threshold).** ≤ 10 MB AND ≤ 800×800 → pass-through; > 10 MB OR > 800×800 → resize. (Lane D MEDIUM.)
+- ✅ [MUSI-0030] **A26 — Spec 08 §Symlink filenames trim order specified.**
+  "Trim leading/trailing whitespace AND dots — repeat until stable." (Lane A MEDIUM.)
+  Kind: implement.
+
+- ✅ [MUSI-0031] **A27 — Spec 08 §Outputs `#PLAYLIST:` / `#EXTART:` emit predicate.**
+  Emit `#PLAYLIST:` iff `album.name` non-empty; emit `#EXTART:` iff all tracks share an artist. (Lane A MEDIUM.)
+  Kind: implement.
+
+- ✅ [MUSI-0032] **A28 — Spec 08 §Robustness collision dedup placement.**
+  `track A.mp3` vs `track A (2).mp3` — show explicit example with extension. (Lane A MEDIUM.)
+  Kind: implement.
+
+- ✅ [MUSI-0033] **A29 — Spec 08 §Errors no-mutagen-readable-title fallback.**
+  Distinct from post-sanitisation empty (which uses `track-{NN}`). (Lane A MEDIUM.)
+  Kind: implement.
+
+- ✅ [MUSI-0034] **A30 — Spec 08 §Errors album-folder-deleted-mid-session.**
+  `mkdir(exist_ok=True)` recreates silently — Spec 02's deletion semantics mean the folder is in `.trash/`; export should detect deletion and abort with a toast, not silently recreate. (Lane A MEDIUM.)
+  Kind: implement.
+
+- ✅ [MUSI-0035] **A31 — Spec 09 `version_string()` `ImportError` fallback.**
+  Return `'unknown'` on import failure; never abort render. Tighten TC-09-02 accordingly. (Lane B MEDIUM.)
+  Kind: implement.
+
+- ✅ [MUSI-0036] **A32 — Spec 09 §Technology single-string-for-both-outputs claim clarified.**
+  Confirm (or amend): rendered HTML string is identical for both writes; print-only CSS is gated behind `@media print` so HTML displays correctly in browsers. (Lane B MEDIUM.)
+  Kind: implement.
+
+- ✅ [MUSI-0037] **A33 — Spec 09 §Errors partial-composer-column case.**
+  Some tracks have a composer, some don't — currently §Track listing only handles "all share." Fix: composer column shown in full when ≥1 track has a composer; missing entries render as em-dash. (Lane B MEDIUM.)
+  Kind: implement.
+
+- ✅ [MUSI-0038] **A34 — Spec 09 §Errors lyrics block size cap.**
+  100 KB single-track lyrics inflates the PDF. Fix: cap rendered block at e.g. 32 KB with "(... truncated)" suffix; full text remains in source LRC. (Lane B MEDIUM.)
+  Kind: implement.
+
+- ✅ [MUSI-0039] **A35 — Spec 09 §Errors re-entrant approve.**
+  Approve clicked while a previous approve worker is still rendering. Fix: button disables for the duration; queued click is dropped. (Lane B MEDIUM.)
+  Kind: implement.
+
+- ✅ [MUSI-0040] **A36 — Spec 10 §Atomic write protocol gets a `§Atomic pair (multi-file transactions)` subsection.**
+  Names the invariant Spec 09 step 3 enforces; recovery rule lives here, not buried in Spec 09 prose. (Lane C MEDIUM.)
+  Kind: implement.
+
+- ✅ [MUSI-0041] **A37 — Spec 09 §canonical approve sequence step references switch from numeric to named anchors.**
+  `step:verify-paths`, `step:export-staging`, `step:export-commit`, `step:render-tmp`, `step:render-rename-html`, `step:render-rename-pdf`, `step:write-marker`, `step:flip-status`. The crash-recovery table cites the named anchors. Future renumbering can't silently invalidate the recovery contract. (Lane C MEDIUM.)
+  Kind: implement.
+
+- ✅ [MUSI-0042] **A38 — Sharpen TC-02-13 + TC-02-19.**
+  Enumerate the four artefacts (`playlist.m3u8`, symlink set, PDF, HTML, marker) with non-zero size assertion; enumerate three crash points (post-step-2b, post-step-3d, post-step-4) for idempotency. (Lane D MEDIUM.)
+  Kind: implement.
+
+- ✅ [MUSI-0043] **A39 — Sharpen TC-09-08 (cover resize threshold).**
+  ≤ 10 MB AND ≤ 800×800 → pass-through; > 10 MB OR > 800×800 → resize. (Lane D MEDIUM.)
+  Kind: implement.
 
 **Deferred / closed-by-policy (LOW):**
 
-- ✅ **L1 — Spec 08 title `(M3U + Symlink Folder)`.** Stays as written; "M3U" refers to the format here, consistent with Spec 00 §Glossary which calls it the format. No change.
-- ✅ **L2 — "Toast" not in Spec 00 §Glossary.** Cross-spec UI term; defined implicitly by Spec 11 surface conventions. Out of Phase 4 prep scope; bookmark for v0.6+ glossary expansion.
-- ✅ **L3 — `reports/` deletion ordering note in Spec 09.** Folded into A37 (named anchors) — when steps are named, ordering becomes load-bearing automatically.
-- ✅ **L4 — Concurrent export passes for two albums.** Implicit from Spec 10 §Debounce ("Multiple albums are debounced independently"). No new spec text required.
-- ✅ **L5 — `reports/` is a user-symlink (shenanigans).** Out of v1 threat model (single-user single-machine); explicitly out of scope per Spec 00.
-- ✅ **L6 — TC-11-10 ↔ TC-09-02 duplication.** Intentional cross-spec link per Spec 11's "mirror" wording. No change.
+- ✅ [MUSI-0044] **L1 — Spec 08 title `(M3U + Symlink Folder)`.**
+  Stays as written; "M3U" refers to the format here, consistent with Spec 00 §Glossary which calls it the format. No change.
+  Kind: implement.
+
+- ✅ [MUSI-0045] **L2 — "Toast" not in Spec 00 §Glossary.**
+  Cross-spec UI term; defined implicitly by Spec 11 surface conventions. Out of Phase 4 prep scope; bookmark for v0.6+ glossary expansion.
+  Kind: implement.
+
+- ✅ [MUSI-0046] **L3 — `reports/` deletion ordering note in Spec 09.**
+  Folded into A37 (named anchors) — when steps are named, ordering becomes load-bearing automatically.
+  Kind: implement.
+
+- ✅ [MUSI-0047] **L4 — Concurrent export passes for two albums.**
+  Implicit from Spec 10 §Debounce ("Multiple albums are debounced independently"). No new spec text required.
+  Kind: implement.
+
+- ✅ [MUSI-0048] **L5 — `reports/` is a user-symlink (shenanigans).**
+  Out of v1 threat model (single-user single-machine); explicitly out of scope per Spec 00.
+  Kind: implement.
+
+- ✅ [MUSI-0049] **L6 — TC-11-10 ↔ TC-09-02 duplication.**
+  Intentional cross-spec link per Spec 11's "mirror" wording. No change.
+  Kind: implement.
 
 #### ✅ Phase 4 prep — Round 2 spec sweep (2026-04-30)
 
@@ -284,41 +431,99 @@ Single consolidated cold-eyes pass against the round-1 fixed spec set. 18 issues
 
 **Priority A — internal contradictions (BLOCKER + HIGH):**
 
-- ✅ **B1 — Spec 09 §Outputs lines 178–179 still carry `[_vN]` after the §File naming rewrite excised the rule.** Direct contradiction inside the same spec. Fix: drop `[_vN]` from both `<album-name> - YYYY-MM-DD[_vN].pdf` and `.html` lines.
-- ✅ **B2 — Spec 02 §approve §Behavior bullet 2 retains numeric "step 1 and step 2" reference.** Should cite `step:verify-paths` and `step:export-staging`.
-- ✅ **B3 — Spec 08 contains two stale "Spec 09 step 2" / "Spec 09 step 1" numeric citations.** Inline algorithm comment + TC-08-05a body. Should be `step:export-staging` and `step:verify-paths`.
-- ✅ **B5 — TC-09-26 has mojibake `ὑ2` instead of the lock codepoint.** ASCII-only convention applied wrongly. Fix: rewrite as `\U0001F512` per the project's ASCII-source convention.
-- ✅ **B6 — Spec 11 §Glyphs has no named constants; Spec 09 references `Glyphs.CHECK` / `Glyphs.LOCK` as if they were defined.** Fix: add a "Constants exposed in `theme.Glyphs`" subsection to Spec 11 §Glyphs mapping each glyph to a Python identifier.
+- ✅ [MUSI-0050] **B1 — Spec 09 §Outputs lines 178–179 still carry `[_vN]` after the §File naming rewrite excised the rule.**
+  Direct contradiction inside the same spec. Fix: drop `[_vN]` from both `<album-name> - YYYY-MM-DD[_vN].pdf` and `.html` lines.
+  Kind: implement.
+
+- ✅ [MUSI-0051] **B2 — Spec 02 §approve §Behavior bullet 2 retains numeric "step 1 and step 2" reference.**
+  Should cite `step:verify-paths` and `step:export-staging`.
+  Kind: implement.
+
+- ✅ [MUSI-0052] **B3 — Spec 08 contains two stale "Spec 09 step 2" / "Spec 09 step 1" numeric citations.**
+  Inline algorithm comment + TC-08-05a body. Should be `step:export-staging` and `step:verify-paths`.
+  Kind: implement.
+
+- ✅ [MUSI-0053] **B5 — TC-09-26 has mojibake `ὑ2` instead of the lock codepoint.**
+  ASCII-only convention applied wrongly. Fix: rewrite as `\U0001F512` per the project's ASCII-source convention.
+  Kind: implement.
+
+- ✅ [MUSI-0054] **B6 — Spec 11 §Glyphs has no named constants; Spec 09 references `Glyphs.CHECK` / `Glyphs.LOCK` as if they were defined.**
+  Fix: add a "Constants exposed in `theme.Glyphs`" subsection to Spec 11 §Glyphs mapping each glyph to a Python identifier.
+  Kind: implement.
 
 **Priority B — drift / semantic gap (MEDIUM):**
 
-- ✅ **B7 — Spec 02 `Albums/<slug>/` half-conversion drift.** §delete, §Outputs, the companions table, TC-02-05, TC-02-15 still use the literal `Albums/<slug>/`. Fix: add a one-line preamble — "Throughout this spec, `Albums/<slug>/` is shorthand for `<settings.albums_folder>/<slug>/`."
-- ✅ **B12 — Spec 09 §The reopen flow step 3 inlines the unapprove substeps instead of cross-referencing.** Fix: replace inline enumeration with "per Spec 02 §unapprove step 2.{i,ii,iii}."
-- ✅ **B13 — `step:render-rename-pdf` recovery row references a Spec 02 self-heal that doesn't exist.** Fix: weaken to "no self-heal needed; the marker is the source of truth."
-- ✅ **B14 — Spec 10 §Atomic pair scan uses `album.sanitised_name` without defining it.** Fix: add one-liner — "`album.sanitised_name` is `sanitise_title(album.name)` per Spec 09 §File naming."
-- ✅ **B15 — Atomic-pair glob can false-match on date-suffix album names** (e.g. `"Daily - 2026-04-30"`). Fix: add constraint — UI-side validation rejects album names ending in ` - YYYY-MM-DD`.
+- ✅ [MUSI-0055] **B7 — Spec 02 `Albums/<slug>/` half-conversion drift.**
+  §delete, §Outputs, the companions table, TC-02-05, TC-02-15 still use the literal `Albums/<slug>/`. Fix: add a one-line preamble — "Throughout this spec, `Albums/<slug>/` is shorthand for `<settings.albums_folder>/<slug>/`."
+  Kind: implement.
+
+- ✅ [MUSI-0056] **B12 — Spec 09 §The reopen flow step 3 inlines the unapprove substeps instead of cross-referencing.**
+  Fix: replace inline enumeration with "per Spec 02 §unapprove step 2.{i,ii,iii}."
+  Kind: implement.
+
+- ✅ [MUSI-0057] **B13 — `step:render-rename-pdf` recovery row references a Spec 02 self-heal that doesn't exist.**
+  Fix: weaken to "no self-heal needed; the marker is the source of truth."
+  Kind: implement.
+
+- ✅ [MUSI-0058] **B14 — Spec 10 §Atomic pair scan uses `album.sanitised_name` without defining it.**
+  Fix: add one-liner — "`album.sanitised_name` is `sanitise_title(album.name)` per Spec 09 §File naming."
+  Kind: implement.
+
+- ✅ [MUSI-0059] **B15 — Atomic-pair glob can false-match on date-suffix album names**
+  (e.g. `"Daily - 2026-04-30"`). Fix: add constraint — UI-side validation rejects album names ending in ` - YYYY-MM-DD`.
+  Kind: implement.
 
 **Priority C — cosmetic / docs hygiene (LOW):**
 
-- ✅ **B8 — Spec 09 doesn't state symmetric "approve regenerates symlinks/M3U; unapprove keeps them."** Fix: add a one-line note to §The reopen flow.
-- ✅ **B10 — Spec 08 inline comment "album.track_paths is list[str] per Spec 10" is misleading.** Fix: clarify — "list[str] on disk per Spec 10; coerce to Path here."
-- ✅ **B11 — TC-08-03 has no width=3 example.** Fix: add a one-line example for `len > 99`.
-- ✅ **B16 — Spec 10 TC-10-22/23 missing `(Phase 4)` tag.** Fix: tag consistently OR amend §Test contract preamble.
-- ✅ **B17 — Spec 11 §Branding "Generated by [icon] Album Builder" vs Spec 09 footer mismatch.** Fix: pick one — add icon to Spec 09 cover-page footer, OR drop "[icon]" from Spec 11.
+- ✅ [MUSI-0060] **B8 — Spec 09 doesn't state symmetric "approve regenerates symlinks/M3U; unapprove keeps them."**
+  Fix: add a one-line note to §The reopen flow.
+  Kind: implement.
+
+- ✅ [MUSI-0061] **B10 — Spec 08 inline comment "album.track_paths is list[str] per Spec 10" is misleading.**
+  Fix: clarify — "list[str] on disk per Spec 10; coerce to Path here."
+  Kind: implement.
+
+- ✅ [MUSI-0062] **B11 — TC-08-03 has no width=3 example.**
+  Fix: add a one-line example for `len > 99`.
+  Kind: implement.
+
+- ✅ [MUSI-0063] **B16 — Spec 10 TC-10-22/23 missing `(Phase 4)` tag.**
+  Fix: tag consistently OR amend §Test contract preamble.
+  Kind: implement.
+
+- ✅ [MUSI-0064] **B17 — Spec 11 §Branding "Generated by [icon] Album Builder" vs Spec 09 footer mismatch.**
+  Fix: pick one — add icon to Spec 09 cover-page footer, OR drop "[icon]" from Spec 11.
+  Kind: implement.
 
 **Closed-without-change (LOW):**
 
-- ✅ **B4 / B9 — Spec 08 in-algorithm "step N" self-references.** Closed by B3 (only cross-spec citations need updating).
-- ✅ **B18 — Spec 11 §Album cover placeholder.** Confirmed clean.
-- ✅ **TC-09-04 / TC-09-11 / TC-09-23 tombstones.** Confirmed acceptable cleanup approach.
+- ✅ [MUSI-0065] **B4 / B9 — Spec 08 in-algorithm "step N" self-references.**
+  Closed by B3 (only cross-spec citations need updating).
+  Kind: implement.
+
+- ✅ [MUSI-0066] **B18 — Spec 11 §Album cover placeholder.**
+  Confirmed clean.
+  Kind: implement.
+
+- ✅ [MUSI-0067] **TC-09-04 / TC-09-11 / TC-09-23 tombstones.**
+  Confirmed acceptable cleanup approach.
+  Kind: implement.
 
 #### ✅ Phase 4 prep — Round 3 spec sweep (2026-04-30)
 
 Single consolidated cold-eyes pass against the round-2 fixed spec set. 3 issues found — **convergence indicator**: round 1 = 39 actionable; round 2 = 17; round 3 = 3.
 
-- ✅ **C1 [HIGH] — Spec 02 §unapprove narration line 89 contradicts Spec 09's `step:render-rename-pdf` recovery contract.** Reads "Spec 09 self-heals this on next load by regenerating the report." No such "regenerate-on-load" self-heal exists in Spec 09 (recovery table says "no self-heal needed; user re-approves"). Fix: rewrite the sentence to match the actual contract — marker presence wins, a load-time toast prompts re-approve.
-- ✅ **C2 [MEDIUM] — Spec 10 §Atomic pair attributes the album-name regex constraint to "Spec 02 §rename" but neither Spec 02 §rename nor §create surfaces the rule.** A Spec-02-only reader would never see it. Fix: add the validation rule to Spec 02 §create + §rename + §Errors table; cross-reference Spec 10 §Atomic pair as the rationale.
-- ✅ **C3 [LOW] — Spec 11 §Constants exposed in `theme.Glyphs` includes `CLOSE` (`×`, U+00D7) but the visual §Glyphs table above does not.** Small narrative contradiction. Fix: add a `×` row to the upper visual table (toast close affordance) for parity.
+- ✅ [MUSI-0068] **C1 [HIGH] — Spec 02 §unapprove narration line 89 contradicts Spec 09's `step:render-rename-pdf` recovery contract.**
+  Reads "Spec 09 self-heals this on next load by regenerating the report." No such "regenerate-on-load" self-heal exists in Spec 09 (recovery table says "no self-heal needed; user re-approves"). Fix: rewrite the sentence to match the actual contract — marker presence wins, a load-time toast prompts re-approve.
+  Kind: implement.
+
+- ✅ [MUSI-0069] **C2 [MEDIUM] — Spec 10 §Atomic pair attributes the album-name regex constraint to "Spec 02 §rename" but neither Spec 02 §rename nor §create surfaces the rule.**
+  A Spec-02-only reader would never see it. Fix: add the validation rule to Spec 02 §create + §rename + §Errors table; cross-reference Spec 10 §Atomic pair as the rationale.
+  Kind: implement.
+
+- ✅ [MUSI-0070] **C3 [LOW] — Spec 11 §Constants exposed in `theme.Glyphs` includes `CLOSE` (`×`, U+00D7) but the visual §Glyphs table above does not.**
+  Small narrative contradiction. Fix: add a `×` row to the upper visual table (toast close affordance) for parity.
+  Kind: implement.
 
 #### ✅ Phase 4 prep — Round 4 confirmation pass (2026-04-30)
 
@@ -366,72 +571,207 @@ Author-bias flagged: parent session authored entire Phase 4 surface; cold-eyes l
 
 **Tier 1 — ship-this-week (CRITICAL + HIGH that breaks shipping invariants):**
 
-- ✅ **F1 [CRITICAL] — Drift-detection unwired (Theme O).** `services/export.py:188-208` defines `is_export_fresh` with zero callers; `services/album_store.py:138-147` calls `cleanup_stale_staging` and discards its return value (documented as "caller may flag the album `needs_regen`"). Spec 08 line 167 mandates `AlbumStore.load()` to set `needs_regen` on count mismatch; current code can never repair a kill-mid-`_commit_export` short of user mutation. Fix: add `needs_regen` attribute, wire scan in `rescan()`, trigger regeneration via Qt signal on next mutation.
-- ✅ **F2 [CRITICAL] — Hardlink/copy fallback chain unimplemented (Theme O, scope decision).** `services/export.py:257` calls `link.symlink_to(...)` with no `try/except OSError`; `fs_supports_symlinks` + `_load_fs_caps` + `_save_fs_caps` + `_fs_key` + `_FS_CAPS_CACHE_PATH` are zombie code (50 LoC). FAT32/vfat album folder produces a stack trace instead of spec'd fallback. **Decision: scope-out the FAT32 fallback for v0.5.0 (not a real-world Linux desktop case)** — delete the dead infrastructure + amend Spec 08 §Errors to mark "Album folder on FS without symlink support" as v0.6+ defer.
-- ✅ **F3 [CRITICAL] — `assert staging.parent == folder` disappears under `python -O`.** `services/export.py:416`. Spec 08 line 147 explicitly contrasts "asserted, not just commented" — but `assert` is exactly the wrong tool. Fix: replace with `if … != …: raise RuntimeError(...)`.
-- ✅ **F4 [CRITICAL] — Pre-flight approve dialog uses default Qt Yes/No.** `ui/main_window.py:282-285`. Spec 09 §The approve flow step 3 mandates literal "Approve and generate report" / "Cancel" labels with destructive styling; default-Cancel per UX safety. Today: localised "Yes/No" defaults to Yes. Fix: replace `QMessageBox.question(...)` with custom `QMessageBox` mirroring `_on_reopen` shape.
-- ✅ **F5 [CRITICAL] — `_show_toast` `statusBar()` fallback materialises a permanent status bar.** `ui/main_window.py:349-351`. Calling `statusBar()` instantiates the widget. `hasattr(self, "statusBar")` is always True (inherited method). Fix: drop the fallback; toast widget is always present in normal init.
-- ✅ **F6 [CRITICAL] — `render_report` writes tmp via bare `open()` not `atomic_write_text`.** `services/report.py:264-276`. Spec 09 §step:render-tmp says "Write reports/… via Spec 10 atomic_write_text"; current code does `fsync(fh.fileno())` but skips parent-dir fsync. Fix: route through `atomic_io._atomic_write` or replicate its dir-fsync. (Note: the contract is satisfied at the file level; this is dir-level durability.)
-- ✅ **F7 [HIGH] — `_commit_export` partial-failure leaks staging files (Theme N adjacent).** `services/export.py:286-291`. The for-loop calls `os.replace` per entry; ENOSPC mid-loop leaves half the new symlinks plus stale ones from previous order. Fix: catch OSError, log, skip stale-unlink step so previous order survives.
-- ✅ **F8 [HIGH] — Atomic-pair recovery hole, in-process (Theme N).** `services/report.py:289-298`. On second `os.replace` failure, `html_final` orphan stays. Fix: in `except OSError` branch, also attempt `html_final.unlink()` matching Spec 10 "delete both".
-- ✅ **F9 [HIGH] — `library=None` branch in `approve()` silently skips export+report.** `services/album_store.py:313-322`. Spec 09 mandates steps 2-3; legacy compatibility branch produces "approved album with no artefacts" — exact invariant the spec forbids. Fix: drop the branch (update the legacy test to pass a fake library) or raise on `None`.
-- ✅ **F10 [HIGH] — `pairs_repaired` increments even when `unlink` failed.** `persistence/atomic_pair.py:90-102`. Stat lies to caller. Fix: increment only when both unlinks succeed; same for `tmps_swept`.
-- ✅ **F11 [HIGH] — `_DATE_STEM_RE` is dead code.** `persistence/atomic_pair.py:23`. Module-top regex never used; inline copy at line 60 does the actual matching. Fix: delete the global; use the inline form (or refactor inline → global).
-- ✅ **F12 [HIGH] — `·` glyph hardcoded in toast message (Theme J recurrence).** `ui/main_window.py:305`. Spec 11 §Constants single-source rule. Fix: add `Glyphs.MIDDOT = "·"` (or `Glyphs.SEP`) and reference it.
-- ✅ **F13 [HIGH] — `except Exception` in `_on_approve` post-niceties (Theme M).** `ui/main_window.py:311`. Fix: narrow to `(OSError, ImportError)`.
-- ✅ **F14 [HIGH] — `except OSError` in `rescan()` self-heal too narrow (Theme M).** `services/album_store.py:145`. `scan_reports_dir` could raise `re.error` in a future edit; `cleanup_stale_staging` could raise `ValueError` on bad input. Fix: add inline comment naming the policy ("OSError only — logic errors propagate to surface bugs"); broader catch with explicit raise-on-non-OSError.
-- ✅ **F15 [HIGH] — Approve-failure leaves user with no toast surface.** `ui/main_window.py:285-294`. Spec 09 §Errors row "Disk full at PDF write time → Toast error". Fix: emit toast on OSError alongside (or instead of) the QMessageBox.warning.
-- ✅ **F16 [HIGH] — Pillow optional + raw-bytes-survive masks decode failure.** `services/report.py:86-88`. With Pillow missing AND corrupt bytes, broken bytes flow into the data URI; WeasyPrint may abort. Fix: make Pillow a hard runtime dep (it's installed in venv), drop the `try/except ImportError`.
+- ✅ [MUSI-0071] **F1 [CRITICAL] — Drift-detection unwired (Theme O).**
+  `services/export.py:188-208` defines `is_export_fresh` with zero callers; `services/album_store.py:138-147` calls `cleanup_stale_staging` and discards its return value (documented as "caller may flag the album `needs_regen`"). Spec 08 line 167 mandates `AlbumStore.load()` to set `needs_regen` on count mismatch; current code can never repair a kill-mid-`_commit_export` short of user mutation. Fix: add `needs_regen` attribute, wire scan in `rescan()`, trigger regeneration via Qt signal on next mutation.
+  Kind: implement.
+
+- ✅ [MUSI-0072] **F2 [CRITICAL] — Hardlink/copy fallback chain unimplemented (Theme O, scope decision).**
+  `services/export.py:257` calls `link.symlink_to(...)` with no `try/except OSError`; `fs_supports_symlinks` + `_load_fs_caps` + `_save_fs_caps` + `_fs_key` + `_FS_CAPS_CACHE_PATH` are zombie code (50 LoC). FAT32/vfat album folder produces a stack trace instead of spec'd fallback. **Decision: scope-out the FAT32 fallback for v0.5.0 (not a real-world Linux desktop case)** — delete the dead infrastructure + amend Spec 08 §Errors to mark "Album folder on FS without symlink support" as v0.6+ defer.
+  Kind: implement.
+
+- ✅ [MUSI-0073] **F3 [CRITICAL] — `assert staging.parent == folder` disappears under `python -O`.**
+  `services/export.py:416`. Spec 08 line 147 explicitly contrasts "asserted, not just commented" — but `assert` is exactly the wrong tool. Fix: replace with `if … != …: raise RuntimeError(...)`.
+  Kind: implement.
+
+- ✅ [MUSI-0074] **F4 [CRITICAL] — Pre-flight approve dialog uses default Qt Yes/No.**
+  `ui/main_window.py:282-285`. Spec 09 §The approve flow step 3 mandates literal "Approve and generate report" / "Cancel" labels with destructive styling; default-Cancel per UX safety. Today: localised "Yes/No" defaults to Yes. Fix: replace `QMessageBox.question(...)` with custom `QMessageBox` mirroring `_on_reopen` shape.
+  Kind: implement.
+
+- ✅ [MUSI-0075] **F5 [CRITICAL] — `_show_toast` `statusBar()` fallback materialises a permanent status bar.**
+  `ui/main_window.py:349-351`. Calling `statusBar()` instantiates the widget. `hasattr(self, "statusBar")` is always True (inherited method). Fix: drop the fallback; toast widget is always present in normal init.
+  Kind: implement.
+
+- ✅ [MUSI-0076] **F6 [CRITICAL] — `render_report` writes tmp via bare `open()` not `atomic_write_text`.**
+  `services/report.py:264-276`. Spec 09 §step:render-tmp says "Write reports/… via Spec 10 atomic_write_text"; current code does `fsync(fh.fileno())` but skips parent-dir fsync. Fix: route through `atomic_io._atomic_write` or replicate its dir-fsync. (Note: the contract is satisfied at the file level; this is dir-level durability.)
+  Kind: implement.
+
+- ✅ [MUSI-0077] **F7 [HIGH] — `_commit_export` partial-failure leaks staging files (Theme N adjacent).**
+  `services/export.py:286-291`. The for-loop calls `os.replace` per entry; ENOSPC mid-loop leaves half the new symlinks plus stale ones from previous order. Fix: catch OSError, log, skip stale-unlink step so previous order survives.
+  Kind: implement.
+
+- ✅ [MUSI-0078] **F8 [HIGH] — Atomic-pair recovery hole, in-process (Theme N).**
+  `services/report.py:289-298`. On second `os.replace` failure, `html_final` orphan stays. Fix: in `except OSError` branch, also attempt `html_final.unlink()` matching Spec 10 "delete both".
+  Kind: implement.
+
+- ✅ [MUSI-0079] **F9 [HIGH] — `library=None` branch in `approve()` silently skips export+report.**
+  `services/album_store.py:313-322`. Spec 09 mandates steps 2-3; legacy compatibility branch produces "approved album with no artefacts" — exact invariant the spec forbids. Fix: drop the branch (update the legacy test to pass a fake library) or raise on `None`.
+  Kind: implement.
+
+- ✅ [MUSI-0080] **F10 [HIGH] — `pairs_repaired` increments even when `unlink` failed.**
+  `persistence/atomic_pair.py:90-102`. Stat lies to caller. Fix: increment only when both unlinks succeed; same for `tmps_swept`.
+  Kind: implement.
+
+- ✅ [MUSI-0081] **F11 [HIGH] — `_DATE_STEM_RE` is dead code.**
+  `persistence/atomic_pair.py:23`. Module-top regex never used; inline copy at line 60 does the actual matching. Fix: delete the global; use the inline form (or refactor inline → global).
+  Kind: implement.
+
+- ✅ [MUSI-0082] **F12 [HIGH] — `·` glyph hardcoded in toast message (Theme J recurrence).**
+  `ui/main_window.py:305`. Spec 11 §Constants single-source rule. Fix: add `Glyphs.MIDDOT = "·"` (or `Glyphs.SEP`) and reference it.
+  Kind: implement.
+
+- ✅ [MUSI-0083] **F13 [HIGH] — `except Exception` in `_on_approve` post-niceties (Theme M).**
+  `ui/main_window.py:311`. Fix: narrow to `(OSError, ImportError)`.
+  Kind: implement.
+
+- ✅ [MUSI-0084] **F14 [HIGH] — `except OSError` in `rescan()` self-heal too narrow (Theme M).**
+  `services/album_store.py:145`. `scan_reports_dir` could raise `re.error` in a future edit; `cleanup_stale_staging` could raise `ValueError` on bad input. Fix: add inline comment naming the policy ("OSError only — logic errors propagate to surface bugs"); broader catch with explicit raise-on-non-OSError.
+  Kind: implement.
+
+- ✅ [MUSI-0085] **F15 [HIGH] — Approve-failure leaves user with no toast surface.**
+  `ui/main_window.py:285-294`. Spec 09 §Errors row "Disk full at PDF write time → Toast error". Fix: emit toast on OSError alongside (or instead of) the QMessageBox.warning.
+  Kind: implement.
+
+- ✅ [MUSI-0086] **F16 [HIGH] — Pillow optional + raw-bytes-survive masks decode failure.**
+  `services/report.py:86-88`. With Pillow missing AND corrupt bytes, broken bytes flow into the data URI; WeasyPrint may abort. Fix: make Pillow a hard runtime dep (it's installed in venv), drop the `try/except ImportError`.
+  Kind: implement.
 
 **Tier 2 — hardening sweep (MEDIUM):**
 
-- ✅ **F17 — TOCTOU window between `step:verify-paths` and `step:export-staging`.** `services/album_store.py:307-315`. Mitigation is `strict=True` in export; pre-flight is UX only. Fix: add comment naming the mitigation so a future cleanup-pass author doesn't delete one half.
-- ✅ **F18 — Re-entrant `approve()` not guarded at service layer.** `services/album_store.py:290`. Contract delegated to UI button-disabling. Fix: add `_approve_in_flight: set[UUID]` guard.
-- ✅ **F19 — `unapprove()` partial-rmtree leaves indeterminate state.** `services/album_store.py:336-342`. EBUSY/EACCES mid-tree raises; album stays APPROVED with half-deleted reports/. Fix: catch OSError, retry once, then surface clear "manual cleanup needed" toast.
-- ✅ **F20 — 64-byte sanity check doesn't verify zero-length.** `services/export.py:259-263`. `fh.read(64)` returns `b""` for both zero-length AND short-file-no-error; warning never fires. Fix: check return-value bytes against a minimum threshold.
-- ✅ **F21 — M3U round-trip parse promised but not implemented.** `services/export.py:268`. Spec 08 line 186. Fix: scope-out for v0.5.0 (move to v0.6+ in spec) — round-trip is sanity, not safety.
-- ✅ **F22 — Toast surface for control-char rejection.** `services/export.py:162` (`_render_m3u`) and `:245-247` (`_build_staging`). Fix: return `(created, warnings)` tuple from `regenerate_album_exports` so caller can surface a toast.
-- ✅ **F23 — Permissions error in album folder gives stack trace, not toast.** `services/export.py:412-414`. `staging.mkdir()` raises `PermissionError`; no try-block around it. Fix: catch + raise `ExportFailed` with user-friendly message.
-- ✅ **F24 — `_append_export_log` write failure kills successful export.** `services/export.py:326`. Fix: wrap in try/except; log-and-continue (best-effort).
-- ✅ **F25 — `pairs_repaired`/`tmps_swept` accuracy + glob-escape sanitised_name.** `persistence/atomic_pair.py:41`. Album name with `[` or `]` (sanitiser doesn't strip these) silently fails to match. Fix: `glob.escape(sanitised_name)`.
-- ✅ **F26 — Both-finals + stale-tmp branch missing in scan.** `persistence/atomic_pair.py:88-110`. State not in spec recovery table but spirit ("never half-good") implies stale `.tmp` should be swept. Fix: add `else: unlink(tmps)` arm.
-- ✅ **F27 — `version_string()` falls back only on `ImportError`.** `services/report.py:49`. `AttributeError` (no `__version__` attr) raises. Fix: catch `(ImportError, AttributeError)`.
-- ✅ **F28 — Reopen confirm dialog has no warning icon, no destructive styling.** `ui/main_window.py:325-332`. TC-09-20 last sentence. Fix: `setIcon(QMessageBox.Icon.Warning)` + `setObjectName("DestructiveButton")` + QSS rule.
-- ✅ **F29 — Approve confirm default-Yes; should be default-Cancel.** `ui/main_window.py:282-285`. Destructive (irreversible) UI. Subsumed by F4 (custom dialog).
-- ✅ **F30 — Settings re-read on every approve.** `ui/main_window.py:307-310`. Fix: cache at app start; invalidate via signal on settings-change.
-- ✅ **F31 — Theme not whitelisted in `read_ui`.** `persistence/settings.py:201-203`. Spec 10 says only `"dark-colourful"` is valid. Fix: add `ALLOWED_THEMES = frozenset({"dark-colourful"})`.
-- ✅ **F32 — Date-suffix regex matches pre-sanitise; spec says post-sanitise.** `domain/album.py:30`. Same set rejected in practice (sanitiser doesn't change date pattern), but spec-vs-code drift. Fix: add comment naming the equivalence; OR match against `sanitise_title(n)`.
+- ✅ [MUSI-0087] **F17 — TOCTOU window between `step:verify-paths` and `step:export-staging`.**
+  `services/album_store.py:307-315`. Mitigation is `strict=True` in export; pre-flight is UX only. Fix: add comment naming the mitigation so a future cleanup-pass author doesn't delete one half.
+  Kind: implement.
+
+- ✅ [MUSI-0088] **F18 — Re-entrant `approve()` not guarded at service layer.**
+  `services/album_store.py:290`. Contract delegated to UI button-disabling. Fix: add `_approve_in_flight: set[UUID]` guard.
+  Kind: implement.
+
+- ✅ [MUSI-0089] **F19 — `unapprove()` partial-rmtree leaves indeterminate state.**
+  `services/album_store.py:336-342`. EBUSY/EACCES mid-tree raises; album stays APPROVED with half-deleted reports/. Fix: catch OSError, retry once, then surface clear "manual cleanup needed" toast.
+  Kind: implement.
+
+- ✅ [MUSI-0090] **F20 — 64-byte sanity check doesn't verify zero-length.**
+  `services/export.py:259-263`. `fh.read(64)` returns `b""` for both zero-length AND short-file-no-error; warning never fires. Fix: check return-value bytes against a minimum threshold.
+  Kind: implement.
+
+- ✅ [MUSI-0091] **F21 — M3U round-trip parse promised but not implemented.**
+  `services/export.py:268`. Spec 08 line 186. Fix: scope-out for v0.5.0 (move to v0.6+ in spec) — round-trip is sanity, not safety.
+  Kind: implement.
+
+- ✅ [MUSI-0092] **F22 — Toast surface for control-char rejection.**
+  `services/export.py:162` (`_render_m3u`) and `:245-247` (`_build_staging`). Fix: return `(created, warnings)` tuple from `regenerate_album_exports` so caller can surface a toast.
+  Kind: implement.
+
+- ✅ [MUSI-0093] **F23 — Permissions error in album folder gives stack trace, not toast.**
+  `services/export.py:412-414`. `staging.mkdir()` raises `PermissionError`; no try-block around it. Fix: catch + raise `ExportFailed` with user-friendly message.
+  Kind: implement.
+
+- ✅ [MUSI-0094] **F24 — `_append_export_log` write failure kills successful export.**
+  `services/export.py:326`. Fix: wrap in try/except; log-and-continue (best-effort).
+  Kind: implement.
+
+- ✅ [MUSI-0095] **F25 — `pairs_repaired`/`tmps_swept` accuracy + glob-escape sanitised_name.**
+  `persistence/atomic_pair.py:41`. Album name with `[` or `]` (sanitiser doesn't strip these) silently fails to match. Fix: `glob.escape(sanitised_name)`.
+  Kind: implement.
+
+- ✅ [MUSI-0096] **F26 — Both-finals + stale-tmp branch missing in scan.**
+  `persistence/atomic_pair.py:88-110`. State not in spec recovery table but spirit ("never half-good") implies stale `.tmp` should be swept. Fix: add `else: unlink(tmps)` arm.
+  Kind: implement.
+
+- ✅ [MUSI-0097] **F27 — `version_string()` falls back only on `ImportError`.**
+  `services/report.py:49`. `AttributeError` (no `__version__` attr) raises. Fix: catch `(ImportError, AttributeError)`.
+  Kind: implement.
+
+- ✅ [MUSI-0098] **F28 — Reopen confirm dialog has no warning icon, no destructive styling.**
+  `ui/main_window.py:325-332`. TC-09-20 last sentence. Fix: `setIcon(QMessageBox.Icon.Warning)` + `setObjectName("DestructiveButton")` + QSS rule.
+  Kind: implement.
+
+- ✅ [MUSI-0099] **F29 — Approve confirm default-Yes; should be default-Cancel.**
+  `ui/main_window.py:282-285`. Destructive (irreversible) UI. Subsumed by F4 (custom dialog).
+  Kind: implement.
+
+- ✅ [MUSI-0100] **F30 — Settings re-read on every approve.**
+  `ui/main_window.py:307-310`. Fix: cache at app start; invalidate via signal on settings-change.
+  Kind: implement.
+
+- ✅ [MUSI-0101] **F31 — Theme not whitelisted in `read_ui`.**
+  `persistence/settings.py:201-203`. Spec 10 says only `"dark-colourful"` is valid. Fix: add `ALLOWED_THEMES = frozenset({"dark-colourful"})`.
+  Kind: implement.
+
+- ✅ [MUSI-0102] **F32 — Date-suffix regex matches pre-sanitise; spec says post-sanitise.**
+  `domain/album.py:30`. Same set rejected in practice (sanitiser doesn't change date pattern), but spec-vs-code drift. Fix: add comment naming the equivalence; OR match against `sanitise_title(n)`.
+  Kind: implement.
 
 **Tier 3 — structural / cosmetic (LOW + INFO):**
 
-- ✅ **F33 — Library walked 2-3 times per export pass.** `services/export.py:140-185, 216-269`. Fix: pass `rendered: list[(Path, Track)]` to `_render_m3u`.
-- ✅ **F34 — Inline imports in `main_window.py` `_on_approve` / `_on_reopen`.** Lines 267, 302, 307, 318. Fix: move to module-top.
-- ✅ **F35 — Unicode em-dash in template `<title>` + `·` in footer.** `services/templates/report.html.j2:5, 251`. Fix: replace with ASCII `-` (template not linted by ruff).
-- ✅ **F36 — Performed-by template line is unreachable.** `services/templates/report.html.j2:192`. Predicate `all_artist and not artist` always False because `artist = columns["all_artist"]`. Fix: drop the line, or rewrite predicate against the mixed-artist case.
-- ✅ **F37 — `report_paths_for` `cover_uri` MIME hardcoded `image/jpeg`.** `services/report.py:107-110`. PNG cover_override would mislabel. Fix: detect via Pillow, or stream raw bytes through Pillow → JPEG always.
-- ✅ **F38 — Approve runs synchronously on GUI thread.** `ui/main_window.py:285-294`. 5s budget per Spec 09 §Performance freezes UI. **Defer to v0.5.1** — Phase 4 ships synchronous; threaded approve is a hardening pass.
-- ✅ **F39 — Focus restoration after approve dialog close.** WCAG §2.4.3. Fix: `self.top_bar.btn_reopen.setFocus()` post-success.
-- ✅ **F40 — `EXPORT_LOG_RETAIN = 10` truncates user-edited logs silently.** Cosmetic.
+- ✅ [MUSI-0103] **F33 — Library walked 2-3 times per export pass.**
+  `services/export.py:140-185, 216-269`. Fix: pass `rendered: list[(Path, Track)]` to `_render_m3u`.
+  Kind: implement.
+
+- ✅ [MUSI-0104] **F34 — Inline imports in `main_window.py` `_on_approve` / `_on_reopen`.**
+  Lines 267, 302, 307, 318. Fix: move to module-top.
+  Kind: implement.
+
+- ✅ [MUSI-0105] **F35 — Unicode em-dash in template `<title>` + `·` in footer.**
+  `services/templates/report.html.j2:5, 251`. Fix: replace with ASCII `-` (template not linted by ruff).
+  Kind: implement.
+
+- ✅ [MUSI-0106] **F36 — Performed-by template line is unreachable.**
+  `services/templates/report.html.j2:192`. Predicate `all_artist and not artist` always False because `artist = columns["all_artist"]`. Fix: drop the line, or rewrite predicate against the mixed-artist case.
+  Kind: implement.
+
+- ✅ [MUSI-0107] **F37 — `report_paths_for` `cover_uri` MIME hardcoded `image/jpeg`.**
+  `services/report.py:107-110`. PNG cover_override would mislabel. Fix: detect via Pillow, or stream raw bytes through Pillow → JPEG always.
+  Kind: implement.
+
+- ✅ [MUSI-0108] **F38 — Approve runs synchronously on GUI thread.**
+  `ui/main_window.py:285-294`. 5s budget per Spec 09 §Performance freezes UI. **Defer to v0.5.1** — Phase 4 ships synchronous; threaded approve is a hardening pass.
+  Kind: implement.
+
+- ✅ [MUSI-0109] **F39 — Focus restoration after approve dialog close.**
+  WCAG §2.4.3. Fix: `self.top_bar.btn_reopen.setFocus()` post-success.
+  Kind: implement.
+
+- ✅ [MUSI-0110] **F40 — `EXPORT_LOG_RETAIN = 10` truncates user-edited logs silently.**
+  Cosmetic.
+  Kind: implement.
 
 **Closed without change:**
 
-- ✅ **Verified — `xdg-open` argv injection.** `subprocess.Popen([list], …)` — list-form, no shell. Safe.
-- ✅ **Verified — Jinja2 `select_autoescape(["html", "xml"])` blocks the XSS class.** `services/report.py:206`.
-- ✅ **Verified — Single-template, two-output rendering, no `_vN` suffix, lyrics 32 KB cap, three-state composer column, page-break + word-wrap CSS, single-file portability, name regex DoS-safe** — all match spec.
+- ✅ [MUSI-0111] **Verified — `xdg-open` argv injection.**
+  `subprocess.Popen([list], …)` — list-form, no shell. Safe.
+  Kind: implement.
+
+- ✅ [MUSI-0112] **Verified — Jinja2 `select_autoescape(["html", "xml"])` blocks the XSS class.**
+  `services/report.py:206`.
+  Kind: implement.
+
+- ✅ [MUSI-0113] **Verified — Single-template, two-output rendering, no `_vN` suffix, lyrics 32 KB cap, three-state composer column, page-break + word-wrap CSS, single-file portability, name regex DoS-safe**
+  — all match spec.
+  Kind: implement.
 
 ##### 🔥 Round 2 indie-review (2026-04-30 post-fix)
 
 Single-lane cold-eyes follow-up against the round-1 fixed code. 3 surviving findings (2 HIGH, 1 MEDIUM); all closed.
 
-- ✅ **G1 [HIGH] — `_show_toast` typo `self.toast` vs `self._toast`.** `ui/main_window.py`. Round-1 introduced the bug; every toast (success, failure, reopen-partial) silently logged-only. Fixed: read `self._toast` via `getattr` to keep the test-isolation safety.
-- ✅ **G2 [HIGH] — `_needs_regen` set in `rescan()` but never consumed on a draft mutation.** Spec 08 §`_commit_export` Drift-detection ("next mutation re-runs the full sequence") was unwired. Fixed: added `AlbumStore.schedule_export(album_id, library)` method calling `regenerate_album_exports(strict=False)` and clearing the flag; wired from main_window's `_on_target_changed`, `_on_track_toggled`, `_on_reorder_done`.
-- ✅ **G3 [MEDIUM] — `_commit_export` partial-promote never raised in strict mode.** A failed promote let approve continue to `step:render-tmp` against a half-promoted folder. Fixed: added `strict` parameter to `_commit_export`; `regenerate_album_exports` passes its own `strict` through; failure raises `ExportFailed`.
+- ✅ [MUSI-0114] **G1 [HIGH] — `_show_toast` typo `self.toast` vs `self._toast`.**
+  `ui/main_window.py`. Round-1 introduced the bug; every toast (success, failure, reopen-partial) silently logged-only. Fixed: read `self._toast` via `getattr` to keep the test-isolation safety.
+  Kind: implement.
+
+- ✅ [MUSI-0115] **G2 [HIGH] — `_needs_regen` set in `rescan()` but never consumed on a draft mutation.**
+  Spec 08 §`_commit_export` Drift-detection ("next mutation re-runs the full sequence") was unwired. Fixed: added `AlbumStore.schedule_export(album_id, library)` method calling `regenerate_album_exports(strict=False)` and clearing the flag; wired from main_window's `_on_target_changed`, `_on_track_toggled`, `_on_reorder_done`.
+  Kind: implement.
+
+- ✅ [MUSI-0116] **G3 [MEDIUM] — `_commit_export` partial-promote never raised in strict mode.**
+  A failed promote let approve continue to `step:render-tmp` against a half-promoted folder. Fixed: added `strict` parameter to `_commit_export`; `regenerate_album_exports` passes its own `strict` through; failure raises `ExportFailed`.
+  Kind: implement.
 
 ##### ✅ Round 3 indie-review confirmation pass (2026-04-30)
 
 Single-lane cold-eyes verification against the round-2 fixed code. **0 findings introduced by round-2 fixes.** 1 pre-existing dead branch flagged (`_key_in_text_field` line 482 — pre-existing, not Phase 4). 1 hygiene finding (G2 — `_needs_regen` not discarded on `delete()`); fixed inline.
 
-- ✅ **H1 [LOW, hygiene] — `_needs_regen.discard(album_id)` and `_approve_in_flight.discard(album_id)` on `delete()`.** Stale ids accumulating across long delete-heavy sessions. Fixed.
+- ✅ [MUSI-0117] **H1 [LOW, hygiene] — `_needs_regen.discard(album_id)` and `_approve_in_flight.discard(album_id)` on `delete()`.**
+  Stale ids accumulating across long delete-heavy sessions. Fixed.
+  Kind: implement.
 
 ##### ✅ Full-codebase audit (2026-04-30)
 
@@ -571,32 +911,81 @@ Framework: pytest + pytest-qt. Files scanned: 49. Dimensions: all 18 from `~/.cl
 Pre-pass grep produced 3 false positives (all confirmed mitigated): `datetime.now(UTC)` in fixture-construction helpers, `https://www.w3.org/2000/svg` XML-namespace string, real WhisperX import gated correctly via `pytest.importorskip` + `AB_INTEGRATION_LYRICS=1`.
 
 **Correctness & accuracy (Dim 1-3)**
-- ✅ **MED — `tests/test_main_window_usage.py` `inspect.getsource()` antipattern.** Initially flagged as HIGH; on verification, the rebuild call IS a documented Spec 13 §Behavior contract ("rebuild before pane refresh so the Used column paints once with correct counts"), so a source-text grep is appropriate. Behavioural alternative attempted (monkeypatch spy on `UsageIndex.rebuild`) deadlocks on `_on_approve`'s modal `QMessageBox.exec()` and would require mocking 4+ unrelated side-effects (toast, file-manager open, report generation, dialog button). Kept the source-grep but parametrized over `[_on_approve, _on_reopen]` and added a spec-anchored failure message naming the contract. True behavioural coverage waits on a `_after_approve_success` extraction (out of scope for this audit pass).
+
+- ✅ [MUSI-0118] **MED — `tests/test_main_window_usage.py` `inspect.getsource()` antipattern.**
+  Initially flagged as HIGH; on verification, the rebuild call IS a documented Spec 13 §Behavior contract ("rebuild before pane refresh so the Used column paints once with correct counts"), so a source-text grep is appropriate. Behavioural alternative attempted (monkeypatch spy on `UsageIndex.rebuild`) deadlocks on `_on_approve`'s modal `QMessageBox.exec()` and would require mocking 4+ unrelated side-effects (toast, file-manager open, report generation, dialog button). Kept the source-grep but parametrized over `[_on_approve, _on_reopen]` and added a spec-anchored failure message naming the contract. True behavioural coverage waits on a `_after_approve_success` extraction (out of scope for this audit pass).
   Resolved (2026-06-17): landed the extraction as `MainWindow._refresh_panes_after_lifecycle_change(album_id)` - the identical rebuild + 3-pane-refresh chain that `_on_approve` and `_on_reopen` had each duplicated verbatim (reuse-before-rewriting; net -1 production line). The `inspect.getsource` behaviour-grep is replaced by `test_refresh_after_lifecycle_change_rebuilds_before_pane_refresh`, which drives the helper directly with order-recording spies and asserts the actual Spec 13 ORDERING contract (rebuild strictly precedes every pane refresh) - something a source grep can never verify. A narrow, documented `getsource` sentinel remains only to guard that both handlers still *delegate* to the helper (driving the full handlers would need a real symlink export + WeasyPrint PDF just to reach the refresh). Full suite green (pytest exit 0, 8.5s, no teardown hang); ruff clean.
-- ✅ **HIGH — `tests/domain/test_album.py:53,184` `>=` allows zero-mutation pass.** `assert a.updated_at >= before` passes if `_now()` returns the same microsecond twice (fast systems). Replaced with `monkeypatch.setattr(album, "_now", ...)` returning a known-later timestamp so the assertion becomes `>`.
-- ✅ **HIGH — `tests/persistence/test_settings.py:160` vacuous bool-volume test.** `test_audio_rejects_bool_volume` was asserting `"audio" in json.dumps(raw)` — tests the `json` stdlib, not the SUT. Rewritten to write the file via the `xdg_config` fixture, call `settings.read_audio()`, assert `volume == DEFAULT_VOLUME` (i.e. the bool guard at `settings.py:144` actually fired).
-- ✅ **HIGH — Coverage gap: `tests/domain/test_album.py` missing date-suffix rejection.** `_validate_name` rejects names matching `r".* - \d{4}-\d{2}-\d{2}$"` (Spec 10 §Atomic pair) — untested. Added `"My Album - 2026-01-01"` to the parametrized bad-names lists for both `create` and `rename`.
-- ✅ **HIGH — Coverage gap: TC-04-02 `deselect()` when approved untested.** Symmetric to `select()` — the spec says BOTH raise. Added `test_album_deselect_rejects_when_approved`.
-- ✅ **HIGH — Coverage gap: TC-01-08 only TITLE sort tested.** Parametrized `test_library_sort_ascending_descending` across `SortKey.TITLE / ARTIST / ALBUM / COMPOSER` (DURATION skipped — fixture tracks are 1s silent, so durations are identical).
-- ✅ **MED — `tests/persistence/test_album_io.py:72` string-scrape key-order heuristic.** Replaced 2-line split-on-`"` heuristic with `list(json.loads(raw).keys())`; both reads share the same JSON-decode path.
+  Kind: implement.
+
+- ✅ [MUSI-0119] **HIGH — `tests/domain/test_album.py:53,184` `>=` allows zero-mutation pass.**
+  `assert a.updated_at >= before` passes if `_now()` returns the same microsecond twice (fast systems). Replaced with `monkeypatch.setattr(album, "_now", ...)` returning a known-later timestamp so the assertion becomes `>`.
+  Kind: implement.
+
+- ✅ [MUSI-0120] **HIGH — `tests/persistence/test_settings.py:160` vacuous bool-volume test.**
+  `test_audio_rejects_bool_volume` was asserting `"audio" in json.dumps(raw)` — tests the `json` stdlib, not the SUT. Rewritten to write the file via the `xdg_config` fixture, call `settings.read_audio()`, assert `volume == DEFAULT_VOLUME` (i.e. the bool guard at `settings.py:144` actually fired).
+  Kind: implement.
+
+- ✅ [MUSI-0121] **HIGH — Coverage gap: `tests/domain/test_album.py` missing date-suffix rejection.**
+  `_validate_name` rejects names matching `r".* - \d{4}-\d{2}-\d{2}$"` (Spec 10 §Atomic pair) — untested. Added `"My Album - 2026-01-01"` to the parametrized bad-names lists for both `create` and `rename`.
+  Kind: implement.
+
+- ✅ [MUSI-0122] **HIGH — Coverage gap: TC-04-02 `deselect()` when approved untested.**
+  Symmetric to `select()` — the spec says BOTH raise. Added `test_album_deselect_rejects_when_approved`.
+  Kind: implement.
+
+- ✅ [MUSI-0123] **HIGH — Coverage gap: TC-01-08 only TITLE sort tested.**
+  Parametrized `test_library_sort_ascending_descending` across `SortKey.TITLE / ARTIST / ALBUM / COMPOSER` (DURATION skipped — fixture tracks are 1s silent, so durations are identical).
+  Kind: implement.
+
+- ✅ [MUSI-0124] **MED — `tests/persistence/test_album_io.py:72` string-scrape key-order heuristic.**
+  Replaced 2-line split-on-`"` heuristic with `list(json.loads(raw).keys())`; both reads share the same JSON-decode path.
+  Kind: implement.
 
 **Reliability & isolation (Dim 5-7)**
-- ✅ **HIGH — `tests/persistence/test_debounce.py:64` cancel-test vacuous-pass risk.** `test_cancel_drops_pending_callback_without_firing` used `qtbot.wait(80)` for a 20-ms timer; under CI event-loop starvation the timer could simply *not fire*, making "calls == []" trivially true and giving false confidence in `cancel()`. Replaced with `w.flush_all()` so the assertion is deterministic.
-- ✅ **HIGH — `tests/persistence/test_atomic_io.py:64` direct attribute monkeypatch.** `aio.os.replace = capture_then_replace` with manual `try/finally` is KeyboardInterrupt-unsafe. Replaced with `monkeypatch.setattr(aio.os, "replace", capture_then_replace)`.
-- ✅ **MED — `tests/services/test_player.py:245` bare `assert errors`.** No content check — a malformed error from any source would pass. Tightened to `assert len(errors) == 1` and `"does-not-exist" in errors[0]`.
-- ✅ **MED — `tests/services/test_player.py:272` `state() in (PLAYING, STOPPED, PAUSED)`.** Accepts every non-ERROR state; cannot catch a regression. Narrowed to `assert p.source() == other` (the actual contract is source-was-swapped) plus a `waitUntil` for a known terminal state.
+
+- ✅ [MUSI-0125] **HIGH — `tests/persistence/test_debounce.py:64` cancel-test vacuous-pass risk.**
+  `test_cancel_drops_pending_callback_without_firing` used `qtbot.wait(80)` for a 20-ms timer; under CI event-loop starvation the timer could simply *not fire*, making "calls == []" trivially true and giving false confidence in `cancel()`. Replaced with `w.flush_all()` so the assertion is deterministic.
+  Kind: implement.
+
+- ✅ [MUSI-0126] **HIGH — `tests/persistence/test_atomic_io.py:64` direct attribute monkeypatch.**
+  `aio.os.replace = capture_then_replace` with manual `try/finally` is KeyboardInterrupt-unsafe. Replaced with `monkeypatch.setattr(aio.os, "replace", capture_then_replace)`.
+  Kind: implement.
+
+- ✅ [MUSI-0127] **MED — `tests/services/test_player.py:245` bare `assert errors`.**
+  No content check — a malformed error from any source would pass. Tightened to `assert len(errors) == 1` and `"does-not-exist" in errors[0]`.
+  Kind: implement.
+
+- ✅ [MUSI-0128] **MED — `tests/services/test_player.py:272` `state() in (PLAYING, STOPPED, PAUSED)`.**
+  Accepts every non-ERROR state; cannot catch a regression. Narrowed to `assert p.source() == other` (the actual contract is source-was-swapped) plus a `waitUntil` for a known terminal state.
+  Kind: implement.
 
 **Coverage gaps (Dim 3)**
-- ✅ **CRITICAL — `tests/persistence/test_schema.py` missing migration-raises test.** The runner has no try/except around `migrations[v](data)`; raw exceptions propagate. Added `test_migrate_forward_propagates_migration_function_exception` to lock the contract.
+
+- ✅ [MUSI-0129] **CRITICAL — `tests/persistence/test_schema.py` missing migration-raises test.**
+  The runner has no try/except around `migrations[v](data)`; raw exceptions propagate. Added `test_migrate_forward_propagates_migration_function_exception` to lock the contract.
+  Kind: implement.
+
 - ⏭️ **MED — Service-layer TC-13-05 / TC-13-06 (approve/unapprove → count_for delta).** Per UsageIndex source (`services/usage_index.py:43-44`), the index only subscribes to `album_added` / `album_removed` — NOT approve/unapprove. Production wiring is via `MainWindow._on_approve` calling `idx.rebuild()` explicitly (covered by `test_main_window_usage.py`) + `UsageIndex.rebuild()` correctness (covered by `test_TC_13_01_rebuild_counts_across_approved_albums`). Not adding redundant service-layer tests — existing split is correct.
 
 **Maintainability (Dim 10-14)**
-- ✅ **MED — `tests/ui/test_lyrics_panel.py:29-37, 41-55` state-walk splitting.** Two tests walked through 3-state and 6-state `set_status()` sequences in single test bodies; first-assertion failure hid the rest. Parametrized over `(status, expected_substring)` and `(status, expected_visible)`.
-- ✅ **LOW — `tests/domain/test_library.py:134` dead import + `tests/persistence/test_atomic_io.py:111-112` dead cleanup.** `import _pytest.monkeypatch  # noqa: F401` referenced nothing; `if target.exists(): target.unlink()` cleaned up a file that the test never wrote. Both removed.
+
+- ✅ [MUSI-0130] **MED — `tests/ui/test_lyrics_panel.py:29-37, 41-55` state-walk splitting.**
+  Two tests walked through 3-state and 6-state `set_status()` sequences in single test bodies; first-assertion failure hid the rest. Parametrized over `(status, expected_substring)` and `(status, expected_visible)`.
+  Kind: implement.
+
+- ✅ [MUSI-0131] **LOW — `tests/domain/test_library.py:134` dead import + `tests/persistence/test_atomic_io.py:111-112` dead cleanup.**
+  `import _pytest.monkeypatch  # noqa: F401` referenced nothing; `if target.exists(): target.unlink()` cleaned up a file that the test never wrote. Both removed.
+  Kind: implement.
 
 **Accuracy (Dim 1)**
-- ✅ **MED — `tests/ui/test_album_switcher.py:41,44,89-92` hardcoded glyph codepoints.** Tests hard-coded `"✓"` and `"\U0001f512"` instead of `Glyphs.CHECK` / `Glyphs.LOCK` from `album_builder.ui.theme`. Project convention (CLAUDE.md) requires glyphs come from `theme.Glyphs` so palette changes flow through. Imported and substituted.
-- ✅ **MED — `tests/ui/test_top_bar.py:29` ambiguous `or` assertion.** `assert not visible or not enabled` accepted any non-(visible-AND-enabled) state. The contract is "hidden" (matches line 30 for `btn_reopen`). Tightened to `assert not visible`.
+
+- ✅ [MUSI-0132] **MED — `tests/ui/test_album_switcher.py:41,44,89-92` hardcoded glyph codepoints.**
+  Tests hard-coded `"✓"` and `"\U0001f512"` instead of `Glyphs.CHECK` / `Glyphs.LOCK` from `album_builder.ui.theme`. Project convention (CLAUDE.md) requires glyphs come from `theme.Glyphs` so palette changes flow through. Imported and substituted.
+  Kind: implement.
+
+- ✅ [MUSI-0133] **MED — `tests/ui/test_top_bar.py:29` ambiguous `or` assertion.**
+  `assert not visible or not enabled` accepted any non-(visible-AND-enabled) state. The contract is "hidden" (matches line 30 for `btn_reopen`). Tightened to `assert not visible`.
+  Kind: implement.
 
 **Filtered (not actioned)**
 - ~40 missing `# Spec: TC-NN-MM` anchors across domain/services/ui test files — pure documentation, no functional risk; out of scope for a fix pass.
@@ -613,57 +1002,178 @@ Framework: pytest + pytest-qt. Files scanned: 49. Dimensions: all 18. Raw findin
 
 Pre-pass: 5 grep hits across c-001 (4×) and c-003 (1×) for `datetime.now`. All 5 verified as false-positives — every call sites passed the value to `Album(...)` / `Track(...)` as a field; nothing asserted on the timestamp itself.
 
-This sweep used the Ants MCP `test_audit_partition` + `test_audit_synthesis_prompt` tools end-to-end (Option B from previous Ants MCP feedback); see `Music_Production_Ants_MCP_Feedback.md` for the discoverability notes that informed the choice.
+This sweep used the Ants MCP `test_audit_partition` + `test_audit_synthesis_prompt` tools end-to-end (Option B from previous Ants MCP feedback); see `Album_Builder_Ants_MCP_Feedback.md` for the discoverability notes that informed the choice.
 
 **Closed inline (this work)**
 
-- ✅ **HIGH — `tests/services/test_library_watcher.py:32,43,160` inotify timeouts raised 2000→5000ms.** Under CI load the kernel can coalesce + delay watch events past the 2 s window; raised to 5 s with explanatory comment. Also removed the dead `tagged_track  # noqa` no-op parameter from `test_watcher_survives_folder_deletion_and_recreation` (fixture's side-effect put files in the *wrong* directory anyway).
-- ✅ **HIGH — `tests/ui/test_main_window.py:45,63,174,190` XDG isolation gap.** Four tests constructed `MainWindow` without `monkeypatch.setenv("XDG_CONFIG_HOME", ...)`, so the under-the-hood `read_audio()` / `closeEvent → write_audio()` calls read/wrote against the developer's real `~/.config/album-builder/settings.json`. Added the env-set to every such call site.
-- ✅ **HIGH — `tests/ui/test_TC_13_usage_badge_delegate.py:36,44,52` missing `qtbot.addWidget`.** Three `LibraryPane()` constructions in the `qapp`-only tests were not registered for deferred cleanup; switched to `qtbot` and added `qtbot.addWidget(pane)`.
-- ✅ **HIGH — `tests/ui/test_transport_bar.py:57` mute-button toggle test combined two acts.** Initial-glyph branch untested and a single failure point couldn't tell mute from unmute. Split into `test_mute_button_click_mutes` and `test_mute_button_click_unmutes` + a dedicated `test_initial_state_shows_unmute_glyph`.
-- ✅ **HIGH — `tests/ui/test_transport_bar.py:101` drag-guard branch never exercised.** Test docstring claimed to cover the `if not self.scrubber.isSliderDown(): self.scrubber.setValue(...)` guard but `sliderPressed.emit()` doesn't flip `isSliderDown()` under the offscreen QPA, so the test only ever ran the non-drag branch. Replaced with `monkeypatch.setattr(b.scrubber, "isSliderDown", lambda: True)` so the guard executes, and added a second assertion proving the time label DOES still update during drag.
-- ✅ **MED — `tests/ui/test_transport_bar.py:91` scrubber `minimum() == 0` not asserted.** A regression flipping `setRange(0, X)` to `setRange(1, X)` would silently break seek-to-zero with no test catching it. Added the assertion.
-- ✅ **MED — Scrubber-truncation vs label-rounding divergence untested.** `_on_position_changed(65.7)` truncates to scrubber=65 but rounds to label="1:06". Added both assertions in `test_position_change_updates_current_time` (preceded by `duration_changed.emit(200.0)` so the scrubber accepts non-zero values).
-- ✅ **MED — `PlayerState.PAUSED` never emitted.** Source's `_on_state_changed` else-branch covers both PAUSED and STOPPED with the same glyph. Added `test_state_paused_shows_play_glyph` so a future dedicated-paused-glyph regression would surface.
-- ✅ **MED — `tests/ui/test_toast.py:54` timer-reset assertion racy.** `auto_dismiss_ms=200` + two `qtbot.wait(150)` calls left only ~50 ms of slack at the assertion; loaded CI runners overshot. Widened to `auto_dismiss_ms=500` + two `qtbot.wait(200)` calls → 300 ms slack.
-- ✅ **MED — `tests/ui/test_TC_13_usage_badge_delegate.py:116-118` hardcoded RGB bounds.** `(95-125, 45-75, 230-255)` was derived manually from `accent_primary_1 = #6e3df0`; a Spec 11 palette token revision would fail with confusing `R=X` messages. Replaced with `QColor(Palette.dark_colourful().accent_primary_1).red()/green()/blue()` derivation + `tol = 15`.
-- ✅ **MED — `tests/ui/test_main_window.py:433` if-focusWidget guards silently skipped.** Three assertions guarded by `if QApplication.focusWidget() is widget:`; under offscreen QPA focus is often `None`, so all three branches no-oped and the test passed trivially. Replaced with `monkeypatch.setattr(QApplication, "focusWidget", staticmethod(lambda: widget))` per case.
-- ✅ **MED — `tests/services/test_player.py:223,232` integration assertions tightened.** `+ 0.05` undocumented fudge replaced with `pytest.approx(..., abs=0.05)` + explanatory comment; exact-zero assertion after `qtbot.wait(100)` replaced with `qtbot.waitUntil(lambda: p.position() == pytest.approx(0.0, abs=0.05))`.
-- ✅ **MED — `tests/services/test_player.py:347` `state() in (STOPPED, ERROR)` accepted pre-call state.** ERROR was the EXACT state before `set_source`, so the post-call assertion was a near no-op. Narrowed to `== STOPPED`.
-- ✅ **MED — Coverage gap: `tests/persistence/test_album_io.py` missing approve/unapprove ordering tests.** Spec 09 canonical sequence pins marker-before-json on approve, marker-deleted-before-json on unapprove; the four-line `save_album_for_approve` / `save_album_for_unapprove` helpers had zero direct test coverage. Added `test_save_album_for_approve_writes_marker_before_json` and `test_save_album_for_unapprove_deletes_marker_before_json` with spy decorators on `Path.touch` / `Path.unlink` / `_write_album_json`.
-- ✅ **MED — Coverage gap: `scan_reports_dir` branch 2 (complete pair + stale .tmps) untested.** Added `test_TC_10_21_complete_pair_with_stale_tmps_sweeps_tmps` — the only path where `pairs_completed >= 1` AND `tmps_swept >= 1` co-occur.
-- ✅ **MED — Coverage gap: `Album.select()` target-reached `ValueError` untested.** Added `test_album_select_rejects_when_target_reached`.
-- ✅ **MED — Coverage gap: TC-08-06 sanitised-title collision dedup untested.** Two distinct raw titles (`"Foo/Bar"` and `"Foo_Bar"`) that sanitise to the same canonical string must collision-dedup, not overwrite. Added `test_TC_08_06_symlink_dedup_after_title_sanitisation`.
-- ✅ **MED — Coverage gap: `AlignmentWorker` generic `Exception` branch untested.** Added `test_worker_emits_failure_on_unexpected_runtime_error` exercising the `except Exception as exc` path via a `RuntimeError("CUDA out of memory")` monkeypatch on `_load_whisperx`. Pragma kept on the source branch since integration tier still covers the live path.
-- ✅ **MED — `tests/domain/test_lyrics.py:193,202` hash-tautology.** `assert hash(x) == hash(x)` only proves Python identity guarantee, not the equal-but-distinct-instance hash invariant. Replaced with `hash(parse_lrc(text)) == hash(parse_lrc(text))` (two separate instances).
-- ✅ **MED — `tests/services/test_TC_08_export.py:448` duplicate `TC-08-07` header.** TC-08-07 was already used at line 254 for "real files preserved"; line 448 covered "album folder deleted mid-session" which is a §Errors prose row with no TC number. Renamed the header to `# --- §Errors: album folder deleted mid-session ---`.
-- ✅ **MED — `tests/services/test_TC_08_export.py:363` `assert log` accepted any non-empty content.** Tightened to `assert "sanity-check" in log and "0 bytes" in log` (the actual zero-byte-target log entry shape).
-- ✅ **MED — `tests/services/test_alignment_service.py:181` misleading test name.** `test_cancel_no_lrc_written` used `behavior="interrupt"` so the `service.cancel(audio)` call was a no-op — the FakeWorker bailed regardless. Removed the misleading `cancel()` line and renamed to `test_interrupted_worker_writes_no_lrc`; the cancel-status side of the contract is covered separately by `test_cancel_emits_status_revert_to_not_yet_aligned`.
-- ✅ **MED — `tests/domain/test_album.py` extracted `_post_init_kwargs(**overrides)` helper.** Three `test_album_post_init_*` tests each inlined a 9-field `Album(...)` constructor call. Adding a new `Album` field now touches one site, not three. Spec citations added to all 5 previously-uncited test_album_post_init tests + select-rejects test.
-- ✅ **LOW — `tests/persistence/test_album_io.py:215` missing Spec citation.** Added `# Spec: TC-10-08`.
-- ✅ **LOW — `tests/domain/test_library.py:88,122` `chmod(0o000)` tests need root-bypass guard.** Added `@pytest.mark.skipif(os.getuid() == 0, reason="root bypasses mode bits")` to both. Mode bits are a no-op for root, which silently broke the tests when run in a Docker container as root.
-- ✅ **LOW — `tests/ui/test_TC_13_library_pane_usage_column.py:72` missing Spec citation.** Added `# Spec: TC-13-09a`.
-- ✅ **LOW — `tests/services/test_TC_09_report.py:101` `assert v and v != "unknown"` loose.** Tightened with `re.match(r"^\d+\.\d+", v)`.
-- ✅ **LOW — `tests/services/test_TC_09_report.py:312` `import re` inline.** Moved to top-level imports.
-- ✅ **LOW — `tests/services/test_alignment_worker.py:88,101` `import logging as _logging` inline.** Moved to top-level `import logging`.
-- ✅ **LOW — `tests/ui/test_library_pane.py` 5× dead `qtbot.wait(50)` after sync `_on_search_changed`.** Verified source is synchronous (`_proxy.set_needle(text)` no debounce). Removed all 5 dead waits.
-- ✅ **LOW — `tests/ui/test_library_pane.py` 6× redundant in-function imports.** `Qt`, `Library`, `LibraryPane` re-imported inside function bodies despite module-level imports. Removed.
-- ✅ **LOW — Missing module docstrings on `tests/ui/test_main_window.py` + `tests/ui/test_library_pane.py`.** Added.
-- ✅ **LOW — Spec citations added across `test_transport_bar.py` (12 of 13 previously uncited) + `test_toast.py` (6 previously uncited).** All map to TC-06-NN contracts in Spec 06.
-- ✅ **LOW — Add `slow` marker to pyproject.toml + decorate 3 real-WeasyPrint render_report tests.** Lets developers `-m 'not slow'` to skip ~5 s of PDF generation when iterating. Marked `test_TC_09_05`, `test_TC_09_10`, `test_TC_09_29`, `test_TC_09_30`.
-- ✅ **INFO — `tests/ui/test_main_window.py:515` dead `qtbot.wait(50)` after `qtbot.waitExposed()`.** Verified `MainWindow.showEvent` is synchronous (`setSizes` runs inside the event, no `QTimer.singleShot`). Removed the wait.
+- ✅ [MUSI-0134] **HIGH — `tests/services/test_library_watcher.py:32,43,160` inotify timeouts raised 2000→5000ms.**
+  Under CI load the kernel can coalesce + delay watch events past the 2 s window; raised to 5 s with explanatory comment. Also removed the dead `tagged_track  # noqa` no-op parameter from `test_watcher_survives_folder_deletion_and_recreation` (fixture's side-effect put files in the *wrong* directory anyway).
+  Kind: implement.
+
+- ✅ [MUSI-0135] **HIGH — `tests/ui/test_main_window.py:45,63,174,190` XDG isolation gap.**
+  Four tests constructed `MainWindow` without `monkeypatch.setenv("XDG_CONFIG_HOME", ...)`, so the under-the-hood `read_audio()` / `closeEvent → write_audio()` calls read/wrote against the developer's real `~/.config/album-builder/settings.json`. Added the env-set to every such call site.
+  Kind: implement.
+
+- ✅ [MUSI-0136] **HIGH — `tests/ui/test_TC_13_usage_badge_delegate.py:36,44,52` missing `qtbot.addWidget`.**
+  Three `LibraryPane()` constructions in the `qapp`-only tests were not registered for deferred cleanup; switched to `qtbot` and added `qtbot.addWidget(pane)`.
+  Kind: implement.
+
+- ✅ [MUSI-0137] **HIGH — `tests/ui/test_transport_bar.py:57` mute-button toggle test combined two acts.**
+  Initial-glyph branch untested and a single failure point couldn't tell mute from unmute. Split into `test_mute_button_click_mutes` and `test_mute_button_click_unmutes` + a dedicated `test_initial_state_shows_unmute_glyph`.
+  Kind: implement.
+
+- ✅ [MUSI-0138] **HIGH — `tests/ui/test_transport_bar.py:101` drag-guard branch never exercised.**
+  Test docstring claimed to cover the `if not self.scrubber.isSliderDown(): self.scrubber.setValue(...)` guard but `sliderPressed.emit()` doesn't flip `isSliderDown()` under the offscreen QPA, so the test only ever ran the non-drag branch. Replaced with `monkeypatch.setattr(b.scrubber, "isSliderDown", lambda: True)` so the guard executes, and added a second assertion proving the time label DOES still update during drag.
+  Kind: implement.
+
+- ✅ [MUSI-0139] **MED — `tests/ui/test_transport_bar.py:91` scrubber `minimum() == 0` not asserted.**
+  A regression flipping `setRange(0, X)` to `setRange(1, X)` would silently break seek-to-zero with no test catching it. Added the assertion.
+  Kind: implement.
+
+- ✅ [MUSI-0140] **MED — Scrubber-truncation vs label-rounding divergence untested.**
+  `_on_position_changed(65.7)` truncates to scrubber=65 but rounds to label="1:06". Added both assertions in `test_position_change_updates_current_time` (preceded by `duration_changed.emit(200.0)` so the scrubber accepts non-zero values).
+  Kind: implement.
+
+- ✅ [MUSI-0141] **MED — `PlayerState.PAUSED` never emitted.**
+  Source's `_on_state_changed` else-branch covers both PAUSED and STOPPED with the same glyph. Added `test_state_paused_shows_play_glyph` so a future dedicated-paused-glyph regression would surface.
+  Kind: implement.
+
+- ✅ [MUSI-0142] **MED — `tests/ui/test_toast.py:54` timer-reset assertion racy.**
+  `auto_dismiss_ms=200` + two `qtbot.wait(150)` calls left only ~50 ms of slack at the assertion; loaded CI runners overshot. Widened to `auto_dismiss_ms=500` + two `qtbot.wait(200)` calls → 300 ms slack.
+  Kind: implement.
+
+- ✅ [MUSI-0143] **MED — `tests/ui/test_TC_13_usage_badge_delegate.py:116-118` hardcoded RGB bounds.**
+  `(95-125, 45-75, 230-255)` was derived manually from `accent_primary_1 = #6e3df0`; a Spec 11 palette token revision would fail with confusing `R=X` messages. Replaced with `QColor(Palette.dark_colourful().accent_primary_1).red()/green()/blue()` derivation + `tol = 15`.
+  Kind: implement.
+
+- ✅ [MUSI-0144] **MED — `tests/ui/test_main_window.py:433` if-focusWidget guards silently skipped.**
+  Three assertions guarded by `if QApplication.focusWidget() is widget:`; under offscreen QPA focus is often `None`, so all three branches no-oped and the test passed trivially. Replaced with `monkeypatch.setattr(QApplication, "focusWidget", staticmethod(lambda: widget))` per case.
+  Kind: implement.
+
+- ✅ [MUSI-0145] **MED — `tests/services/test_player.py:223,232` integration assertions tightened.**
+  `+ 0.05` undocumented fudge replaced with `pytest.approx(..., abs=0.05)` + explanatory comment; exact-zero assertion after `qtbot.wait(100)` replaced with `qtbot.waitUntil(lambda: p.position() == pytest.approx(0.0, abs=0.05))`.
+  Kind: implement.
+
+- ✅ [MUSI-0146] **MED — `tests/services/test_player.py:347` `state() in (STOPPED, ERROR)` accepted pre-call state.**
+  ERROR was the EXACT state before `set_source`, so the post-call assertion was a near no-op. Narrowed to `== STOPPED`.
+  Kind: implement.
+
+- ✅ [MUSI-0147] **MED — Coverage gap: `tests/persistence/test_album_io.py` missing approve/unapprove ordering tests.**
+  Spec 09 canonical sequence pins marker-before-json on approve, marker-deleted-before-json on unapprove; the four-line `save_album_for_approve` / `save_album_for_unapprove` helpers had zero direct test coverage. Added `test_save_album_for_approve_writes_marker_before_json` and `test_save_album_for_unapprove_deletes_marker_before_json` with spy decorators on `Path.touch` / `Path.unlink` / `_write_album_json`.
+  Kind: implement.
+
+- ✅ [MUSI-0148] **MED — Coverage gap: `scan_reports_dir` branch 2 (complete pair + stale .tmps) untested.**
+  Added `test_TC_10_21_complete_pair_with_stale_tmps_sweeps_tmps` — the only path where `pairs_completed >= 1` AND `tmps_swept >= 1` co-occur.
+  Kind: implement.
+
+- ✅ [MUSI-0149] **MED — Coverage gap: `Album.select()` target-reached `ValueError` untested.**
+  Added `test_album_select_rejects_when_target_reached`.
+  Kind: implement.
+
+- ✅ [MUSI-0150] **MED — Coverage gap: TC-08-06 sanitised-title collision dedup untested.**
+  Two distinct raw titles (`"Foo/Bar"` and `"Foo_Bar"`) that sanitise to the same canonical string must collision-dedup, not overwrite. Added `test_TC_08_06_symlink_dedup_after_title_sanitisation`.
+  Kind: implement.
+
+- ✅ [MUSI-0151] **MED — Coverage gap: `AlignmentWorker` generic `Exception` branch untested.**
+  Added `test_worker_emits_failure_on_unexpected_runtime_error` exercising the `except Exception as exc` path via a `RuntimeError("CUDA out of memory")` monkeypatch on `_load_whisperx`. Pragma kept on the source branch since integration tier still covers the live path.
+  Kind: implement.
+
+- ✅ [MUSI-0152] **MED — `tests/domain/test_lyrics.py:193,202` hash-tautology.**
+  `assert hash(x) == hash(x)` only proves Python identity guarantee, not the equal-but-distinct-instance hash invariant. Replaced with `hash(parse_lrc(text)) == hash(parse_lrc(text))` (two separate instances).
+  Kind: implement.
+
+- ✅ [MUSI-0153] **MED — `tests/services/test_TC_08_export.py:448` duplicate `TC-08-07` header.**
+  TC-08-07 was already used at line 254 for "real files preserved"; line 448 covered "album folder deleted mid-session" which is a §Errors prose row with no TC number. Renamed the header to `# --- §Errors: album folder deleted mid-session ---`.
+  Kind: implement.
+
+- ✅ [MUSI-0154] **MED — `tests/services/test_TC_08_export.py:363` `assert log` accepted any non-empty content.**
+  Tightened to `assert "sanity-check" in log and "0 bytes" in log` (the actual zero-byte-target log entry shape).
+  Kind: implement.
+
+- ✅ [MUSI-0155] **MED — `tests/services/test_alignment_service.py:181` misleading test name.**
+  `test_cancel_no_lrc_written` used `behavior="interrupt"` so the `service.cancel(audio)` call was a no-op — the FakeWorker bailed regardless. Removed the misleading `cancel()` line and renamed to `test_interrupted_worker_writes_no_lrc`; the cancel-status side of the contract is covered separately by `test_cancel_emits_status_revert_to_not_yet_aligned`.
+  Kind: implement.
+
+- ✅ [MUSI-0156] **MED — `tests/domain/test_album.py` extracted `_post_init_kwargs(**overrides)` helper.**
+  Three `test_album_post_init_*` tests each inlined a 9-field `Album(...)` constructor call. Adding a new `Album` field now touches one site, not three. Spec citations added to all 5 previously-uncited test_album_post_init tests + select-rejects test.
+  Kind: implement.
+
+- ✅ [MUSI-0157] **LOW — `tests/persistence/test_album_io.py:215` missing Spec citation.**
+  Added `# Spec: TC-10-08`.
+  Kind: implement.
+
+- ✅ [MUSI-0158] **LOW — `tests/domain/test_library.py:88,122` `chmod(0o000)` tests need root-bypass guard.**
+  Added `@pytest.mark.skipif(os.getuid() == 0, reason="root bypasses mode bits")` to both. Mode bits are a no-op for root, which silently broke the tests when run in a Docker container as root.
+  Kind: implement.
+
+- ✅ [MUSI-0159] **LOW — `tests/ui/test_TC_13_library_pane_usage_column.py:72` missing Spec citation.**
+  Added `# Spec: TC-13-09a`.
+  Kind: implement.
+
+- ✅ [MUSI-0160] **LOW — `tests/services/test_TC_09_report.py:101` `assert v and v != "unknown"` loose.**
+  Tightened with `re.match(r"^\d+\.\d+", v)`.
+  Kind: implement.
+
+- ✅ [MUSI-0161] **LOW — `tests/services/test_TC_09_report.py:312` `import re` inline.**
+  Moved to top-level imports.
+  Kind: implement.
+
+- ✅ [MUSI-0162] **LOW — `tests/services/test_alignment_worker.py:88,101` `import logging as _logging` inline.**
+  Moved to top-level `import logging`.
+  Kind: implement.
+
+- ✅ [MUSI-0163] **LOW — `tests/ui/test_library_pane.py` 5× dead `qtbot.wait(50)` after sync `_on_search_changed`.**
+  Verified source is synchronous (`_proxy.set_needle(text)` no debounce). Removed all 5 dead waits.
+  Kind: implement.
+
+- ✅ [MUSI-0164] **LOW — `tests/ui/test_library_pane.py` 6× redundant in-function imports.**
+  `Qt`, `Library`, `LibraryPane` re-imported inside function bodies despite module-level imports. Removed.
+  Kind: implement.
+
+- ✅ [MUSI-0165] **LOW — Missing module docstrings on `tests/ui/test_main_window.py` + `tests/ui/test_library_pane.py`.**
+  Added.
+  Kind: implement.
+
+- ✅ [MUSI-0166] **LOW — Spec citations added across `test_transport_bar.py` (12 of 13 previously uncited) + `test_toast.py` (6 previously uncited).**
+  All map to TC-06-NN contracts in Spec 06.
+  Kind: implement.
+
+- ✅ [MUSI-0167] **LOW — Add `slow` marker to pyproject.toml + decorate 3 real-WeasyPrint render_report tests.**
+  Lets developers `-m 'not slow'` to skip ~5 s of PDF generation when iterating. Marked `test_TC_09_05`, `test_TC_09_10`, `test_TC_09_29`, `test_TC_09_30`.
+  Kind: implement.
+
+- ✅ [MUSI-0168] **INFO — `tests/ui/test_main_window.py:515` dead `qtbot.wait(50)` after `qtbot.waitExposed()`.**
+  Verified `MainWindow.showEvent` is synchronous (`setSizes` runs inside the event, no `QTimer.singleShot`). Removed the wait.
+  Kind: implement.
 
 **Deferred (queued)**
 
-- ✅ **MED — Extract shared test fixtures into `tests/services/conftest.py` / `tests/ui/conftest.py`.** Multiple cross-chunk duplications surfaced — `_FakeLibrary` in 3 service-test files (with divergent `find()` impls already), `_make_track` / `_ord_track` / `_track` factories in 6+ files, `main_window` fixture in 2 places. Rule of Three exceeded but extraction crosses 8+ files; better suited to `/debt-sweep` than an audit fix-pass. Re-flagged for the next sweep. **Resolved (2026-06-10):** created `tests/ui/conftest.py` with the `main_window` fixture (4 byte-identical copies -> 1; pytest auto-injects by name, so no call-site changes — only orphaned imports cleaned in the 4 files). Deliberately did **not** create `tests/services/conftest.py`: the `_FakeLibrary` (3x) and `_make_track` (6x) helpers are genuinely divergent (`SimpleNamespace` vs `Track`, disk-check vs pre-built dict, differing `refresh` tracking) — merging them adds complexity, not removes it (simplicity-first). `_ord_track` (2x) is below the Rule-of-Three threshold. Only the genuinely-shared fixture was extracted.
-- ✅ **MED — `tests/ui/test_TC_06_17_18_19_row_play_pause.py:96,164,380,470` + `test_TC_06_20:155,380` direct `_player._state` mutation.** Tests directly write `main_window._player._state = PlayerState.PLAYING` to drive state without going through the state machine — documented as "real QMediaPlayer may take longer than the test window to actually start; the dispatch logic only cares about the reported state." Acceptable but fragile: a Player class change to private state could invalidate the test silently. Better long-term fix is exposing a `_force_state_for_test()` method or making the dispatch testable via `_on_media_status` injection. Documented in chunk c-003 H3. **Resolved (2026-06-10):** added `Player._set_state_for_test(state)` seam (`services/player.py`) and routed all 6 direct writes (`test_TC_06_17:83,151`; `test_TC_06_20:156,381,394,471`) through it. The coupling to the private `_state` field now lives in one named, documented chokepoint, so a field rename can't silently invalidate the tests. No signal emitted (mirrors the prior direct writes). Full suite green; ruff clean.
-- ✅ **MED — `tests/services/test_alignment_worker.py:152` install-hint test couples to `sys.executable`.** Test asserts `f"{sys.executable} -m pip install whisperx"` substring; brittle when the venv path changes. Working as designed but worth revisiting if path-portability ever bites. **Resolved-by-analysis (2026-06-10):** no code change. On inspection the test is **not** brittle — both the production hint (`alignment_worker.py:69`) and the assertion (now at `:142`) read `sys.executable` *live* at runtime, so they always agree regardless of venv path. The "brittle when the venv path changes" premise does not hold. Closed as verified non-issue.
-- ✅ **LOW — Tuple-returning fixtures (`populated_pane` returns `(LibraryPane, Library)`; `pane` in `test_now_playing_pane.py` returns `(NowPlayingPane, Player)`).** Forces 23+ consumers to destructure with non-obvious aliasing. Splitting requires touching every consumer; defer to a focused refactor. **Re-confirmed deferred (2026-06-10):** 23+ call-sites is too wide a blast radius for a fix-pass; the cleaner split (separate fixtures, not tuples) is its own focused refactor. Left as-is.
+- ✅ [MUSI-0169] **MED — Extract shared test fixtures into `tests/services/conftest.py` / `tests/ui/conftest.py`.**
+  Multiple cross-chunk duplications surfaced — `_FakeLibrary` in 3 service-test files (with divergent `find()` impls already), `_make_track` / `_ord_track` / `_track` factories in 6+ files, `main_window` fixture in 2 places. Rule of Three exceeded but extraction crosses 8+ files; better suited to `/debt-sweep` than an audit fix-pass. Re-flagged for the next sweep. **Resolved (2026-06-10):** created `tests/ui/conftest.py` with the `main_window` fixture (4 byte-identical copies -> 1; pytest auto-injects by name, so no call-site changes — only orphaned imports cleaned in the 4 files). Deliberately did **not** create `tests/services/conftest.py`: the `_FakeLibrary` (3x) and `_make_track` (6x) helpers are genuinely divergent (`SimpleNamespace` vs `Track`, disk-check vs pre-built dict, differing `refresh` tracking) — merging them adds complexity, not removes it (simplicity-first). `_ord_track` (2x) is below the Rule-of-Three threshold. Only the genuinely-shared fixture was extracted.
+  Kind: implement.
+
+- ✅ [MUSI-0170] **MED — `tests/ui/test_TC_06_17_18_19_row_play_pause.py:96,164,380,470` + `test_TC_06_20:155,380` direct `_player._state` mutation.**
+  Tests directly write `main_window._player._state = PlayerState.PLAYING` to drive state without going through the state machine — documented as "real QMediaPlayer may take longer than the test window to actually start; the dispatch logic only cares about the reported state." Acceptable but fragile: a Player class change to private state could invalidate the test silently. Better long-term fix is exposing a `_force_state_for_test()` method or making the dispatch testable via `_on_media_status` injection. Documented in chunk c-003 H3. **Resolved (2026-06-10):** added `Player._set_state_for_test(state)` seam (`services/player.py`) and routed all 6 direct writes (`test_TC_06_17:83,151`; `test_TC_06_20:156,381,394,471`) through it. The coupling to the private `_state` field now lives in one named, documented chokepoint, so a field rename can't silently invalidate the tests. No signal emitted (mirrors the prior direct writes). Full suite green; ruff clean.
+  Kind: implement.
+
+- ✅ [MUSI-0171] **MED — `tests/services/test_alignment_worker.py:152` install-hint test couples to `sys.executable`.**
+  Test asserts `f"{sys.executable} -m pip install whisperx"` substring; brittle when the venv path changes. Working as designed but worth revisiting if path-portability ever bites. **Resolved-by-analysis (2026-06-10):** no code change. On inspection the test is **not** brittle — both the production hint (`alignment_worker.py:69`) and the assertion (now at `:142`) read `sys.executable` *live* at runtime, so they always agree regardless of venv path. The "brittle when the venv path changes" premise does not hold. Closed as verified non-issue.
+  Kind: implement.
+
+- ✅ [MUSI-0172] **LOW — Tuple-returning fixtures (`populated_pane` returns `(LibraryPane, Library)`; `pane` in `test_now_playing_pane.py` returns `(NowPlayingPane, Player)`).**
+  Forces 23+ consumers to destructure with non-obvious aliasing. Splitting requires touching every consumer; defer to a focused refactor. **Re-confirmed deferred (2026-06-10):** 23+ call-sites is too wide a blast radius for a fix-pass; the cleaner split (separate fixtures, not tuples) is its own focused refactor. Left as-is.
   Resolved (2026-06-17, commit 5d6d400): split into single-purpose fixtures - separate `lib` fixture in test_library_pane.py; dropped the unused Player half of the now-playing tuple (all 10 consumers discarded it). Full suite 597 passed.
-- ✅ **LOW — ~70 missing `# Spec: TC-NN-MM` anchors across test files not touched this pass.** Same as prior /test-audit "filtered" entry — purely documentation, no functional risk. Re-deferred. **Re-confirmed deferred (2026-06-10):** ~70 anchors would each need its real spec contract verified before citing (a wrong citation is worse than none); high effort, zero functional value, twice-deferred by prior passes. Best handled as a dedicated documentation pass, not folded into a code bundle.
+  Kind: implement.
+
+- ✅ [MUSI-0173] **LOW — ~70 missing `# Spec: TC-NN-MM` anchors across test files not touched this pass.**
+  Same as prior /test-audit "filtered" entry — purely documentation, no functional risk. Re-deferred. **Re-confirmed deferred (2026-06-10):** ~70 anchors would each need its real spec contract verified before citing (a wrong citation is worse than none); high effort, zero functional value, twice-deferred by prior passes. Best handled as a dedicated documentation pass, not folded into a code bundle.
   Resolved (2026-06-17, commit 5484d2e): suite-wide sweep found ~300 anchorless tests (not 70 - that was one pass's skipped subset). Mapped each against the specs' TC-NN-MM tables via parallel verification agents; anchored the 37 that verifiably check a single named contract. The remaining ~263 are indie-review robustness tests, low-level persistence/atomic-write infra, QThread/inotify mechanics, and widget-rendering helpers with no single TC contract - left unanchored by design (wrong citation worse than none). Verified subset is the correct closure: nothing further can be cited correctly. Full suite 597 passed, ruff clean.
-- ✅ **MED — Full-suite run intermittently hangs in process teardown after reaching 100% (discovered 2026-06-10).** A single `pytest` invocation over the whole suite *sometimes* stalls during interpreter shutdown: every test passes and the run reaches `[100%]` (594 passed, 0 failed — only the expected `AB_INTEGRATION_*` skips), then the process blocks indefinitely (observed `Sl` state, 0.2% CPU, killed after 26 min). Other runs exit cleanly (`594 passed, 11 skipped in 6.86s`). Not test-order dependent (`pytest-randomly` is not installed; order is deterministic), so this is a timing-dependent teardown race, not an ordering interaction. Most likely a non-joined background thread at exit — `LibraryWatcher`'s inotify thread or an `AlignmentWorker` QThread that isn't stopped/joined when its owning widget tears down. Impact: tests are green, but CI could intermittently hang and burn a runner until timeout. Fix direction: (a) ensure those threads are stopped + joined on widget `closeEvent` / a session-scoped teardown fixture, and/or (b) add `pytest-timeout` to `requirements-dev.txt` with a per-test cap as a CI backstop so a teardown stall fails fast instead of hanging. Aligns with the existing flagged timing-sensitive items in this section (inotify timeouts, Toast timer races).
+  Kind: implement.
+
+- ✅ [MUSI-0174] **MED — Full-suite run intermittently hangs in process teardown after reaching 100% (discovered 2026-06-10).**
+  A single `pytest` invocation over the whole suite *sometimes* stalls during interpreter shutdown: every test passes and the run reaches `[100%]` (594 passed, 0 failed — only the expected `AB_INTEGRATION_*` skips), then the process blocks indefinitely (observed `Sl` state, 0.2% CPU, killed after 26 min). Other runs exit cleanly (`594 passed, 11 skipped in 6.86s`). Not test-order dependent (`pytest-randomly` is not installed; order is deterministic), so this is a timing-dependent teardown race, not an ordering interaction. Most likely a non-joined background thread at exit — `LibraryWatcher`'s inotify thread or an `AlignmentWorker` QThread that isn't stopped/joined when its owning widget tears down. Impact: tests are green, but CI could intermittently hang and burn a runner until timeout. Fix direction: (a) ensure those threads are stopped + joined on widget `closeEvent` / a session-scoped teardown fixture, and/or (b) add `pytest-timeout` to `requirements-dev.txt` with a per-test cap as a CI backstop so a teardown stall fails fast instead of hanging. Aligns with the existing flagged timing-sensitive items in this section (inotify timeouts, Toast timer races).
   - **Resolved (2026-06-11) — root cause was a GIL deadlock, not a non-joined thread.** The original hypothesis (unjoined inotify/`AlignmentWorker` thread) was *wrong*; two `gdb` all-thread dumps plus a coredump showed: when Python GC destroys a `Player`, its child `QMediaPlayer` blocks in `~QMediaPlayer` -> `QFutureInterfaceBase::waitForFinished()` **holding the GIL** (an in-flight FFmpeg decode future), while the FFmpeg worker thread (`Thread (pooled)`) blocks forever in `PyGILState_Ensure` trying to emit a Qt log line through PyQt's Python message handler `qtcore_MessageHandler`. The future never finishes -> `waitForFinished()` never returns. It fires at an arbitrary GC point (observed mid-`runtestprotocol`, *not* at interpreter shutdown), which is why an earlier teardown-drain WIP (a `Player._instances` WeakSet drained at each test teardown) could never reach it reliably and in fact ran 7/7 hangs in one verification batch — that WIP was reverted. **Fix (test-harness only):** a session-autouse fixture `tests/conftest.py::_qt_native_message_handler` calls `qInstallMessageHandler(None)` to install Qt's native C++ message handler, so the FFmpeg worker no longer needs the GIL to log; paired with `--no-qt-log` in `pyproject.toml` addopts so pytest-qt does not reinstall its own Python handler per test. Verified **30/30** timed full-suite runs hang-free (baseline hung ~50%); `597 passed, 12 skipped`, ruff clean. `pytest-timeout` (fix direction b) was not added — unnecessary once the deadlock is gone, and it would only convert a hang into a failure rather than fix it. **Latent follow-up (not fixed):** the same deadlock could in theory hang the *production* app on close (the single long-lived `Player` destroyed with an in-flight future); never observed, and fixing it would change production Qt-logging behavior, so left as a separate consideration. **Related benign symptom (2026-07-28):** the test log occasionally prints `qt.core.qfuture.continuations: Parent future has 2 result(s), but only the first result will be handled in the continuation.` - this is the *same* QMediaPlayer/FFmpeg in-flight decode future, emitted from inside Qt Multimedia (our source has zero `QFuture`/`QtConcurrent` use). Informational only, no functional impact; parked here rather than as a new item because it shares this root machinery. Would be resolved by the same production-close future-drain if that latent follow-up is ever taken.
+  Kind: implement.
 
 **False positives logged**
 
@@ -678,14 +1188,27 @@ Calibration: 67 raw → ~40 actionable → ~35 closed inline + 5 deferred. Lower
 
 Tools run: ruff, bandit, semgrep (`p/security-audit` + `p/python`), gitleaks, trivy fs, pyright, shellcheck. Six tools clean (0 findings each); pyright surfaced 65 raw → 3 actionable (95% noise from PyQt6 stub conservatism: `objectName=` kwarg, `Optional[X]` returns from `QListWidget.item()` / `QMenu.addAction()`, parameter-name mismatch on `resizeEvent` overrides, mutagen import resolution on system-Python pyright). Filtered manually given small volume.
 
-- ✅ **LOW — `LibraryPane.set_tracks` annotation widened to `Sequence[Track]`.** Now matches `Library.tracks: tuple[Track, ...]` (commit `b00807b`).
-- ✅ **LOW — `AlbumOrderPane._rerender_after_move` narrows `itemWidget()`.** `isinstance(widget, _OrderRowWidget)` makes a future row-widget swap fail at type-check time rather than runtime (commit `b00807b`).
-- ✅ **LOW — `LibraryPane.row_accent_at` narrowed via `isinstance(value, str)`.** Toggle-column sort tuple can't leak through the title-column lookup (commit `b00807b`).
+- ✅ [MUSI-0175] **LOW — `LibraryPane.set_tracks` annotation widened to `Sequence[Track]`.**
+  Now matches `Library.tracks: tuple[Track, ...]` (commit `b00807b`).
+  Kind: implement.
+
+- ✅ [MUSI-0176] **LOW — `AlbumOrderPane._rerender_after_move` narrows `itemWidget()`.**
+  `isinstance(widget, _OrderRowWidget)` makes a future row-widget swap fail at type-check time rather than runtime (commit `b00807b`).
+  Kind: implement.
+
+- ✅ [MUSI-0177] **LOW — `LibraryPane.row_accent_at` narrowed via `isinstance(value, str)`.**
+  Toggle-column sort tuple can't leak through the title-column lookup (commit `b00807b`).
+  Kind: implement.
 
 Also recommended (not code findings):
 
-- ✅ **INFO — Add `pyrightconfig.json` at project root pointing at `.venv`.** Recovers the 4 `mutagen` unresolved-import diagnostics on every audit run. Landed in v0.5.1 sweep.
-- ✅ **INFO — Persist `.gitleaks.toml` allowlist in-repo.** Path-regexp allowlist + extends-default-rules pinned at the repo root; `gitleaks detect -c .gitleaks.toml` runs without a `/tmp` shim. Landed in v0.5.1 sweep.
+- ✅ [MUSI-0178] **INFO — Add `pyrightconfig.json` at project root pointing at `.venv`.**
+  Recovers the 4 `mutagen` unresolved-import diagnostics on every audit run. Landed in v0.5.1 sweep.
+  Kind: implement.
+
+- ✅ [MUSI-0179] **INFO — Persist `.gitleaks.toml` allowlist in-repo.**
+  Path-regexp allowlist + extends-default-rules pinned at the repo root; `gitleaks detect -c .gitleaks.toml` runs without a `/tmp` shim. Landed in v0.5.1 sweep.
+  Kind: implement.
 
 Calibration: 0 actionable security findings (4th run; cf. 2026-04-28 audit which was 0 actionable post-Phase-2). 95% noise rate on pyright is consistent with PyQt6 stub maturity.
 
@@ -695,102 +1218,297 @@ Calibration: 0 actionable security findings (4th run; cf. 2026-04-28 audit which
 
 8-lane multi-agent independent review post-Phase-3B (v0.4.0). Author-bias flagged: parent session authored Phase 3B (Lanes 1, 4, 7 dense in author-recent code). Mitigation: every cross-cutting theme below is grounded in ≥2 independent agent reports.
 
-- ✅ **Theme I — Test names mirror internal modules, not external signals.** Closed by policy in v0.4.2: CLAUDE.md adopts the forward-only `test_TC_NN_*` / `test_WCAG_*` / `test_RFC_*` prefix convention for NEW load-bearing tests; existing files keep their names (retroactive rename would cascade through 15+ doc references without improving correctness).
-- ✅ **Theme J — Glyphs single-source-of-truth bypassed across UI.** Closed in v0.4.2 commit `d4ef58f` (`alignment_status.py`, `library_pane.py`, `toast.py` consume `theme.Glyphs`); v0.5.0 F12 added `Glyphs.MIDDOT` for the toast separator.
-- ✅ **Theme K — Cancel / teardown semantics are partial across subsystems.** All three components closed: `AlignmentService.cancel()` emits NOT_YET_ALIGNED revert (Tier 1 L4-M5); `AlbumStore.delete/rename` cancel `DebouncedWriter` entries (Tier 1 L5-M3); `closeEvent` collects per-step failures into a stderr summary (Tier 2 L8-H4).
-- ✅ **Theme L — Spec text vs code drift on contracts that can't ship in current form.** All four closed: L1-H3 spec amended to "semantic equivalence" (Tier 2); L2-H3 `<file>.v<old>.bak` migration helper added (Tier 2); L6-H4 drag handles hidden on approved (Tier 2); L8-M4 outline-offset workaround in `theme.py:184-186` widens the existing border + shrinks padding to avoid layout shift (Qt QSS limitation documented inline).
-- ✅ **Theme F (recurrence)** — WCAG 2.2 §4.1.2 / §4.1.3 a11y gaps closed in Tier 2: top-bar Approve / Reopen + AlbumSwitcher pill expose `setAccessibleName` (L6-H2 + H3); Toast surfaces `AccessibleDescription` for live-region announcement (L7-H2).
-- ✅ **Theme B (recurrence)** — settings.json schema growth caught up to Spec 10: `albums_folder` (Tier 1 L8-C1), `ui.theme` + `ui.open_report_folder_on_approve` (v0.5.0 F31 + F30), `schema_version` stamping at every write site (v0.5.1 sweep). All Spec 10 §`settings.json` v1 fields are now implemented.
+- ✅ [MUSI-0180] **Theme I — Test names mirror internal modules, not external signals.**
+  Closed by policy in v0.4.2: CLAUDE.md adopts the forward-only `test_TC_NN_*` / `test_WCAG_*` / `test_RFC_*` prefix convention for NEW load-bearing tests; existing files keep their names (retroactive rename would cascade through 15+ doc references without improving correctness).
+  Kind: implement.
+
+- ✅ [MUSI-0181] **Theme J — Glyphs single-source-of-truth bypassed across UI.**
+  Closed in v0.4.2 commit `d4ef58f` (`alignment_status.py`, `library_pane.py`, `toast.py` consume `theme.Glyphs`); v0.5.0 F12 added `Glyphs.MIDDOT` for the toast separator.
+  Kind: implement.
+
+- ✅ [MUSI-0182] **Theme K — Cancel / teardown semantics are partial across subsystems.**
+  All three components closed: `AlignmentService.cancel()` emits NOT_YET_ALIGNED revert (Tier 1 L4-M5); `AlbumStore.delete/rename` cancel `DebouncedWriter` entries (Tier 1 L5-M3); `closeEvent` collects per-step failures into a stderr summary (Tier 2 L8-H4).
+  Kind: implement.
+
+- ✅ [MUSI-0183] **Theme L — Spec text vs code drift on contracts that can't ship in current form.**
+  All four closed: L1-H3 spec amended to "semantic equivalence" (Tier 2); L2-H3 `<file>.v<old>.bak` migration helper added (Tier 2); L6-H4 drag handles hidden on approved (Tier 2); L8-M4 outline-offset workaround in `theme.py:184-186` widens the existing border + shrinks padding to avoid layout shift (Qt QSS limitation documented inline).
+  Kind: implement.
+
+- ✅ [MUSI-0184] **Theme F (recurrence)**
+  — WCAG 2.2 §4.1.2 / §4.1.3 a11y gaps closed in Tier 2: top-bar Approve / Reopen + AlbumSwitcher pill expose `setAccessibleName` (L6-H2 + H3); Toast surfaces `AccessibleDescription` for live-region announcement (L7-H2).
+  Kind: implement.
+
+- ✅ [MUSI-0185] **Theme B (recurrence)**
+  — settings.json schema growth caught up to Spec 10: `albums_folder` (Tier 1 L8-C1), `ui.theme` + `ui.open_report_folder_on_approve` (v0.5.0 F31 + F30), `schema_version` stamping at every write site (v0.5.1 sweep). All Spec 10 §`settings.json` v1 fields are now implemented.
+  Kind: implement.
 
 ## 🔒 Tier 1 — Phase 3B ship-this-week fixes (data-loss / blocking)
 
 ✅ **All 7 landed 2026-04-30** across 5 commits. 354 → 366 tests pass; ruff clean. Threat-model calibration: single-user desktop, no network/auth/PII; data-locality + crash-atomicity are HIGH; "security" findings universally Low (no remote attacker).
 
-- ✅ **CRITICAL — `app._resolve_project_root()` returned `Path.cwd()` instead of consulting settings.** Wired `albums_folder` setting (Spec 10 declared it but the reader was never built). Resolution order: settings → repo root if running from a source tree → CWD with stderr warning. Installed users with a configured `albums_folder` get Albums/ + state.json at the right location; unconfigured installs get a loud stderr nudge. (Commit `63c1678`. L8-C1.)
-- ✅ **HIGH — `AlbumStore.rename()` was not crash-atomic.** Reordered to: validate name → cancel pending → rename folder → mutate domain → save JSON → emit. EBUSY/EACCES/EXDEV on the disk move now leaves the entire pre-state intact. (Commit `5e18c14`. L5-H1.)
-- ✅ **HIGH — `AlbumStore.delete()` / `rename()` didn't cancel pending `DebouncedWriter` entries.** Added `DebouncedWriter.cancel(key)`; rename() and delete() call it before moving the folder. (Commit `5e18c14`. L5-M3.)
-- ✅ **HIGH — `AlbumStore.delete()` slot-raise left dangling `_current_id`.** Reordered delete() to compute `was_current` → pop dicts → swap `_current_id` → emit album_removed → emit current_album_changed. State is consistent before any signal fires. (Commit `5e18c14`. L5-H3.)
-- ✅ **HIGH — `Player._on_media_status` swallowed `MediaStatus.InvalidMedia`.** Added an InvalidMedia clause that mirrors `_on_error`'s ERROR-state transition and emits `Could not decode <source>`. Other media statuses unchanged. (Commit `02ba08a`. L3-H1.)
-- ✅ **HIGH — `AlignmentService.cancel()` didn't emit status revert.** Emit `status_changed(path, NOT_YET_ALIGNED)` immediately after `requestInterruption()`. LyricsPanel pill leaves the ALIGNING state. (Commit `b3d7249`. L4-M5.)
-- ✅ **HIGH — AlignmentWorker dropped the WhisperX install hint.** Added `except ImportError` branch in `run()` that emits the spec'd "WhisperX not installed. Install via: pip install whisperx" string. (Commit `41a09cf`. L4-L5.)
+- ✅ [MUSI-0186] **CRITICAL — `app._resolve_project_root()` returned `Path.cwd()` instead of consulting settings.**
+  Wired `albums_folder` setting (Spec 10 declared it but the reader was never built). Resolution order: settings → repo root if running from a source tree → CWD with stderr warning. Installed users with a configured `albums_folder` get Albums/ + state.json at the right location; unconfigured installs get a loud stderr nudge. (Commit `63c1678`. L8-C1.)
+  Kind: implement.
+
+- ✅ [MUSI-0187] **HIGH — `AlbumStore.rename()` was not crash-atomic.**
+  Reordered to: validate name → cancel pending → rename folder → mutate domain → save JSON → emit. EBUSY/EACCES/EXDEV on the disk move now leaves the entire pre-state intact. (Commit `5e18c14`. L5-H1.)
+  Kind: implement.
+
+- ✅ [MUSI-0188] **HIGH — `AlbumStore.delete()` / `rename()` didn't cancel pending `DebouncedWriter` entries.**
+  Added `DebouncedWriter.cancel(key)`; rename() and delete() call it before moving the folder. (Commit `5e18c14`. L5-M3.)
+  Kind: implement.
+
+- ✅ [MUSI-0189] **HIGH — `AlbumStore.delete()` slot-raise left dangling `_current_id`.**
+  Reordered delete() to compute `was_current` → pop dicts → swap `_current_id` → emit album_removed → emit current_album_changed. State is consistent before any signal fires. (Commit `5e18c14`. L5-H3.)
+  Kind: implement.
+
+- ✅ [MUSI-0190] **HIGH — `Player._on_media_status` swallowed `MediaStatus.InvalidMedia`.**
+  Added an InvalidMedia clause that mirrors `_on_error`'s ERROR-state transition and emits `Could not decode <source>`. Other media statuses unchanged. (Commit `02ba08a`. L3-H1.)
+  Kind: implement.
+
+- ✅ [MUSI-0191] **HIGH — `AlignmentService.cancel()` didn't emit status revert.**
+  Emit `status_changed(path, NOT_YET_ALIGNED)` immediately after `requestInterruption()`. LyricsPanel pill leaves the ALIGNING state. (Commit `b3d7249`. L4-M5.)
+  Kind: implement.
+
+- ✅ [MUSI-0192] **HIGH — AlignmentWorker dropped the WhisperX install hint.**
+  Added `except ImportError` branch in `run()` that emits the spec'd "WhisperX not installed. Install via: pip install whisperx" string. (Commit `41a09cf`. L4-L5.)
+  Kind: implement.
 
 ## 🔒 Tier 2 — Phase 3B hardening sweep (correctness, pre-v0.5.0)
 
 ✅ **All 35 landed 2026-04-30** across 8 commits. 366 → 408 tests pass; ruff clean. One spec amendment (L1-H3) and one closure-by-spec (L6-H1) required no code change.
 
 Domain (L1):
-- ✅ **HIGH — `Lyrics.track_path` typed `Path | None` but Spec 07 §Outputs declares `Path`; `parse_lrc` never sets it.** Threaded `track_path` through `parse_lrc(text, *, track_path)` (commit `abcc021`). L1-H1.
-- ✅ **HIGH — `parse_lrc` malformed-line tolerance has no signal.** Now raises `LRCParseError` when malformed (no-leading-stamp) lines exceed 50% of non-blank, non-tag-header content lines (commit `abcc021`). The persistence layer's existing `LRCParseError → .lrc.bak` path now picks up noisy files. L1-H2.
-- ✅ **SPEC AMEND — `format_lrc` byte-identical round-trip is structurally impossible.** Spec 07 TC-07-02 amended to "semantic equivalence" with explicit rationale (headers/multi-stamp/comments are surface metadata, not playable contract); Lyrics dataclass type bumped to `track_path: Path | None = None` (commit `abcc021`). L1-H3.
+
+- ✅ [MUSI-0193] **HIGH — `Lyrics.track_path` typed `Path | None` but Spec 07 §Outputs declares `Path`; `parse_lrc` never sets it.**
+  Threaded `track_path` through `parse_lrc(text, *, track_path)` (commit `abcc021`). L1-H1.
+  Kind: implement.
+
+- ✅ [MUSI-0194] **HIGH — `parse_lrc` malformed-line tolerance has no signal.**
+  Now raises `LRCParseError` when malformed (no-leading-stamp) lines exceed 50% of non-blank, non-tag-header content lines (commit `abcc021`). The persistence layer's existing `LRCParseError → .lrc.bak` path now picks up noisy files. L1-H2.
+  Kind: implement.
+
+- ✅ [MUSI-0195] **SPEC AMEND — `format_lrc` byte-identical round-trip is structurally impossible.**
+  Spec 07 TC-07-02 amended to "semantic equivalence" with explicit rationale (headers/multi-stamp/comments are surface metadata, not playable contract); Lyrics dataclass type bumped to `track_path: Path | None = None` (commit `abcc021`). L1-H3.
+  Kind: implement.
 
 Persistence (L2):
-- ✅ **HIGH — `_fsync_dir` swallows all `OSError` indiscriminately.** Errno check narrowed to `{errno.EINVAL, errno.ENOTSUP}`; EIO / EACCES / ENOENT propagate (commit `a54b5a1`). L2-H1.
-- ✅ **HIGH — Post-`os.replace` `_fsync_dir` failure unlinks tmp + raises.** Split try-block: post-rename fsync failure logs warning + continues (data is durable at the final name) (commit `a54b5a1`). L2-H2.
-- ✅ **HIGH — Schema migration `.bak` requirement still unimplemented (Theme C closure).** `_write_migration_bak()` helper added to both `album_io.py` and `state_io.py`; load-time migration writes `<file>.v<old>.bak` with the original bytes before rewriting the migrated form (commit `a54b5a1`). Latent until v2 schema lands. L2-H3.
-- ✅ **MEDIUM — `_deserialize` field-shape errors leak as bare `KeyError`/`ValueError`.** Wrapped `_deserialize` call site with `except (KeyError, ValueError, TypeError) as exc: raise AlbumDirCorrupt(...) from exc` (commit `a54b5a1`). L2-M4.
-- ✅ **MEDIUM — `state_io._coerce_window` accepts width=0 / height=0; Spec 10 mandates >= 100.** Added `max(100, raw)` clamp on width/height; x/y unaffected (commit `a54b5a1`). L2-M2.
-- ✅ **MEDIUM — `_coerce_window` rejects splitter_sizes `n == 0`.** Filter relaxed to `n >= 0` per Spec 10 (commit `a54b5a1`). L2-M3.
+
+- ✅ [MUSI-0196] **HIGH — `_fsync_dir` swallows all `OSError` indiscriminately.**
+  Errno check narrowed to `{errno.EINVAL, errno.ENOTSUP}`; EIO / EACCES / ENOENT propagate (commit `a54b5a1`). L2-H1.
+  Kind: implement.
+
+- ✅ [MUSI-0197] **HIGH — Post-`os.replace` `_fsync_dir` failure unlinks tmp + raises.**
+  Split try-block: post-rename fsync failure logs warning + continues (data is durable at the final name) (commit `a54b5a1`). L2-H2.
+  Kind: implement.
+
+- ✅ [MUSI-0198] **HIGH — Schema migration `.bak` requirement still unimplemented (Theme C closure).**
+  `_write_migration_bak()` helper added to both `album_io.py` and `state_io.py`; load-time migration writes `<file>.v<old>.bak` with the original bytes before rewriting the migrated form (commit `a54b5a1`). Latent until v2 schema lands. L2-H3.
+  Kind: implement.
+
+- ✅ [MUSI-0199] **MEDIUM — `_deserialize` field-shape errors leak as bare `KeyError`/`ValueError`.**
+  Wrapped `_deserialize` call site with `except (KeyError, ValueError, TypeError) as exc: raise AlbumDirCorrupt(...) from exc` (commit `a54b5a1`). L2-M4.
+  Kind: implement.
+
+- ✅ [MUSI-0200] **MEDIUM — `state_io._coerce_window` accepts width=0 / height=0; Spec 10 mandates >= 100.**
+  Added `max(100, raw)` clamp on width/height; x/y unaffected (commit `a54b5a1`). L2-M2.
+  Kind: implement.
+
+- ✅ [MUSI-0201] **MEDIUM — `_coerce_window` rejects splitter_sizes `n == 0`.**
+  Filter relaxed to `n >= 0` per Spec 10 (commit `a54b5a1`). L2-M3.
+  Kind: implement.
 
 Player (L3):
-- ✅ **HIGH — `Player` has no `EndOfMedia` signal.** Added `ended = pyqtSignal()` emitted from `_on_media_status` on `EndOfMedia` (commit `0e60314`). Lyrics tracker / autoplay UX can now distinguish natural end from user-stop. L3-H2.
-- ✅ **MEDIUM — `_on_error` may emit `error` twice on Qt 6.11 backends.** Added `_emit_error()` indirection with (code, message)+50ms-window dedupe; both `_on_error` and `_on_media_status` (InvalidMedia) route through it (commit `0e60314`). L3-M3.
+
+- ✅ [MUSI-0202] **HIGH — `Player` has no `EndOfMedia` signal.**
+  Added `ended = pyqtSignal()` emitted from `_on_media_status` on `EndOfMedia` (commit `0e60314`). Lyrics tracker / autoplay UX can now distinguish natural end from user-stop. L3-H2.
+  Kind: implement.
+
+- ✅ [MUSI-0203] **MEDIUM — `_on_error` may emit `error` twice on Qt 6.11 backends.**
+  Added `_emit_error()` indirection with (code, message)+50ms-window dedupe; both `_on_error` and `_on_media_status` (InvalidMedia) route through it (commit `0e60314`). L3-M3.
+  Kind: implement.
 
 Alignment (L4):
-- ✅ **MEDIUM — Worker fast-cancel pulls in WhisperX before hitting interrupt check.** Added `_check_interrupted()` helper; the WhisperX import is now wrapped in `try/finally` so a cancel between the pre-check and the import surfaces as `_AlignmentInterrupted` (commit `e9ef0d4`). L4-H1-real.
-- ✅ **MEDIUM — `_segments_to_lyrics` silently mis-pairs on count mismatch.** `logger.info(...)` line now records segment-vs-lyric count drift + the fallback-end timestamp (commit `e9ef0d4`). L4-M1.
-- ✅ **MEDIUM — `segments[-1]["end"]` access without `.get()` guard.** Switched to `.get("end", 0.0)` (commit `e9ef0d4`). L4-M2.
-- ✅ **MEDIUM — `LyricsTracker.set_lyrics` does not reset `_last_position`.** Reset to 0.0 in `set_lyrics`; the index-recompute uses the reset position (commit `e9ef0d4`). L4-M4.
+
+- ✅ [MUSI-0204] **MEDIUM — Worker fast-cancel pulls in WhisperX before hitting interrupt check.**
+  Added `_check_interrupted()` helper; the WhisperX import is now wrapped in `try/finally` so a cancel between the pre-check and the import surfaces as `_AlignmentInterrupted` (commit `e9ef0d4`). L4-H1-real.
+  Kind: implement.
+
+- ✅ [MUSI-0205] **MEDIUM — `_segments_to_lyrics` silently mis-pairs on count mismatch.**
+  `logger.info(...)` line now records segment-vs-lyric count drift + the fallback-end timestamp (commit `e9ef0d4`). L4-M1.
+  Kind: implement.
+
+- ✅ [MUSI-0206] **MEDIUM — `segments[-1]["end"]` access without `.get()` guard.**
+  Switched to `.get("end", 0.0)` (commit `e9ef0d4`). L4-M2.
+  Kind: implement.
+
+- ✅ [MUSI-0207] **MEDIUM — `LyricsTracker.set_lyrics` does not reset `_last_position`.**
+  Reset to 0.0 in `set_lyrics`; the index-recompute uses the reset position (commit `e9ef0d4`). L4-M4.
+  Kind: implement.
 
 Library Watcher (L5):
-- ✅ **HIGH — `LibraryWatcher._rebind_watch` removes-then-adds = inotify event-loss window.** Replaced removeAll-then-addAll with diff-based `removePaths(current - wanted) + addPaths(wanted - current)`; same-set rebinds touch nothing (commit `e7d29cc`). L5-H2.
-- ✅ **MEDIUM — `_check_trash_same_filesystem` only runs at construction.** Re-runs from `delete()` after `trash.mkdir()`; one-shot via `_trash_fs_checked` flag (commit `e7d29cc`). L5-M1.
-- ✅ **MEDIUM — `rescan()` clears state before the iterate loop.** Local-dict-then-swap; PermissionError on `iterdir()` returns early with prior state intact (commit `e7d29cc`). L5-M2.
-- ✅ **MEDIUM — `LibraryWatcher` parent-watch fires on unrelated sibling changes.** `_on_dir_changed` filters by path argument: only the tracked folder OR its exact parent triggers refresh (commit `e7d29cc`). L5-M4.
+
+- ✅ [MUSI-0208] **HIGH — `LibraryWatcher._rebind_watch` removes-then-adds = inotify event-loss window.**
+  Replaced removeAll-then-addAll with diff-based `removePaths(current - wanted) + addPaths(wanted - current)`; same-set rebinds touch nothing (commit `e7d29cc`). L5-H2.
+  Kind: implement.
+
+- ✅ [MUSI-0209] **MEDIUM — `_check_trash_same_filesystem` only runs at construction.**
+  Re-runs from `delete()` after `trash.mkdir()`; one-shot via `_trash_fs_checked` flag (commit `e7d29cc`). L5-M1.
+  Kind: implement.
+
+- ✅ [MUSI-0210] **MEDIUM — `rescan()` clears state before the iterate loop.**
+  Local-dict-then-swap; PermissionError on `iterdir()` returns early with prior state intact (commit `e7d29cc`). L5-M2.
+  Kind: implement.
+
+- ✅ [MUSI-0211] **MEDIUM — `LibraryWatcher` parent-watch fires on unrelated sibling changes.**
+  `_on_dir_changed` filters by path argument: only the tracked folder OR its exact parent triggers refresh (commit `e7d29cc`). L5-M4.
+  Kind: implement.
 
 UI top/library/order (L6):
-- ✅ **HIGH — Drag-handle glyph visible on approved albums.** Extracted `_row_text(i, title, *, approved)` helper; `set_album` and `_rerender_after_move` both consult album status (commit `6d2b88e`). L6-H4.
-- ✅ **HIGH (closure) — Approve button enabled below target.** Spec 02 §approve preconditions explicitly allows approval at any non-zero count; the green-counter cue at at-target is UX feedback for "complete album", not a gate. Documented inline in `top_bar.py:87` (commit `091859a`). L6-H1.
-- ✅ **HIGH — Top-bar buttons + AlbumSwitcher pill missing `setAccessibleName` (Theme F closure).** Approve / Reopen got accessible names + descriptions; AlbumSwitcher pill folds the current album name into its accessible name on every refresh (commit `6d2b88e`). L6-H2 + H3.
-- ✅ **MEDIUM — `TargetCounter` text-input path bypasses at-target floor invariant.** `_on_text_committed` now reverts when typed value < `_selected`; no `target_changed` emit on rejected input (commit `6d2b88e`). L6-M3.
-- ✅ **MEDIUM — `TrackFilterProxy` uses `.lower()` not `.casefold()` (Theme G closure).** Both needle and per-field comparison switched to `casefold()`; matches AlbumStore / Library / model sort role behaviour (commit `6d2b88e`). L6-M5.
-- ✅ **MEDIUM — `LibraryPane` accesses `_model._toggle_enabled` / `._tracks`.** Added public accessors `tracks()`, `is_toggle_enabled(row)`, `selected_paths()` on `TrackTableModel`; `LibraryPane` no longer reaches into private state (commit `6d2b88e`). L6-M2.
+
+- ✅ [MUSI-0212] **HIGH — Drag-handle glyph visible on approved albums.**
+  Extracted `_row_text(i, title, *, approved)` helper; `set_album` and `_rerender_after_move` both consult album status (commit `6d2b88e`). L6-H4.
+  Kind: implement.
+
+- ✅ [MUSI-0213] **HIGH (closure) — Approve button enabled below target.**
+  Spec 02 §approve preconditions explicitly allows approval at any non-zero count; the green-counter cue at at-target is UX feedback for "complete album", not a gate. Documented inline in `top_bar.py:87` (commit `091859a`). L6-H1.
+  Kind: implement.
+
+- ✅ [MUSI-0214] **HIGH — Top-bar buttons + AlbumSwitcher pill missing `setAccessibleName` (Theme F closure).**
+  Approve / Reopen got accessible names + descriptions; AlbumSwitcher pill folds the current album name into its accessible name on every refresh (commit `6d2b88e`). L6-H2 + H3.
+  Kind: implement.
+
+- ✅ [MUSI-0215] **MEDIUM — `TargetCounter` text-input path bypasses at-target floor invariant.**
+  `_on_text_committed` now reverts when typed value < `_selected`; no `target_changed` emit on rejected input (commit `6d2b88e`). L6-M3.
+  Kind: implement.
+
+- ✅ [MUSI-0216] **MEDIUM — `TrackFilterProxy` uses `.lower()` not `.casefold()` (Theme G closure).**
+  Both needle and per-field comparison switched to `casefold()`; matches AlbumStore / Library / model sort role behaviour (commit `6d2b88e`). L6-M5.
+  Kind: implement.
+
+- ✅ [MUSI-0217] **MEDIUM — `LibraryPane` accesses `_model._toggle_enabled` / `._tracks`.**
+  Added public accessors `tracks()`, `is_toggle_enabled(row)`, `selected_paths()` on `TrackTableModel`; `LibraryPane` no longer reaches into private state (commit `6d2b88e`). L6-M2.
+  Kind: implement.
 
 UI playback/lyrics (L7):
-- ✅ **HIGH — `LyricsPanel._restyle_items` constructs default `QFont()`.** Per-item font now derived from `self.list.font()` (Spec 11 typography preserved); only the bold property is mutated per row (commit `dab8507`). L7-H1.
-- ✅ **HIGH — Toast lacks AlertMessage role / ARIA-live (Theme F closure).** `show_message` updates `setAccessibleName("Notification")` + `setAccessibleDescription(msg)` to fire Qt's DescriptionChange a11y event. (PyQt6 doesn't bind `QAccessible.updateAccessibility` — this is the closest live-region announcement available.) (commit `dab8507`). L7-H2.
-- ✅ **MEDIUM — TransportBar scrubber `sliderMoved` spams `player.seek()`.** Switched to `sliderReleased`; the slot reads `self.scrubber.value()` for the final drag position (commit `dab8507`). L7-H3.
-- ✅ **MEDIUM — `LyricsPanel._restyle_items` is O(N) per line crossing.** Added `_restyle_at(set)` for partial restyles; `set_current_line` now restyles only the inclusive `[min(old, new), max(old, new)]` range (2 items for forward-by-one ticks; bounded by jump distance for seeks) (commit `dab8507`). L7-H4.
-- ✅ **MEDIUM — `NowPlayingPane.set_track(None)` does not clear `lyrics_panel`.** Mirror the per-field clear with `self.lyrics_panel.set_lyrics(None)` (commit `dab8507`). L7-M5.
-- ✅ **MEDIUM — `LyricsPanel.__init__` palette default is unsafe-by-default.** Added `palette_for_lyrics()` accessor so callers can verify which palette instance is bound; default `Palette.dark_colourful()` retained for back-compat with construction-without-palette tests (commit `dab8507`). L7-M1.
+
+- ✅ [MUSI-0218] **HIGH — `LyricsPanel._restyle_items` constructs default `QFont()`.**
+  Per-item font now derived from `self.list.font()` (Spec 11 typography preserved); only the bold property is mutated per row (commit `dab8507`). L7-H1.
+  Kind: implement.
+
+- ✅ [MUSI-0219] **HIGH — Toast lacks AlertMessage role / ARIA-live (Theme F closure).**
+  `show_message` updates `setAccessibleName("Notification")` + `setAccessibleDescription(msg)` to fire Qt's DescriptionChange a11y event. (PyQt6 doesn't bind `QAccessible.updateAccessibility` — this is the closest live-region announcement available.) (commit `dab8507`). L7-H2.
+  Kind: implement.
+
+- ✅ [MUSI-0220] **MEDIUM — TransportBar scrubber `sliderMoved` spams `player.seek()`.**
+  Switched to `sliderReleased`; the slot reads `self.scrubber.value()` for the final drag position (commit `dab8507`). L7-H3.
+  Kind: implement.
+
+- ✅ [MUSI-0221] **MEDIUM — `LyricsPanel._restyle_items` is O(N) per line crossing.**
+  Added `_restyle_at(set)` for partial restyles; `set_current_line` now restyles only the inclusive `[min(old, new), max(old, new)]` range (2 items for forward-by-one ticks; bounded by jump distance for seeks) (commit `dab8507`). L7-H4.
+  Kind: implement.
+
+- ✅ [MUSI-0222] **MEDIUM — `NowPlayingPane.set_track(None)` does not clear `lyrics_panel`.**
+  Mirror the per-field clear with `self.lyrics_panel.set_lyrics(None)` (commit `dab8507`). L7-M5.
+  Kind: implement.
+
+- ✅ [MUSI-0223] **MEDIUM — `LyricsPanel.__init__` palette default is unsafe-by-default.**
+  Added `palette_for_lyrics()` accessor so callers can verify which palette instance is bound; default `Palette.dark_colourful()` retained for back-compat with construction-without-palette tests (commit `dab8507`). L7-M1.
+  Kind: implement.
 
 App + main_window + theme (L8):
-- ✅ **HIGH — `splitter.setSizes` runs before `splitter.show()`.** Stash `_restore_splitter_sizes` at construction; `showEvent` applies them once the splitter has its real width. Idempotent: minimise/restore doesn't re-clamp (commit `911784e`). L8-H1.
-- ✅ **HIGH — `start_raise_server` precondition only in docstring.** Now takes a required `lock: QSharedMemory` kwarg with `assert lock is not None`; the test that calls it acquires + passes the lock (commit `911784e`). L8-H3.
-- ✅ **MEDIUM — `closeEvent` silent-fail with no user surface.** Per-step failures collected into a single stderr summary line at the end of `closeEvent` rather than only `logger.exception` (commit `911784e`). L8-H4.
-- ✅ **MEDIUM — `_state_save_timer` not stopped at start of `closeEvent`.** First instruction of `closeEvent` is now `self._state_save_timer.stop()` (commit `911784e`). L8-M2.
-- ✅ **MEDIUM — `_save_state_now` ratio rounding doesn't preserve sum=13.** Replaced naive `round()` with `_hamilton_ratios()` (largest-remainder method); pathological splits like `[1, 1, 1500]` now sum to exactly `SPLITTER_RATIO_TOTAL` (commit `911784e`). L8-M1.
-- ✅ **MEDIUM — `_key_in_text_field` doesn't include `QAbstractSpinBox` / editable `QComboBox` / `QDateTimeEdit`.** Broadened the isinstance set; editable QComboBox detected by walking up to the parent (commit `911784e`). L8-M3.
-- ✅ **MEDIUM — `_sync_lyrics_for_track` calls `auto_align_on_play(track)` whose name hides the gate.** Added a leading comment at the callsite naming the `alignment.auto_align_on_play` setting that gates the actual start (commit `911784e`). L8-M5.
+
+- ✅ [MUSI-0224] **HIGH — `splitter.setSizes` runs before `splitter.show()`.**
+  Stash `_restore_splitter_sizes` at construction; `showEvent` applies them once the splitter has its real width. Idempotent: minimise/restore doesn't re-clamp (commit `911784e`). L8-H1.
+  Kind: implement.
+
+- ✅ [MUSI-0225] **HIGH — `start_raise_server` precondition only in docstring.**
+  Now takes a required `lock: QSharedMemory` kwarg with `assert lock is not None`; the test that calls it acquires + passes the lock (commit `911784e`). L8-H3.
+  Kind: implement.
+
+- ✅ [MUSI-0226] **MEDIUM — `closeEvent` silent-fail with no user surface.**
+  Per-step failures collected into a single stderr summary line at the end of `closeEvent` rather than only `logger.exception` (commit `911784e`). L8-H4.
+  Kind: implement.
+
+- ✅ [MUSI-0227] **MEDIUM — `_state_save_timer` not stopped at start of `closeEvent`.**
+  First instruction of `closeEvent` is now `self._state_save_timer.stop()` (commit `911784e`). L8-M2.
+  Kind: implement.
+
+- ✅ [MUSI-0228] **MEDIUM — `_save_state_now` ratio rounding doesn't preserve sum=13.**
+  Replaced naive `round()` with `_hamilton_ratios()` (largest-remainder method); pathological splits like `[1, 1, 1500]` now sum to exactly `SPLITTER_RATIO_TOTAL` (commit `911784e`). L8-M1.
+  Kind: implement.
+
+- ✅ [MUSI-0229] **MEDIUM — `_key_in_text_field` doesn't include `QAbstractSpinBox` / editable `QComboBox` / `QDateTimeEdit`.**
+  Broadened the isinstance set; editable QComboBox detected by walking up to the parent (commit `911784e`). L8-M3.
+  Kind: implement.
+
+- ✅ [MUSI-0230] **MEDIUM — `_sync_lyrics_for_track` calls `auto_align_on_play(track)` whose name hides the gate.**
+  Added a leading comment at the callsite naming the `alignment.auto_align_on_play` setting that gates the actual start (commit `911784e`). L8-M5.
+  Kind: implement.
 
 ## ⚡ Tier 3 — Phase 3B structural / cosmetic
 
 ✅ **All 15 landed 2026-04-30 in v0.4.2** across 5 commits. 408 → 415 tests pass; ruff clean. One MEDIUM item closed by policy (Theme I — test-filename prefix convention adopted forward-only via CLAUDE.md addition; retroactive rename of 30+ test files would cascade through 15+ doc references without improving correctness).
 
-- ✅ **MEDIUM — Glyphs single-source-of-truth sweep (Theme J closure).** Moved `✓` (alignment_status.py), `🔍`/`●`/`○` (library_pane.py), `"x"` (toast.py) to `theme.Glyphs`; literal-vs-escape convention documented at the namespace (commit `d4ef58f`).
-- ✅ **MEDIUM — Test naming discipline (Theme I closure, by policy).** CLAUDE.md adds the forward-only convention: NEW load-bearing test files use `test_TC_NN_*` / `test_WCAG_*` / `test_RFC_*` prefixes. Inline `# Spec:` markers stay required at every test body regardless of filename (commit `1f336df`).
-- ✅ **LOW — `Album` UUID-identity `__eq__`/`__hash__`.** Switched to `dataclass(eq=False)` + explicit identity by `id`. Reads that differ only by `updated_at` ms drift now compare equal (commit `46a33e0`). L1-M2.
-- ✅ **LOW — `Library.find` resolve cost.** Documented at the call site; callers in tight loops should pre-resolve once (commit `46a33e0`). L1-M3.
-- ✅ **LOW — `_format_stamp` 16h cap.** Documented at the `_STAMP` regex (commit `46a33e0`). L1-M4.
-- ✅ **LOW — `slugify` Latin-1 ligature transliteration.** Manual table for Æ/Œ/Ð/Þ/Ø/Ł/Đ/Ħ added before the ASCII-encode step. "Łódź" now slugs to "lodz" not "odz" (commit `46a33e0`).
-- ✅ **LOW — `seek()` clamp below 1.0s.** Documented; tracks <1.0s always seek to start (commit `5ad12f8`). L3-M2.
-- ✅ **LOW — `match qstate:` default case.** Added `case _: pass` for forward-compat with future Qt PlaybackState additions (commit `5ad12f8`).
-- ✅ **LOW — Player handler params typed.** `_on_playback_state` / `_on_media_status` / `_on_error` annotated with `QMediaPlayer.{PlaybackState,MediaStatus,Error}` (commit `5ad12f8`). L3-L1.
-- ✅ **LOW — `LyricsTracker._compute_index` `hint+1` fast path.** Foreground-playing tracks stay O(1) per tick across single-line crossings; two+-line jumps still fall back (commit `5ad12f8`). L4-M3.
-- ✅ **LOW — `Player.set_source(None)` clear.** `path: Path | None` + `setSource(QUrl())`; no more `TypeError` from `Path(None)` (commit `5ad12f8`). L3-M1.
-- ✅ **LOW — Hardcoded `DEFAULT_TRACKS_DIR` path.** Renamed `_DEV_TREE_TRACKS_DIR` (gated to dev mode) + `USER_MUSIC_DIR` (~/Music) added as installed-user fallback (commit `b00807b`). L8-info.
-- ✅ **LOW — Window title duplicates app version.** Title is bare "Album Builder"; `setApplicationVersion` rendered separately by shell (commit `b00807b`). L8-info.
-- ✅ **LOW — Theme font-size 11pt vs Spec 11 11.5px.** Switched body to `font-size: 11.5px`; pixel units sidestep dpi conversion and stay font-anchored across screen scales (commit `b00807b`). L8-info.
-- ✅ **LOW — `closeEvent` `~/` path leak.** `_redact_home()` scrubs `$HOME` → `~` in the per-step failure summary so a desktop launcher redirecting stderr to a shared journal can't expose the username via os-level exception paths (commit `b00807b`). L8-privacy.
+- ✅ [MUSI-0231] **MEDIUM — Glyphs single-source-of-truth sweep (Theme J closure).**
+  Moved `✓` (alignment_status.py), `🔍`/`●`/`○` (library_pane.py), `"x"` (toast.py) to `theme.Glyphs`; literal-vs-escape convention documented at the namespace (commit `d4ef58f`).
+  Kind: implement.
+
+- ✅ [MUSI-0232] **MEDIUM — Test naming discipline (Theme I closure, by policy).**
+  CLAUDE.md adds the forward-only convention: NEW load-bearing test files use `test_TC_NN_*` / `test_WCAG_*` / `test_RFC_*` prefixes. Inline `# Spec:` markers stay required at every test body regardless of filename (commit `1f336df`).
+  Kind: implement.
+
+- ✅ [MUSI-0233] **LOW — `Album` UUID-identity `__eq__`/`__hash__`.**
+  Switched to `dataclass(eq=False)` + explicit identity by `id`. Reads that differ only by `updated_at` ms drift now compare equal (commit `46a33e0`). L1-M2.
+  Kind: implement.
+
+- ✅ [MUSI-0234] **LOW — `Library.find` resolve cost.**
+  Documented at the call site; callers in tight loops should pre-resolve once (commit `46a33e0`). L1-M3.
+  Kind: implement.
+
+- ✅ [MUSI-0235] **LOW — `_format_stamp` 16h cap.**
+  Documented at the `_STAMP` regex (commit `46a33e0`). L1-M4.
+  Kind: implement.
+
+- ✅ [MUSI-0236] **LOW — `slugify` Latin-1 ligature transliteration.**
+  Manual table for Æ/Œ/Ð/Þ/Ø/Ł/Đ/Ħ added before the ASCII-encode step. "Łódź" now slugs to "lodz" not "odz" (commit `46a33e0`).
+  Kind: implement.
+
+- ✅ [MUSI-0237] **LOW — `seek()` clamp below 1.0s.**
+  Documented; tracks <1.0s always seek to start (commit `5ad12f8`). L3-M2.
+  Kind: implement.
+
+- ✅ [MUSI-0238] **LOW — `match qstate:` default case.**
+  Added `case _: pass` for forward-compat with future Qt PlaybackState additions (commit `5ad12f8`).
+  Kind: implement.
+
+- ✅ [MUSI-0239] **LOW — Player handler params typed.**
+  `_on_playback_state` / `_on_media_status` / `_on_error` annotated with `QMediaPlayer.{PlaybackState,MediaStatus,Error}` (commit `5ad12f8`). L3-L1.
+  Kind: implement.
+
+- ✅ [MUSI-0240] **LOW — `LyricsTracker._compute_index` `hint+1` fast path.**
+  Foreground-playing tracks stay O(1) per tick across single-line crossings; two+-line jumps still fall back (commit `5ad12f8`). L4-M3.
+  Kind: implement.
+
+- ✅ [MUSI-0241] **LOW — `Player.set_source(None)` clear.**
+  `path: Path | None` + `setSource(QUrl())`; no more `TypeError` from `Path(None)` (commit `5ad12f8`). L3-M1.
+  Kind: implement.
+
+- ✅ [MUSI-0242] **LOW — Hardcoded `DEFAULT_TRACKS_DIR` path.**
+  Renamed `_DEV_TREE_TRACKS_DIR` (gated to dev mode) + `USER_MUSIC_DIR` (~/Music) added as installed-user fallback (commit `b00807b`). L8-info.
+  Kind: implement.
+
+- ✅ [MUSI-0243] **LOW — Window title duplicates app version.**
+  Title is bare "Album Builder"; `setApplicationVersion` rendered separately by shell (commit `b00807b`). L8-info.
+  Kind: implement.
+
+- ✅ [MUSI-0244] **LOW — Theme font-size 11pt vs Spec 11 11.5px.**
+  Switched body to `font-size: 11.5px`; pixel units sidestep dpi conversion and stay font-anchored across screen scales (commit `b00807b`). L8-info.
+  Kind: implement.
+
+- ✅ [MUSI-0245] **LOW — `closeEvent` `~/` path leak.**
+  `_redact_home()` scrubs `$HOME` → `~` in the per-step failure summary so a desktop launcher redirecting stderr to a shared journal can't expose the username via os-level exception paths (commit `b00807b`). L8-privacy.
+  Kind: implement.
 
 ## 🔭 Methodology gaps (standing practice for v0.5+)
 
@@ -821,7 +1539,9 @@ App + main_window + theme (L8):
 
 **Indie-review carry-forward closures:**
 
-- ✅ **Theme E (keyboard shortcuts).** Every Spec 00 shortcut wired with documented suppression machinery.
+- ✅ [MUSI-0246] **Theme E (keyboard shortcuts).**
+  Every Spec 00 shortcut wired with documented suppression machinery.
+  Kind: implement.
 
 **Manual smoke checklist** (per the Phase 3A plan §Manual smoke):
 
@@ -900,14 +1620,37 @@ Plan: [`docs/plans/2026-04-28-phase-2-albums.md`](docs/plans/2026-04-28-phase-2-
 
 8-lane multi-agent independent review (7 code lanes + 1 documentation lane). Same-mental-model blind spots caught by ≥2 reviewers. Author-bias flagged: parent session authored all of Phase 2; mitigation = fresh-context subagents widening external specs cited.
 
-- ✅ **Theme A — Empty-state pill text drift.** Closed in v0.2.1 Tier 2 (album_switcher.py uses U+00B7 middle dot per Spec 03 + TC-03-06).
-- ✅ **Theme B — `settings.json` 8-field schema.** All Spec 10 v1 fields landed across releases — `tracks_folder` (Phase 1), `albums_folder` (v0.4.0 Tier 1 L8-C1), `audio.{volume,muted}` (v0.3.0), `alignment.*` (v0.4.0), `ui.theme` + `ui.open_report_folder_on_approve` (v0.5.0 F30 + F31), `schema_version` stamping (v0.5.1 sweep).
-- ✅ **Theme C — `.bak` file requirement unimplemented.** Closed in v0.4.1 Tier 2 (L2-H3): `_write_migration_bak()` helper added to both `album_io.py` and `state_io.py`; migration writes `<file>.v<old>.bak` before rewriting.
-- ✅ **Theme D — Approve-button + AlbumPill QSS gradients absent.** Closed in v0.2.2 Tier 3: `QPushButton#ApproveButton` (`success → success-dark`) and `QPushButton#AlbumPill` (`accent-primary-1 → accent-primary-2`) gradient rules in `theme.qt_stylesheet`.
-- ✅ **Theme E — Keyboard shortcuts not wired.** Closed in v0.3.0. Every Spec 00 shortcut wired with `QShortcut` + `_key_in_text_field` suppression for transport keys; F1 help dialog enumerates the bindings.
-- ✅ **Theme F — Screen-reader / a11y labels missing across all widgets.** Closed in v0.2.1 Tier 2 (toggle column `AccessibleTextRole`, drag a11y) + v0.4.1 Tier 2 (top-bar Approve / Reopen + AlbumSwitcher pill `setAccessibleName`; Toast `AccessibleDescription`).
-- ✅ **Theme G — Locale-aware sort missing.** Closed in v0.2.1 Tier 2 (L5-H1 — `library_pane.py` casefold sort role) + v0.2.2 Tier 3 (`AlbumStore.list()` and `Library.sorted()` casefold).
-- ✅ **Theme H — TC-01-P2-03/04 plan-crosswalk lies about coverage.** Closed in v0.2.1 Tier 1 (L8-H2 — both rows flipped from "direct" to "deferred" matching Spec 01 + ROADMAP).
+- ✅ [MUSI-0247] **Theme A — Empty-state pill text drift.**
+  Closed in v0.2.1 Tier 2 (album_switcher.py uses U+00B7 middle dot per Spec 03 + TC-03-06).
+  Kind: implement.
+
+- ✅ [MUSI-0248] **Theme B — `settings.json` 8-field schema.**
+  All Spec 10 v1 fields landed across releases — `tracks_folder` (Phase 1), `albums_folder` (v0.4.0 Tier 1 L8-C1), `audio.{volume,muted}` (v0.3.0), `alignment.*` (v0.4.0), `ui.theme` + `ui.open_report_folder_on_approve` (v0.5.0 F30 + F31), `schema_version` stamping (v0.5.1 sweep).
+  Kind: implement.
+
+- ✅ [MUSI-0249] **Theme C — `.bak` file requirement unimplemented.**
+  Closed in v0.4.1 Tier 2 (L2-H3): `_write_migration_bak()` helper added to both `album_io.py` and `state_io.py`; migration writes `<file>.v<old>.bak` before rewriting.
+  Kind: implement.
+
+- ✅ [MUSI-0250] **Theme D — Approve-button + AlbumPill QSS gradients absent.**
+  Closed in v0.2.2 Tier 3: `QPushButton#ApproveButton` (`success → success-dark`) and `QPushButton#AlbumPill` (`accent-primary-1 → accent-primary-2`) gradient rules in `theme.qt_stylesheet`.
+  Kind: implement.
+
+- ✅ [MUSI-0251] **Theme E — Keyboard shortcuts not wired.**
+  Closed in v0.3.0. Every Spec 00 shortcut wired with `QShortcut` + `_key_in_text_field` suppression for transport keys; F1 help dialog enumerates the bindings.
+  Kind: implement.
+
+- ✅ [MUSI-0252] **Theme F — Screen-reader / a11y labels missing across all widgets.**
+  Closed in v0.2.1 Tier 2 (toggle column `AccessibleTextRole`, drag a11y) + v0.4.1 Tier 2 (top-bar Approve / Reopen + AlbumSwitcher pill `setAccessibleName`; Toast `AccessibleDescription`).
+  Kind: implement.
+
+- ✅ [MUSI-0253] **Theme G — Locale-aware sort missing.**
+  Closed in v0.2.1 Tier 2 (L5-H1 — `library_pane.py` casefold sort role) + v0.2.2 Tier 3 (`AlbumStore.list()` and `Library.sorted()` casefold).
+  Kind: implement.
+
+- ✅ [MUSI-0254] **Theme H — TC-01-P2-03/04 plan-crosswalk lies about coverage.**
+  Closed in v0.2.1 Tier 1 (L8-H2 — both rows flipped from "direct" to "deferred" matching Spec 01 + ROADMAP).
+  Kind: implement.
 
 ---
 
@@ -915,12 +1658,29 @@ Plan: [`docs/plans/2026-04-28-phase-2-albums.md`](docs/plans/2026-04-28-phase-2-
 
 ✅ **All 6 landed 2026-04-28.** 3 surviving Criticals + 3 high-impact docs after threat-model calibration; single-user desktop threat model demoted SHM-leak-on-exception (L7-C2) to MEDIUM and CSRF-class to LOW. 173/173 tests pass; ruff clean.
 
-- ✅ **CRITICAL — `AlbumStore.delete()` not crash-atomic.** Reordered to move-then-mutate at `src/album_builder/services/album_store.py:114-128`; failed `shutil.move` now leaves the album recoverable. Regression test in `test_album_store.py` monkeypatches the move to raise. Commit `a497943`. (L4-C1)
-- ✅ **CRITICAL — Same-second `.trash` collision silently overwrites.** Switched to `%Y%m%d-%H%M%S-%f` (microseconds, UTC) at `album_store.py:124`. Regression test exercises delete-recreate-delete same-name same-second cycle. Commit `a497943`. (L4-C2)
-- ✅ **CRITICAL — `closeEvent` flush is not exception-safe.** Each step wrapped in try/except with `logger.exception` at `main_window.py:217-228`. Regression test monkeypatches `store.flush` to raise; asserts state.json still receives new geometry. Commit `ac6ecbe`. (L7-C1)
-- ✅ **CRITICAL — Project `CLAUDE.md` total rewrite.** Now describes the actual album-builder PyQt6 project (4-layer architecture, build/test/lint commands, conventions, applicable slash commands). Replaces the wholly-wrong "not a code project" declaration. Commit `941a5c3`. (L8-C1)
-- ✅ **HIGH — README v0.2.0 status update.** Status section now describes shipped Phase 2 features (album CRUD, drag-reorder, target counter, watcher, debounced state.json) and clarifies playback → Phase 3 / export → Phase 4. Commit `053893f`. (L8-H1)
-- ✅ **HIGH — Phase-2-plan crosswalk TC-01-P2-03/04 honesty.** Both rows flipped from "direct" to "deferred" matching Spec 01 + ROADMAP. Inline notes explain why the cited tests don't actually assert the spec contract (`is_missing` semantics + `include_missing` filter). Commit `e2eeeaa`. (L8-H2)
+- ✅ [MUSI-0255] **CRITICAL — `AlbumStore.delete()` not crash-atomic.**
+  Reordered to move-then-mutate at `src/album_builder/services/album_store.py:114-128`; failed `shutil.move` now leaves the album recoverable. Regression test in `test_album_store.py` monkeypatches the move to raise. Commit `a497943`. (L4-C1)
+  Kind: implement.
+
+- ✅ [MUSI-0256] **CRITICAL — Same-second `.trash` collision silently overwrites.**
+  Switched to `%Y%m%d-%H%M%S-%f` (microseconds, UTC) at `album_store.py:124`. Regression test exercises delete-recreate-delete same-name same-second cycle. Commit `a497943`. (L4-C2)
+  Kind: implement.
+
+- ✅ [MUSI-0257] **CRITICAL — `closeEvent` flush is not exception-safe.**
+  Each step wrapped in try/except with `logger.exception` at `main_window.py:217-228`. Regression test monkeypatches `store.flush` to raise; asserts state.json still receives new geometry. Commit `ac6ecbe`. (L7-C1)
+  Kind: implement.
+
+- ✅ [MUSI-0258] **CRITICAL — Project `CLAUDE.md` total rewrite.**
+  Now describes the actual album-builder PyQt6 project (4-layer architecture, build/test/lint commands, conventions, applicable slash commands). Replaces the wholly-wrong "not a code project" declaration. Commit `941a5c3`. (L8-C1)
+  Kind: implement.
+
+- ✅ [MUSI-0259] **HIGH — README v0.2.0 status update.**
+  Status section now describes shipped Phase 2 features (album CRUD, drag-reorder, target counter, watcher, debounced state.json) and clarifies playback → Phase 3 / export → Phase 4. Commit `053893f`. (L8-H1)
+  Kind: implement.
+
+- ✅ [MUSI-0260] **HIGH — Phase-2-plan crosswalk TC-01-P2-03/04 honesty.**
+  Both rows flipped from "direct" to "deferred" matching Spec 01 + ROADMAP. Inline notes explain why the cited tests don't actually assert the spec contract (`is_missing` semantics + `include_missing` filter). Commit `e2eeeaa`. (L8-H2)
+  Kind: implement.
 
 ## 🔒 Tier 2 — Phase 2 hardening sweep (correctness, pre-v0.3.0)
 
@@ -928,97 +1688,283 @@ Plan: [`docs/plans/2026-04-28-phase-2-albums.md`](docs/plans/2026-04-28-phase-2-
 
 **Domain (L1):**
 
-- ✅ **HIGH — `Library.scan` per-entry `OSError` unhandled.** `src/album_builder/domain/library.py:51` now wraps the per-entry `is_file()` + `suffix` access in try/except; stale-NFS or permission-denied entries skip the entry instead of aborting the whole scan. Commit `6744d42`. (L1-H1)
-- ✅ **HIGH — `Album.approve` missing-track check delegated, not documented.** Domain method's docstring now names `AlbumStore.approve()` as the precondition's owner; future direct callers must replicate the FileNotFoundError check or accept the risk. Commit `6744d42`. (L1-H2)
-- ✅ **HIGH — `Album.__post_init__` invariant absent.** Now enforces 1≤target_count≤99, target_count≥len(track_paths), and "approved → non-empty selection". `_deserialize` pre-bumps target_count BEFORE construction so the existing TC-04-09 self-heal flow still works. Three new domain tests. Commit `6744d42`. (L1-H3)
+- ✅ [MUSI-0261] **HIGH — `Library.scan` per-entry `OSError` unhandled.**
+  `src/album_builder/domain/library.py:51` now wraps the per-entry `is_file()` + `suffix` access in try/except; stale-NFS or permission-denied entries skip the entry instead of aborting the whole scan. Commit `6744d42`. (L1-H1)
+  Kind: implement.
+
+- ✅ [MUSI-0262] **HIGH — `Album.approve` missing-track check delegated, not documented.**
+  Domain method's docstring now names `AlbumStore.approve()` as the precondition's owner; future direct callers must replicate the FileNotFoundError check or accept the risk. Commit `6744d42`. (L1-H2)
+  Kind: implement.
+
+- ✅ [MUSI-0263] **HIGH — `Album.__post_init__` invariant absent.**
+  Now enforces 1≤target_count≤99, target_count≥len(track_paths), and "approved → non-empty selection". `_deserialize` pre-bumps target_count BEFORE construction so the existing TC-04-09 self-heal flow still works. Three new domain tests. Commit `6744d42`. (L1-H3)
+  Kind: implement.
 
 **Persistence — JSON (L2):**
 
-- ✅ **HIGH — `save_album_for_unapprove` ordering enforcement.** Now asserts `not (folder/"reports").exists()` before unlinking the marker; Phase 4 export-pipeline integration must delete reports/ first. Commit `4c5a562`. (L2-H1)
-- ✅ **HIGH — Self-heal "approved-without-marker" skips `save_album()`.** Now routes through `save_album` for symmetry with the marker-present-status-draft branch; `updated_at` bumps on the heal. Commit `4c5a562`. (L2-H2)
-- ✅ **HIGH — `_deserialize` uses `Path.resolve()` not `Path.absolute()`.** Switched to `Path.absolute()` so user-supplied symlinks survive the relative→absolute heal. Commit `4c5a562`. (L2-H3)
-- ✅ **MEDIUM — `state_io.load_state` rewrite-on-corrupt.** Corrupt JSON now triggers an immediate rewrite with defaults (TC-10-12). New regression test. Commit `4c5a562`. (L2-M3)
-- ✅ **MEDIUM — `state_io.load_state` field-type guards.** Per-field `_coerce_uuid` / `_coerce_path` / `_coerce_window` helpers catch malformed UUID, junk window types, stray keys; falls back to defaults instead of raising past the load_state guard. Commit `4c5a562`. (L2-M4)
-- ✅ **MEDIUM — Self-heal `target_count` upper-bound clamp.** `_deserialize` pre-bumps target_count via `max(raw_target, len(resolved_paths))`; the new `Album.__post_init__` invariant catches >99 corruption at construction. Commit `4c5a562` + `6744d42`. (L2-M5)
+- ✅ [MUSI-0264] **HIGH — `save_album_for_unapprove` ordering enforcement.**
+  Now asserts `not (folder/"reports").exists()` before unlinking the marker; Phase 4 export-pipeline integration must delete reports/ first. Commit `4c5a562`. (L2-H1)
+  Kind: implement.
+
+- ✅ [MUSI-0265] **HIGH — Self-heal "approved-without-marker" skips `save_album()`.**
+  Now routes through `save_album` for symmetry with the marker-present-status-draft branch; `updated_at` bumps on the heal. Commit `4c5a562`. (L2-H2)
+  Kind: implement.
+
+- ✅ [MUSI-0266] **HIGH — `_deserialize` uses `Path.resolve()` not `Path.absolute()`.**
+  Switched to `Path.absolute()` so user-supplied symlinks survive the relative→absolute heal. Commit `4c5a562`. (L2-H3)
+  Kind: implement.
+
+- ✅ [MUSI-0267] **MEDIUM — `state_io.load_state` rewrite-on-corrupt.**
+  Corrupt JSON now triggers an immediate rewrite with defaults (TC-10-12). New regression test. Commit `4c5a562`. (L2-M3)
+  Kind: implement.
+
+- ✅ [MUSI-0268] **MEDIUM — `state_io.load_state` field-type guards.**
+  Per-field `_coerce_uuid` / `_coerce_path` / `_coerce_window` helpers catch malformed UUID, junk window types, stray keys; falls back to defaults instead of raising past the load_state guard. Commit `4c5a562`. (L2-M4)
+  Kind: implement.
+
+- ✅ [MUSI-0269] **MEDIUM — Self-heal `target_count` upper-bound clamp.**
+  `_deserialize` pre-bumps target_count via `max(raw_target, len(resolved_paths))`; the new `Album.__post_init__` invariant catches >99 corruption at construction. Commit `4c5a562` + `6744d42`. (L2-M5)
+  Kind: implement.
 
 **Persistence — write infra (L3):**
 
-- ✅ **HIGH — `atomic_write_text` parent-dir fsync.** New `_fsync_dir` helper called after `os.replace` in both atomic-write helpers; best-effort (swallows EINVAL/ENOTSUP on filesystems without directory-fsync support). Commit `c997729`. (L3-H1)
-- ✅ **HIGH — `DebouncedWriter._fire` callback lacks exception guard.** Wrapped in try/except + `logger.exception` so disk-full mid-callback no longer silently drops the write. Regression test schedules a raising callback + survivor. Commit `c997729`. (L3-H4)
-- ✅ **MEDIUM — `XDG_CONFIG_HOME` relative-path acceptance.** `settings.settings_dir` rejects relative + empty values per the freedesktop Base Dir Spec; falls back to `~/.config/album-builder`. Two regression tests. Commit `c997729`. (L3-M3)
-- ✅ **LOW — `DebouncedWriter._timers` unbounded growth.** Closed in v0.5.3 sweep: `_fire` now pops + `deleteLater()`s the QTimer alongside the existing `_pending` pop, and `cancel()` adds the symmetric `deleteLater()`. The dict bounds itself to active-burst keys regardless of key cardinality (one QTimer ctor per quiet window per key — well below the 250 ms idle floor). Two TC L3-M4 regression tests added. (L3-M4)
+- ✅ [MUSI-0270] **HIGH — `atomic_write_text` parent-dir fsync.**
+  New `_fsync_dir` helper called after `os.replace` in both atomic-write helpers; best-effort (swallows EINVAL/ENOTSUP on filesystems without directory-fsync support). Commit `c997729`. (L3-H1)
+  Kind: implement.
+
+- ✅ [MUSI-0271] **HIGH — `DebouncedWriter._fire` callback lacks exception guard.**
+  Wrapped in try/except + `logger.exception` so disk-full mid-callback no longer silently drops the write. Regression test schedules a raising callback + survivor. Commit `c997729`. (L3-H4)
+  Kind: implement.
+
+- ✅ [MUSI-0272] **MEDIUM — `XDG_CONFIG_HOME` relative-path acceptance.**
+  `settings.settings_dir` rejects relative + empty values per the freedesktop Base Dir Spec; falls back to `~/.config/album-builder`. Two regression tests. Commit `c997729`. (L3-M3)
+  Kind: implement.
+
+- ✅ [MUSI-0273] **LOW — `DebouncedWriter._timers` unbounded growth.**
+  Closed in v0.5.3 sweep: `_fire` now pops + `deleteLater()`s the QTimer alongside the existing `_pending` pop, and `cancel()` adds the symmetric `deleteLater()`. The dict bounds itself to active-burst keys regardless of key cardinality (one QTimer ctor per quiet window per key — well below the 250 ms idle floor). Two TC L3-M4 regression tests added. (L3-M4)
+  Kind: implement.
 
 **Services (L4):**
 
-- ✅ **HIGH — Cross-FS `shutil.move` for `.trash` not asserted.** `AlbumStore.__init__` now compares `st_dev` of `Albums/` and `.trash` (when both exist) and warns on mismatch. Commit `0255943`. (L4-H1)
-- ✅ **HIGH — `datetime.now()` in trash stamp is local time.** Already fixed in Tier 1 (commit `a497943`) — `datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")`. (L4-H2)
-- ✅ **HIGH — `rescan()` race assumption undocumented.** Docstring now pins the single-threaded-Qt-event-loop assumption + adds defensive `except Exception` so a future loader bug doesn't abort startup. Commit `0255943`. (L4-H3)
-- ✅ **MEDIUM — `LibraryWatcher.fileChanged` is dead code.** Connection dropped; comment explains the design choice. Commit `0255943`. (L4-M1)
-- ✅ **MEDIUM — `LibraryWatcher` doesn't watch parent for folder-recreate.** `_rebind_watch` now adds the parent folder to the watcher; folder-delete-then-recreate cycle (TC-01-P2-04) recovers without manual `refresh()`. Commit `0255943`. (L4-M2)
+- ✅ [MUSI-0274] **HIGH — Cross-FS `shutil.move` for `.trash` not asserted.**
+  `AlbumStore.__init__` now compares `st_dev` of `Albums/` and `.trash` (when both exist) and warns on mismatch. Commit `0255943`. (L4-H1)
+  Kind: implement.
+
+- ✅ [MUSI-0275] **HIGH — `datetime.now()` in trash stamp is local time.**
+  Already fixed in Tier 1 (commit `a497943`) — `datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")`. (L4-H2)
+  Kind: implement.
+
+- ✅ [MUSI-0276] **HIGH — `rescan()` race assumption undocumented.**
+  Docstring now pins the single-threaded-Qt-event-loop assumption + adds defensive `except Exception` so a future loader bug doesn't abort startup. Commit `0255943`. (L4-H3)
+  Kind: implement.
+
+- ✅ [MUSI-0277] **MEDIUM — `LibraryWatcher.fileChanged` is dead code.**
+  Connection dropped; comment explains the design choice. Commit `0255943`. (L4-M1)
+  Kind: implement.
+
+- ✅ [MUSI-0278] **MEDIUM — `LibraryWatcher` doesn't watch parent for folder-recreate.**
+  `_rebind_watch` now adds the parent folder to the watcher; folder-delete-then-recreate cycle (TC-01-P2-04) recovers without manual `refresh()`. Commit `0255943`. (L4-M2)
+  Kind: implement.
 
 **UI — lists/tables (L5):**
 
-- ✅ **HIGH — `_toggle` column header sortable would crash.** Sort role for `_toggle` now returns a `(selected, casefolded-name)` tuple; header click no longer raises AttributeError. Commit `236456b`. (L5-H2)
-- ✅ **HIGH — Toggle column not keyboard-reachable.** `QTableView.activated` connected to the click handler; Enter/Return on a focused toggle cell triggers the toggle. WCAG 2.2 §2.1.1. Commit `236456b`. (L5-H3)
-- ✅ **HIGH — Toggle column has no `AccessibleTextRole`.** Branch in `data()` returns `"selected: <title>"` / `"not selected: <title>"`. WCAG 2.2 §4.1.2. Regression test. Commit `236456b`. (L5-H4)
-- ✅ **HIGH — Drag has no reduced-motion / accessible feedback.** `AlbumOrderPane.list.setAccessibleName` + `setAccessibleDescription`; LibraryPane likewise. Commit `236456b`. (L5-H5)
-- ✅ **MEDIUM — Approved-album tooltip absent.** `ToolTipRole` branch on the toggle cell of an APPROVED album returns the spec'd tooltip. Regression test. Commit `236456b`. (L5-M1)
-- ✅ **MEDIUM — `_rerender_after_move` text-mangle fragility.** Now reconstructs from a cached title (`UserRole+3 / TITLE_ROLE`) rather than splitting display text on `". "`. Titles containing ". " (e.g. "Mr. Brightside") survive. Regression test. Commit `236456b`. (L5-M2)
-- ✅ **HIGH — Sort role returns raw value, not `casefold()`.** Now `value.casefold() if isinstance(value, str) else value`. Spec 00 §"Sort order (canonical)". Regression test. Commit `236456b`. (L5-H1)
+- ✅ [MUSI-0279] **HIGH — `_toggle` column header sortable would crash.**
+  Sort role for `_toggle` now returns a `(selected, casefolded-name)` tuple; header click no longer raises AttributeError. Commit `236456b`. (L5-H2)
+  Kind: implement.
+
+- ✅ [MUSI-0280] **HIGH — Toggle column not keyboard-reachable.**
+  `QTableView.activated` connected to the click handler; Enter/Return on a focused toggle cell triggers the toggle. WCAG 2.2 §2.1.1. Commit `236456b`. (L5-H3)
+  Kind: implement.
+
+- ✅ [MUSI-0281] **HIGH — Toggle column has no `AccessibleTextRole`.**
+  Branch in `data()` returns `"selected: <title>"` / `"not selected: <title>"`. WCAG 2.2 §4.1.2. Regression test. Commit `236456b`. (L5-H4)
+  Kind: implement.
+
+- ✅ [MUSI-0282] **HIGH — Drag has no reduced-motion / accessible feedback.**
+  `AlbumOrderPane.list.setAccessibleName` + `setAccessibleDescription`; LibraryPane likewise. Commit `236456b`. (L5-H5)
+  Kind: implement.
+
+- ✅ [MUSI-0283] **MEDIUM — Approved-album tooltip absent.**
+  `ToolTipRole` branch on the toggle cell of an APPROVED album returns the spec'd tooltip. Regression test. Commit `236456b`. (L5-M1)
+  Kind: implement.
+
+- ✅ [MUSI-0284] **MEDIUM — `_rerender_after_move` text-mangle fragility.**
+  Now reconstructs from a cached title (`UserRole+3 / TITLE_ROLE`) rather than splitting display text on `". "`. Titles containing ". " (e.g. "Mr. Brightside") survive. Regression test. Commit `236456b`. (L5-M2)
+  Kind: implement.
+
+- ✅ [MUSI-0285] **HIGH — Sort role returns raw value, not `casefold()`.**
+  Now `value.casefold() if isinstance(value, str) else value`. Spec 00 §"Sort order (canonical)". Regression test. Commit `236456b`. (L5-H1)
+  Kind: implement.
 
 **UI — top-bar (L6):**
 
-- ✅ **HIGH — Empty-state pill text middle dot.** Restored to `▾ No albums · + New album` per Spec 03 line 21 + TC-03-06. Commit `ced2923`. (L6-H1)
-- ✅ **HIGH — `set_current(None)` initial-emit suppressed.** Docstring now documents the "no emit on construction; caller must seed" contract. MainWindow already seeds correctly. Commit `ced2923`. (L6-H2)
-- ✅ **HIGH — `TargetCounter` empty-string commit reverts.** Empty now snaps to `MIN_TARGET` (TC-04-12); non-integer reverts via try/except `int()` (handles negative signs, Unicode digit forms). Commit `ced2923`. (L6-H4)
-- ✅ **HIGH — `setMaxLength(80)` is UTF-16 code units.** Dropped; validation moved to commit time and uses `len(text) > 80` (code points) matching domain. Emoji-rich names no longer truncated. Commit `ced2923`. (L6-H5)
-- ✅ **LOW — `LibraryPane._model._toggle_enabled` direct access.** Closed in v0.4.1 Tier 2 (L6-M2): `tracks()` / `is_toggle_enabled(row)` / `selected_paths()` public accessors on `TrackTableModel`.
-- ✅ **LOW — `ACCENT_ROLE` magic number.** Closed in v0.5.1 sweep: `ACCENT_ROLE = Qt.ItemDataRole.UserRole + 2` extracted as module-level constant in `library_pane.py`; mirrors the `MISSING_ROLE` / `TITLE_ROLE` shape in `album_order_pane.py`.
+- ✅ [MUSI-0286] **HIGH — Empty-state pill text middle dot.**
+  Restored to `▾ No albums · + New album` per Spec 03 line 21 + TC-03-06. Commit `ced2923`. (L6-H1)
+  Kind: implement.
+
+- ✅ [MUSI-0287] **HIGH — `set_current(None)` initial-emit suppressed.**
+  Docstring now documents the "no emit on construction; caller must seed" contract. MainWindow already seeds correctly. Commit `ced2923`. (L6-H2)
+  Kind: implement.
+
+- ✅ [MUSI-0288] **HIGH — `TargetCounter` empty-string commit reverts.**
+  Empty now snaps to `MIN_TARGET` (TC-04-12); non-integer reverts via try/except `int()` (handles negative signs, Unicode digit forms). Commit `ced2923`. (L6-H4)
+  Kind: implement.
+
+- ✅ [MUSI-0289] **HIGH — `setMaxLength(80)` is UTF-16 code units.**
+  Dropped; validation moved to commit time and uses `len(text) > 80` (code points) matching domain. Emoji-rich names no longer truncated. Commit `ced2923`. (L6-H5)
+  Kind: implement.
+
+- ✅ [MUSI-0290] **LOW — `LibraryPane._model._toggle_enabled` direct access.**
+  Closed in v0.4.1 Tier 2 (L6-M2): `tracks()` / `is_toggle_enabled(row)` / `selected_paths()` public accessors on `TrackTableModel`.
+  Kind: implement.
+
+- ✅ [MUSI-0291] **LOW — `ACCENT_ROLE` magic number.**
+  Closed in v0.5.1 sweep: `ACCENT_ROLE = Qt.ItemDataRole.UserRole + 2` extracted as module-level constant in `library_pane.py`; mirrors the `MISSING_ROLE` / `TITLE_ROLE` shape in `album_order_pane.py`.
+  Kind: implement.
 
 **App integration (L7):**
 
-- ✅ **HIGH — `_save_state_now` magic constant `13`.** Extracted `SPLITTER_RATIO_TOTAL = 13` module constant. Commit `8aa06d5`. (L7-H1)
-- ✅ **HIGH — `DEFAULT_TRACKS_DIR` developer absolute path.** Now gated behind `ALBUM_BUILDER_DEV_MODE=1` env OR `pyproject.toml` colocated with the running script. Installed user no longer silently picks the dev path. Commit `8aa06d5`. (L7-H2)
-- ✅ **HIGH — `signal_raise_existing_instance` silent timeout.** `RAISE_TIMEOUT_MS` 500 → 2000 ms; logs to stderr on timeout so a busy peer surfaces a diagnostic. Commit `8aa06d5`. (L7-H3)
-- ✅ **HIGH — `start_raise_server` calls `removeServer` unconditionally.** Docstring now documents the lock-holder-only precondition that justifies the unconditional removeServer. Commit `8aa06d5`. (L7-H4)
-- ✅ **MEDIUM — `acquire_single_instance_lock` doesn't distinguish error classes.** Inspects `lock.error()`; logs to stderr on non-`AlreadyExists` failures. Commit `8aa06d5`. (L7-M2)
-- ✅ **MEDIUM — SHM detach + server.close not in `finally`.** `app.exec()` wrapped in try/finally. Commit `8aa06d5`. (L7-M3)
-- ✅ **MEDIUM — Window geometry restore not bounds-checked.** `max(400, w) / max(300, h) / max(0, x|y)` clamp on restore. Commit `8aa06d5`. (L7-L1)
-- ✅ **LOW (accepted as v1) — Stale-segment recovery TOCTOU.** Closed in v0.5.3 sweep by promoting the v1-acceptance rationale into `acquire_single_instance_lock`'s docstring (`app.py:117-141`): names the trigger (two human double-clicks within one OS scheduler tick), the realistic blast radius (a transient second window, not data loss — atomic writes serialise via `os.replace` regardless of issuer), and the upgrade path (`fcntl.flock` on `$XDG_RUNTIME_DIR` if a daemon/autostart/kiosk deployment ever lands). (L7-M1)
+- ✅ [MUSI-0292] **HIGH — `_save_state_now` magic constant `13`.**
+  Extracted `SPLITTER_RATIO_TOTAL = 13` module constant. Commit `8aa06d5`. (L7-H1)
+  Kind: implement.
+
+- ✅ [MUSI-0293] **HIGH — `DEFAULT_TRACKS_DIR` developer absolute path.**
+  Now gated behind `ALBUM_BUILDER_DEV_MODE=1` env OR `pyproject.toml` colocated with the running script. Installed user no longer silently picks the dev path. Commit `8aa06d5`. (L7-H2)
+  Kind: implement.
+
+- ✅ [MUSI-0294] **HIGH — `signal_raise_existing_instance` silent timeout.**
+  `RAISE_TIMEOUT_MS` 500 → 2000 ms; logs to stderr on timeout so a busy peer surfaces a diagnostic. Commit `8aa06d5`. (L7-H3)
+  Kind: implement.
+
+- ✅ [MUSI-0295] **HIGH — `start_raise_server` calls `removeServer` unconditionally.**
+  Docstring now documents the lock-holder-only precondition that justifies the unconditional removeServer. Commit `8aa06d5`. (L7-H4)
+  Kind: implement.
+
+- ✅ [MUSI-0296] **MEDIUM — `acquire_single_instance_lock` doesn't distinguish error classes.**
+  Inspects `lock.error()`; logs to stderr on non-`AlreadyExists` failures. Commit `8aa06d5`. (L7-M2)
+  Kind: implement.
+
+- ✅ [MUSI-0297] **MEDIUM — SHM detach + server.close not in `finally`.**
+  `app.exec()` wrapped in try/finally. Commit `8aa06d5`. (L7-M3)
+  Kind: implement.
+
+- ✅ [MUSI-0298] **MEDIUM — Window geometry restore not bounds-checked.**
+  `max(400, w) / max(300, h) / max(0, x|y)` clamp on restore. Commit `8aa06d5`. (L7-L1)
+  Kind: implement.
+
+- ✅ [MUSI-0299] **LOW (accepted as v1) — Stale-segment recovery TOCTOU.**
+  Closed in v0.5.3 sweep by promoting the v1-acceptance rationale into `acquire_single_instance_lock`'s docstring (`app.py:117-141`): names the trigger (two human double-clicks within one OS scheduler tick), the realistic blast radius (a transient second window, not data loss — atomic writes serialise via `os.replace` regardless of issuer), and the upgrade path (`fcntl.flock` on `$XDG_RUNTIME_DIR` if a daemon/autostart/kiosk deployment ever lands). (L7-M1)
+  Kind: implement.
 
 **Documentation (L8):**
 
-- ✅ **HIGH — Spec 12 + `.desktop.in` `Exec=` drift.** Spec updated to match `Exec=@@LAUNCHER@@` (no `%F`); inline note explains the omission. Commit `ce37096`. (L8-H3)
-- ✅ **MEDIUM — `set_current` ValueError vs MainWindow ad-hoc check.** Spec 03 TC-03-09 row now documents the lookup-first approach as canonical. Commit `ce37096`. (L8-M1)
-- ✅ **MEDIUM — Phase 2 plan crosswalk missing TC-12-NN.** Crosswalk now has TC-12-01..05 (direct, Phase 1) + TC-12-06..09 (manual smoke). Commit `ce37096`. (L8-M2)
-- ✅ **MEDIUM — Spec 04 `selected == target` boundary wording.** Now explicit: at-target is valid; `set_target(n)` accepts `n == selected_count`. Commit `ce37096`. (L8-M4)
-- ✅ **MEDIUM — Spec 00 keyboard-shortcut table claims Phase-1-2 shortcuts wired.** Added "Wired?" column; all marked "Phase 3" (focus-suppression machinery groups with Spec 06 work). Commit `ce37096`. (L8-M5)
-- ✅ **MEDIUM — Spec 01 `tracks_changed` ownership.** Spec line 37 now correctly attributes the signal to `LibraryWatcher`, not `Library`. Commit `ce37096`. (L8-M6)
+- ✅ [MUSI-0300] **HIGH — Spec 12 + `.desktop.in` `Exec=` drift.**
+  Spec updated to match `Exec=@@LAUNCHER@@` (no `%F`); inline note explains the omission. Commit `ce37096`. (L8-H3)
+  Kind: implement.
+
+- ✅ [MUSI-0301] **MEDIUM — `set_current` ValueError vs MainWindow ad-hoc check.**
+  Spec 03 TC-03-09 row now documents the lookup-first approach as canonical. Commit `ce37096`. (L8-M1)
+  Kind: implement.
+
+- ✅ [MUSI-0302] **MEDIUM — Phase 2 plan crosswalk missing TC-12-NN.**
+  Crosswalk now has TC-12-01..05 (direct, Phase 1) + TC-12-06..09 (manual smoke). Commit `ce37096`. (L8-M2)
+  Kind: implement.
+
+- ✅ [MUSI-0303] **MEDIUM — Spec 04 `selected == target` boundary wording.**
+  Now explicit: at-target is valid; `set_target(n)` accepts `n == selected_count`. Commit `ce37096`. (L8-M4)
+  Kind: implement.
+
+- ✅ [MUSI-0304] **MEDIUM — Spec 00 keyboard-shortcut table claims Phase-1-2 shortcuts wired.**
+  Added "Wired?" column; all marked "Phase 3" (focus-suppression machinery groups with Spec 06 work). Commit `ce37096`. (L8-M5)
+  Kind: implement.
+
+- ✅ [MUSI-0305] **MEDIUM — Spec 01 `tracks_changed` ownership.**
+  Spec line 37 now correctly attributes the signal to `LibraryWatcher`, not `Library`. Commit `ce37096`. (L8-M6)
+  Kind: implement.
 
 ## ⚡ Tier 3 — Phase 2 structural / cosmetic
 
 ✅ **All landed 2026-04-28.** 188 -> 195 tests; ruff clean. Two INFO items intentionally not actioned (test-name convention review carried as ongoing flag; `Albums/__pycache__/` silent-skip already shipped in Tier 2 L4-M1).
 
-- ✅ **MEDIUM — Locale-aware sort.** `AlbumStore.list()` and `Library.sorted()` now use `casefold()` (Unicode-aware lower; handles German ß, Turkish dotless I, Polish ł). LibraryPane's `data()` already used casefold from Tier 2.
-- ✅ **MEDIUM — Approve / pill QSS gradients.** Added `QPushButton#ApproveButton` (`success → success-dark`) and `QPushButton#AlbumPill` (`accent-primary-1 → accent-primary-2`) gradient rules in `theme.qt_stylesheet`; `objectName="ApproveButton"` set on the top-bar approve button.
-- ✅ **MEDIUM — `Library.search` lowercased-cache.** Added `Library._search_blobs: tuple[str, ...]` precomputed at `__post_init__`. Each keystroke now allocates one casefold() on the needle, not 500 on the haystack. Field is `compare=False, repr=False` so it's invisible to equality/repr.
-- ✅ **MEDIUM — `slugify` non-ASCII transliteration.** NFKD-normalise + casefold + ASCII-encode before the regex. "Émile" → "emile", "Café" → "cafe", "Straße" → "strasse", CJK / emoji-only inputs still fall back to "album".
-- ✅ **MEDIUM — `Album.unapprove` re-validate target invariant.** Defensive `assert self.target_count >= len(self.track_paths)` closes the gap when a caller bypasses `select()`'s guard via direct list mutation.
-- ✅ **MEDIUM — `_to_iso` naive-datetime guard.** Now raises `ValueError` if `dt.tzinfo is None`. Prevents wrong-hour `Z` stamps from silently appearing if a caller forgets `tz=UTC`.
-- ✅ **LOW — Refactor `atomic_write_text` / `atomic_write_bytes`.** Shared `_atomic_write(path, mode, content, encoding=...)` core; two 14-line functions are now 1-line wrappers + a 14-line helper.
-- ✅ **LOW — Refactor three `save_album*` post-write blocks.** Extracted `_write_album_json(folder, album)` and `_snap_timestamps_to_ms(album)`; variants now differ only on marker timing as the spec intends.
-- ✅ **LOW — `read_text()` without explicit encoding.** `album_io.load_album` now passes `encoding="utf-8"`. (`state_io.load_state` was already pinned in Tier 2 P4; `settings.read_tracks_folder` was already pinned.)
-- ✅ **LOW — `cover_override` no relative-path heal.** `_deserialize` now applies the same `Path.absolute()` heal to `cover_override` as to `track_paths`; rewrites the file when healed.
-- ✅ **LOW — `Library.scan` casefold not `.lower()`.** `Library.sorted()` lambdas now casefold; `.lower()` was only wrong on German ß + Turkish dotless I but the deviation closes the loop with Spec 00.
-- ✅ **LOW — Approve dialog string mentions "Phase 4".** Rewrote the QMessageBox prompt to user-neutral language ("locked from edits until you reopen it" + parenthetical about export running automatically once that feature ships).
-- ✅ **LOW — `AlbumStore` signal type comment.** Added a leading docstring block on the four signal lines explaining the `pyqtSignal(object) + # Type` idiom and why typed signatures aren't used directly.
-- ✅ **LOW — `LibraryPane.set_tracks` `_selected_paths` contract.** Documented: selection state belongs to `set_album_state()`, not `set_tracks()`. Path equality is value-based so a track that vanishes and reappears stays correctly selected; clearing on every library refresh would visually drop the user's selection.
-- ✅ **LOW — `_format_duration` banker's rounding.** Replaced `round()` (half-to-even) with `int(seconds + 0.5)` (classic half-up). 0.5s → 1, 1.5s → 2, 2.5s → 3. Regression test pinned.
-- ✅ **LOW — `Albums/__pycache__/` noisy warning.** Already shipped in Tier 2; verified `entry.name.startswith("__")` filters it before the `AlbumDirCorrupt` log.
-- ✅ **LOW — Empty-state pill middle dot.** Already shipped in Tier 2 (album_switcher.py:103 uses U+00B7 middle dot).
-- ✅ **LOW — DRAG_HANDLE rendering.** Documented in `theme.Glyphs.DRAG_HANDLE`: U+22EE x2 approximates the spec's vertical stack at the available font sizes; a true vertical stack would require a custom-painted `QStyledItemDelegate`.
-- ✅ **INFO — Structured logging in persistence/.** Added `logger = logging.getLogger(__name__)` to `settings.py`; `read_tracks_folder` now logs `OSError`, malformed-JSON, and non-object cases. (`album_io`, `state_io`, `debounce` already had loggers from prior tiers.)
-- ✅ **INFO (closed by policy) — Tests don't cite WCAG / RFC / TC-* in filenames.** Closed in v0.4.2 by adopting the forward-only `test_TC_NN_*` / `test_WCAG_*` / `test_RFC_*` prefix convention via CLAUDE.md (existing files keep their names, NEW load-bearing tests use the prefix).
+- ✅ [MUSI-0306] **MEDIUM — Locale-aware sort.**
+  `AlbumStore.list()` and `Library.sorted()` now use `casefold()` (Unicode-aware lower; handles German ß, Turkish dotless I, Polish ł). LibraryPane's `data()` already used casefold from Tier 2.
+  Kind: implement.
+
+- ✅ [MUSI-0307] **MEDIUM — Approve / pill QSS gradients.**
+  Added `QPushButton#ApproveButton` (`success → success-dark`) and `QPushButton#AlbumPill` (`accent-primary-1 → accent-primary-2`) gradient rules in `theme.qt_stylesheet`; `objectName="ApproveButton"` set on the top-bar approve button.
+  Kind: implement.
+
+- ✅ [MUSI-0308] **MEDIUM — `Library.search` lowercased-cache.**
+  Added `Library._search_blobs: tuple[str, ...]` precomputed at `__post_init__`. Each keystroke now allocates one casefold() on the needle, not 500 on the haystack. Field is `compare=False, repr=False` so it's invisible to equality/repr.
+  Kind: implement.
+
+- ✅ [MUSI-0309] **MEDIUM — `slugify` non-ASCII transliteration.**
+  NFKD-normalise + casefold + ASCII-encode before the regex. "Émile" → "emile", "Café" → "cafe", "Straße" → "strasse", CJK / emoji-only inputs still fall back to "album".
+  Kind: implement.
+
+- ✅ [MUSI-0310] **MEDIUM — `Album.unapprove` re-validate target invariant.**
+  Defensive `assert self.target_count >= len(self.track_paths)` closes the gap when a caller bypasses `select()`'s guard via direct list mutation.
+  Kind: implement.
+
+- ✅ [MUSI-0311] **MEDIUM — `_to_iso` naive-datetime guard.**
+  Now raises `ValueError` if `dt.tzinfo is None`. Prevents wrong-hour `Z` stamps from silently appearing if a caller forgets `tz=UTC`.
+  Kind: implement.
+
+- ✅ [MUSI-0312] **LOW — Refactor `atomic_write_text` / `atomic_write_bytes`.**
+  Shared `_atomic_write(path, mode, content, encoding=...)` core; two 14-line functions are now 1-line wrappers + a 14-line helper.
+  Kind: implement.
+
+- ✅ [MUSI-0313] **LOW — Refactor three `save_album*` post-write blocks.**
+  Extracted `_write_album_json(folder, album)` and `_snap_timestamps_to_ms(album)`; variants now differ only on marker timing as the spec intends.
+  Kind: implement.
+
+- ✅ [MUSI-0314] **LOW — `read_text()` without explicit encoding.**
+  `album_io.load_album` now passes `encoding="utf-8"`. (`state_io.load_state` was already pinned in Tier 2 P4; `settings.read_tracks_folder` was already pinned.)
+  Kind: implement.
+
+- ✅ [MUSI-0315] **LOW — `cover_override` no relative-path heal.**
+  `_deserialize` now applies the same `Path.absolute()` heal to `cover_override` as to `track_paths`; rewrites the file when healed.
+  Kind: implement.
+
+- ✅ [MUSI-0316] **LOW — `Library.scan` casefold not `.lower()`.**
+  `Library.sorted()` lambdas now casefold; `.lower()` was only wrong on German ß + Turkish dotless I but the deviation closes the loop with Spec 00.
+  Kind: implement.
+
+- ✅ [MUSI-0317] **LOW — Approve dialog string mentions "Phase 4".**
+  Rewrote the QMessageBox prompt to user-neutral language ("locked from edits until you reopen it" + parenthetical about export running automatically once that feature ships).
+  Kind: implement.
+
+- ✅ [MUSI-0318] **LOW — `AlbumStore` signal type comment.**
+  Added a leading docstring block on the four signal lines explaining the `pyqtSignal(object) + # Type` idiom and why typed signatures aren't used directly.
+  Kind: implement.
+
+- ✅ [MUSI-0319] **LOW — `LibraryPane.set_tracks` `_selected_paths` contract.**
+  Documented: selection state belongs to `set_album_state()`, not `set_tracks()`. Path equality is value-based so a track that vanishes and reappears stays correctly selected; clearing on every library refresh would visually drop the user's selection.
+  Kind: implement.
+
+- ✅ [MUSI-0320] **LOW — `_format_duration` banker's rounding.**
+  Replaced `round()` (half-to-even) with `int(seconds + 0.5)` (classic half-up). 0.5s → 1, 1.5s → 2, 2.5s → 3. Regression test pinned.
+  Kind: implement.
+
+- ✅ [MUSI-0321] **LOW — `Albums/__pycache__/` noisy warning.**
+  Already shipped in Tier 2; verified `entry.name.startswith("__")` filters it before the `AlbumDirCorrupt` log.
+  Kind: implement.
+
+- ✅ [MUSI-0322] **LOW — Empty-state pill middle dot.**
+  Already shipped in Tier 2 (album_switcher.py:103 uses U+00B7 middle dot).
+  Kind: implement.
+
+- ✅ [MUSI-0323] **LOW — DRAG_HANDLE rendering.**
+  Documented in `theme.Glyphs.DRAG_HANDLE`: U+22EE x2 approximates the spec's vertical stack at the available font sizes; a true vertical stack would require a custom-painted `QStyledItemDelegate`.
+  Kind: implement.
+
+- ✅ [MUSI-0324] **INFO — Structured logging in persistence/.**
+  Added `logger = logging.getLogger(__name__)` to `settings.py`; `read_tracks_folder` now logs `OSError`, malformed-JSON, and non-object cases. (`album_io`, `state_io`, `debounce` already had loggers from prior tiers.)
+  Kind: implement.
+
+- ✅ [MUSI-0325] **INFO (closed by policy) — Tests don't cite WCAG / RFC / TC-* in filenames.**
+  Closed in v0.4.2 by adopting the forward-only `test_TC_NN_*` / `test_WCAG_*` / `test_RFC_*` prefix convention via CLAUDE.md (existing files keep their names, NEW load-bearing tests use the prefix).
+  Kind: implement.
 
 ---
 
@@ -1029,15 +1975,25 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 **Deliverables:**
 
 - ✅ Project skeleton, venv, ruff config, pytest config
+
 - ✅ Atomic-write helper (`atomic_write_text` / `atomic_write_bytes`)
+
 - ✅ `Track` dataclass with mutagen ID3 parsing
+
 - ✅ `Library` with scan / search / sort
+
 - ✅ Dark + colourful theme (`Palette` + `qt_stylesheet`)
+
 - ✅ `LibraryPane` widget (sortable, filterable QTableView)
+
 - ✅ `MainWindow` with three-pane splitter
+
 - ✅ Single-instance launcher via `QSharedMemory`
+
 - ✅ Vinyl SVG icon + freedesktop `.desktop` template
+
 - ✅ Per-user installer / uninstaller / README
+
 - ✅ 30-test pytest suite (TDD throughout)
 
 **Tag:** `v0.1.0-phase1` (local; not pushed)
@@ -1048,9 +2004,17 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 
 3-lane multi-agent independent review. Same-mental-model blind spots caught by ≥2 reviewers.
 
-- ✅ **Theme 1 — Spec drift.** All 5 instances closed by Tier 1 + Tier 2 fixes (hardcoded Tracks path, `album_artist` filter scope, default sort, PermissionError propagation, JPEG covers).
-- ✅ **Theme 2 — Defensive-handler breadth.** `Library.scan` `OSError` catch narrowed (Tier 1.3); `install.sh` / `uninstall.sh` `2>/dev/null` removed from cache-refresh tools — real failures now surface to the user.
-- ✅ **Theme 3 — Single source of truth violations.** Version string consolidated to `version.py:__version__` (Tier 1.2 fold-in); icon path now resolves through `QIcon.fromTheme("album-builder")` — same theme name the `.desktop` file uses — with a dev-tree SVG fallback for running pre-install.
+- ✅ [MUSI-0326] **Theme 1 — Spec drift.**
+  All 5 instances closed by Tier 1 + Tier 2 fixes (hardcoded Tracks path, `album_artist` filter scope, default sort, PermissionError propagation, JPEG covers).
+  Kind: implement.
+
+- ✅ [MUSI-0327] **Theme 2 — Defensive-handler breadth.**
+  `Library.scan` `OSError` catch narrowed (Tier 1.3); `install.sh` / `uninstall.sh` `2>/dev/null` removed from cache-refresh tools — real failures now surface to the user.
+  Kind: implement.
+
+- ✅ [MUSI-0328] **Theme 3 — Single source of truth violations.**
+  Version string consolidated to `version.py:__version__` (Tier 1.2 fold-in); icon path now resolves through `QIcon.fromTheme("album-builder")` — same theme name the `.desktop` file uses — with a dev-tree SVG fallback for running pre-install.
+  Kind: implement.
 
 **Methodology gap (deferred to Phase 2 prep):** add a "Test contract" section to per-feature specs naming the clauses each test must validate. The implementation pipeline `spec → plan → code → tests` currently lets tests encode the plan's interpretation rather than the spec's contract. Tracked as a Phase 2 prep task; not blocking Phase 2 implementation work.
 
@@ -1060,42 +2024,113 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 
 ✅ **All 4 landed 2026-04-28** on branch `feature/phase-1-foundation`. 47/47 tests pass; ruff clean. Net diff: +194 LOC across `app.py`, `track.py`, `library.py`, `library_pane.py`; +1 new module `persistence/settings.py`; +17 new tests.
 
-- ✅ **CRITICAL — QSharedMemory stale-lock recovery + QLocalServer raise handshake.** `src/album_builder/app.py`. `attach()/detach()` recovery dance before `create(1)` reclaims orphan SHM segments left by SIGKILL/OOM/power-loss. `QLocalServer` listens on the same key; second-launch sends `raise\n` via `QLocalSocket` and exits silently. Previous "Already running" dialog removed. Commit `36afe6b`.
-- ✅ **HIGH — `_resolve_tracks_dir()` consults settings.json first.** `src/album_builder/app.py`. New `persistence.settings` module is XDG-aware (`$XDG_CONFIG_HOME` honored). Dev path is the labelled fallback with stderr warning so a misconfigured install is loud. Commit `ad0496b`.
-- ✅ **HIGH — `Library.scan` surfaces real I/O errors.** `src/album_builder/domain/track.py`. New `_open_tags` helper unwraps OSError from MutagenError; PermissionError now propagates instead of silently dropping the file. Commit `cbeca8e`.
-- ✅ **HIGH — `LibraryPane` filter includes `album_artist`.** `src/album_builder/ui/library_pane.py`. New `TrackFilterProxy` subclass overrides `filterAcceptsRow` to consult the underlying Track's `SEARCH_FIELDS`, matching domain `Library.search()` semantics. Commit `87ec172`.
+- ✅ [MUSI-0329] **CRITICAL — QSharedMemory stale-lock recovery + QLocalServer raise handshake.**
+  `src/album_builder/app.py`. `attach()/detach()` recovery dance before `create(1)` reclaims orphan SHM segments left by SIGKILL/OOM/power-loss. `QLocalServer` listens on the same key; second-launch sends `raise\n` via `QLocalSocket` and exits silently. Previous "Already running" dialog removed. Commit `36afe6b`.
+  Kind: implement.
+
+- ✅ [MUSI-0330] **HIGH — `_resolve_tracks_dir()` consults settings.json first.**
+  `src/album_builder/app.py`. New `persistence.settings` module is XDG-aware (`$XDG_CONFIG_HOME` honored). Dev path is the labelled fallback with stderr warning so a misconfigured install is loud. Commit `ad0496b`.
+  Kind: implement.
+
+- ✅ [MUSI-0331] **HIGH — `Library.scan` surfaces real I/O errors.**
+  `src/album_builder/domain/track.py`. New `_open_tags` helper unwraps OSError from MutagenError; PermissionError now propagates instead of silently dropping the file. Commit `cbeca8e`.
+  Kind: implement.
+
+- ✅ [MUSI-0332] **HIGH — `LibraryPane` filter includes `album_artist`.**
+  `src/album_builder/ui/library_pane.py`. New `TrackFilterProxy` subclass overrides `filterAcceptsRow` to consult the underlying Track's `SEARCH_FIELDS`, matching domain `Library.search()` semantics. Commit `87ec172`.
+  Kind: implement.
 
 ## 🔒 Tier 2 — hardening sweep (correctness)
 
 ✅ **All 7 landed 2026-04-28** (6 from this sweep + 1 free fix folded into Tier 1.2). 57/57 tests pass; ruff + shellcheck clean.
 
-- ✅ **HIGH — Three-way version split.** `src/album_builder/app.py` now imports `__version__` from `album_builder.version` (commit `ad0496b`, folded into Tier 1.2 since the file was already being touched).
-- ✅ **HIGH — install.sh Python version check uses the wrong interpreter.** Now uses `"$PY"` consistently for both version read AND comparison; tuple compare via `sys.version_info >= (3, 11)`. Commit `a7dc745`.
-- ✅ **HIGH — Non-deterministic COMM/USLT frame selection.** New `_pick_localised()` helper in `track.py` prefers `lang == "eng"` and falls back to the first non-empty other language. Empty English frames no longer shadow populated alternatives. Commit `cd829d4`.
-- ✅ **HIGH — JPEG covers silently dropped.** Field renamed `cover_png → cover_data` + new `cover_mime`. `_first_apic_image()` accepts any `image/*` MIME (PNG, JPEG, WebP, GIF). Spec 01 updated. Commit `cd829d4`.
-- ✅ **HIGH — WCAG AA contrast failure on placeholder text.** New `text_placeholder` palette token at `#9a9da8` (6.4:1 vs `bg_pane`). New `QLabel#PlaceholderText` QSS rule replaces inline `setStyleSheet`. Test asserts ratio via WCAG 2.2 luminance formula. Commit `b632264`.
-- ✅ **HIGH — `TrackTableModel.data()` no row-bounds guard.** Explicit `if index.row() >= len(self._tracks): return None` after the validity check; stale proxy indices no longer crash via `IndexError` into Qt's C++ slot dispatch. Commit `b54466d`.
-- ✅ **MEDIUM — No default sort applied at construction.** `LibraryPane.__init__` now calls `sortByColumn(0, AscendingOrder)`. Commit `b54466d`.
+- ✅ [MUSI-0333] **HIGH — Three-way version split.**
+  `src/album_builder/app.py` now imports `__version__` from `album_builder.version` (commit `ad0496b`, folded into Tier 1.2 since the file was already being touched).
+  Kind: implement.
+
+- ✅ [MUSI-0334] **HIGH — install.sh Python version check uses the wrong interpreter.**
+  Now uses `"$PY"` consistently for both version read AND comparison; tuple compare via `sys.version_info >= (3, 11)`. Commit `a7dc745`.
+  Kind: implement.
+
+- ✅ [MUSI-0335] **HIGH — Non-deterministic COMM/USLT frame selection.**
+  New `_pick_localised()` helper in `track.py` prefers `lang == "eng"` and falls back to the first non-empty other language. Empty English frames no longer shadow populated alternatives. Commit `cd829d4`.
+  Kind: implement.
+
+- ✅ [MUSI-0336] **HIGH — JPEG covers silently dropped.**
+  Field renamed `cover_png → cover_data` + new `cover_mime`. `_first_apic_image()` accepts any `image/*` MIME (PNG, JPEG, WebP, GIF). Spec 01 updated. Commit `cd829d4`.
+  Kind: implement.
+
+- ✅ [MUSI-0337] **HIGH — WCAG AA contrast failure on placeholder text.**
+  New `text_placeholder` palette token at `#9a9da8` (6.4:1 vs `bg_pane`). New `QLabel#PlaceholderText` QSS rule replaces inline `setStyleSheet`. Test asserts ratio via WCAG 2.2 luminance formula. Commit `b632264`.
+  Kind: implement.
+
+- ✅ [MUSI-0338] **HIGH — `TrackTableModel.data()` no row-bounds guard.**
+  Explicit `if index.row() >= len(self._tracks): return None` after the validity check; stale proxy indices no longer crash via `IndexError` into Qt's C++ slot dispatch. Commit `b54466d`.
+  Kind: implement.
+
+- ✅ [MUSI-0339] **MEDIUM — No default sort applied at construction.**
+  `LibraryPane.__init__` now calls `sortByColumn(0, AscendingOrder)`. Commit `b54466d`.
+  Kind: implement.
 
 ## ⚡ Tier 3 — structural / cosmetic
 
 ✅ **Sweep complete 2026-04-28.** 11 fixes landed; 2 carried forward (Phase 4 prep + intentional INFO defer). 65/65 tests pass; ruff + shellcheck clean.
 
-- ✅ **MEDIUM — `pgrep` regex tightened.** `python[0-9.]*` matches `python`, `python3`, `python3.11`, `python3.13` — but not `pythonista` or random binaries.
-- ✅ **MEDIUM — `.desktop` Exec= dead `%F` removed.** App doesn't parse argv files; the field was a Phase-1 placeholder.
-- ✅ **MEDIUM — install.sh swallows cache-refresh errors.** `2>/dev/null` removed; `|| true` preserved. Folded into Theme 2 sweep.
-- ✅ **MEDIUM — Focus ring 2px outline.** New `QPushButton:focus`, `QTableView:focus`, `QLineEdit:focus` rules with `2px solid accent_primary_1`. Padding compensated to avoid layout shift.
-- ✅ **MEDIUM — Library pane column resize policy.** Title=Stretch, all others=Interactive with sensible default widths (140/160/140/70 px). Min table width 420 px.
-- ✅ **MEDIUM — `Library.tracks` is now `tuple[Track, ...]`.** `__post_init__` coerces incoming iterables; Library is hashable; mutation through the frozen boundary blocked.
-- ✅ **LOW — `cover_data` rename + spec sync.** Resolved by Tier 2.D (rename `cover_png → cover_data`/`cover_mime` + accept any `image/*` MIME). Spec 01 already updated.
-- ✅ **LOW — Tmp filename collision.** `_unique_tmp_path()` suffixes with PID + 8 hex chars of `uuid4`. Concurrent Phase-2 debounce writers no longer collide.
-- ✅ **LOW — `[[ $PURGE -eq 0 ]] && echo …` brittleness.** Converted to `if`-block; `set -e` safe.
-- ✅ **LOW — `Library.search()` doesn't filter `is_missing`.** Carried forward into Phase 2 deliverables (only meaningful once `is_missing` is reachable post-rescan).
-- ✅ **LOW — QScrollBar QSS styling.** Dark-theme scrollbars: `bg_pane` track, `border_strong` → `text_tertiary`-on-hover handle, 5px radius, no arrow buttons.
-- ✅ **LOW — Splitter ratios.** `[500, 350, 550]` → `[5, 3, 5]` — HiDPI-friendly.
-- ✅ **LOW — README WeasyPrint system-deps.** Closed in v0.5.1 sweep: README §System dependencies lists Pango / Cairo / GDK-PixBuf install commands for openSUSE + Debian/Ubuntu, with link to WeasyPrint's per-distro guide.
-- ✅ **INFO — `track_at()` only used by tests.** Closed in v0.3.0: `LibraryPane._on_table_clicked` and `_on_double_click` consume `track_at()` for preview-play row → Track resolution.
+- ✅ [MUSI-0340] **MEDIUM — `pgrep` regex tightened.**
+  `python[0-9.]*` matches `python`, `python3`, `python3.11`, `python3.13` — but not `pythonista` or random binaries.
+  Kind: implement.
 
+- ✅ [MUSI-0341] **MEDIUM — `.desktop` Exec= dead `%F` removed.**
+  App doesn't parse argv files; the field was a Phase-1 placeholder.
+  Kind: implement.
+
+- ✅ [MUSI-0342] **MEDIUM — install.sh swallows cache-refresh errors.**
+  `2>/dev/null` removed; `|| true` preserved. Folded into Theme 2 sweep.
+  Kind: implement.
+
+- ✅ [MUSI-0343] **MEDIUM — Focus ring 2px outline.**
+  New `QPushButton:focus`, `QTableView:focus`, `QLineEdit:focus` rules with `2px solid accent_primary_1`. Padding compensated to avoid layout shift.
+  Kind: implement.
+
+- ✅ [MUSI-0344] **MEDIUM — Library pane column resize policy.**
+  Title=Stretch, all others=Interactive with sensible default widths (140/160/140/70 px). Min table width 420 px.
+  Kind: implement.
+
+- ✅ [MUSI-0345] **MEDIUM — `Library.tracks` is now `tuple[Track, ...]`.**
+  `__post_init__` coerces incoming iterables; Library is hashable; mutation through the frozen boundary blocked.
+  Kind: implement.
+
+- ✅ [MUSI-0346] **LOW — `cover_data` rename + spec sync.**
+  Resolved by Tier 2.D (rename `cover_png → cover_data`/`cover_mime` + accept any `image/*` MIME). Spec 01 already updated.
+  Kind: implement.
+
+- ✅ [MUSI-0347] **LOW — Tmp filename collision.**
+  `_unique_tmp_path()` suffixes with PID + 8 hex chars of `uuid4`. Concurrent Phase-2 debounce writers no longer collide.
+  Kind: implement.
+
+- ✅ [MUSI-0348] **LOW — `[[ $PURGE -eq 0 ]] && echo …` brittleness.**
+  Converted to `if`-block; `set -e` safe.
+  Kind: implement.
+
+- ✅ [MUSI-0349] **LOW — `Library.search()` doesn't filter `is_missing`.**
+  Carried forward into Phase 2 deliverables (only meaningful once `is_missing` is reachable post-rescan).
+  Kind: implement.
+
+- ✅ [MUSI-0350] **LOW — QScrollBar QSS styling.**
+  Dark-theme scrollbars: `bg_pane` track, `border_strong` → `text_tertiary`-on-hover handle, 5px radius, no arrow buttons.
+  Kind: implement.
+
+- ✅ [MUSI-0351] **LOW — Splitter ratios.**
+  `[500, 350, 550]` → `[5, 3, 5]` — HiDPI-friendly.
+  Kind: implement.
+
+- ✅ [MUSI-0352] **LOW — README WeasyPrint system-deps.**
+  Closed in v0.5.1 sweep: README §System dependencies lists Pango / Cairo / GDK-PixBuf install commands for openSUSE + Debian/Ubuntu, with link to WeasyPrint's per-distro guide.
+  Kind: implement.
+
+- ✅ [MUSI-0353] **INFO — `track_at()` only used by tests.**
+  Closed in v0.3.0: `LibraryPane._on_table_clicked` and `_on_double_click` consume `track_at()` for preview-play row → Track resolution.
+  Kind: implement.
 
 ## 🔭 Future / deferred
 
@@ -1111,7 +2146,9 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 - **Windows port (cross-platform packaging).** The app is Linux-first and several pieces are POSIX-specific: symlink-based export (`os.symlink`), `XDG_CONFIG_HOME` settings paths, a bash `install.sh`, and WeasyPrint's GTK/Pango native runtime. A Windows build needs, at minimum: a Windows-safe export strategy (symlinks require admin / Developer Mode — junctions, hardlinks, or a copy fallback), a `platformdirs`-style config-path resolver replacing the XDG env var, verification that WeasyPrint's GTK runtime ships on Windows (the historical pain point), confirmation of WhisperX/torch wheels, and a PyInstaller/briefcase bundle replacing the shell installer. Audit every `os.symlink`, hardcoded `/`-path, and the `sys.executable` install hint first. Separate phase; pick the packaging tool brainstorm-first. **(Superseded 2026-07-25 — folded into the "Distribution & cross-platform packaging" epic below, which carries this forward with locked decisions.)**
 - **Improve lyric matching / alignment quality.** WhisperX forced-alignment (Spec 07 / `AlignmentService` + `AlignmentWorker`) is the current engine. Quality gaps worth targeting: instrumental intros/outros, repeated choruses, non-English lyrics, and low-confidence word timings drifting. Options to brainstorm: surface per-line/word confidence (cross-ref the deferred "Tap-along LRC editor" so the user can nudge weak lines), a manual global offset control, pre-cleaning lyrics (strip `[Chorus]` / section markers before alignment), or a newer whisper/alignment backend. Establish a hand-aligned reference set and measure before/after rather than eyeballing. Enhancement to the existing `AlignmentService`, not a rewrite.
 - **SQLite-backed library + analytics substrate (long-horizon).** Replace the per-album JSON + in-memory derived structures with a SQLite catalogue once the dataset outgrows the current "single-user picks ~10 tracks per album" regime. Triggers worth waiting for: hundreds of approved albums in the user's history, demand for cross-cutting queries (release-year filters, genre/mood metadata, listening history, smart-playlist rules, full-text search at scale), or analytics dashboards. Brought up during the v0.6.0 popularity-indicator brainstorm (2026-05-01) and explicitly parked: the popularity index for v0.6.0 is in-memory derived because the data model is "count items in a list" and current scale is ~5 approved × ~10 tracks. A SQLite migration would require a Spec 10 amendment (or new Spec 14 for db layer), atomic-write strategy redesign, JSON→SQLite migration helper, test-fixture rewrite across `tests/persistence/`, and a corruption-recovery story — separate phase, not bundled into a feature.
-- 🚧 **Fully-featured music player mode (library-wide playback engine).** (User request 2026-06-17; started 2026-06-17.) Expand Album Builder beyond curation into a general-purpose player: play the whole library (not just an album preview), with a persistent play queue, shuffle/repeat, gapless playback, saved playlists, and a full transport. **Reuse-before-rewrite:** build on the existing `Player` (QMediaPlayer wrapper), `LyricsTracker`, `TransportBar`, and `Library` services rather than a parallel pipeline. Large multi-phase epic; each phase is spec-first (author the spec + run `/cold-eyes` to clean before implementation, per spec discipline).
+
+- 🚧 [MUSI-0354] **Fully-featured music player mode (library-wide playback engine).**
+  (User request 2026-06-17; started 2026-06-17.) Expand Album Builder beyond curation into a general-purpose player: play the whole library (not just an album preview), with a persistent play queue, shuffle/repeat, gapless playback, saved playlists, and a full transport. **Reuse-before-rewrite:** build on the existing `Player` (QMediaPlayer wrapper), `LyricsTracker`, `TransportBar`, and `Library` services rather than a parallel pipeline. Large multi-phase epic; each phase is spec-first (author the spec + run `/cold-eyes` to clean before implementation, per spec discipline).
 
   **Locked decisions (2026-06-17):**
   - **Player surface = a separate tab in `MainWindow`** (user choice 2026-06-17), not a detachable window or a mode toggle. Curation view becomes tab 1; player becomes tab 2. Resolves the Phase E "tab vs detachable window" open question.
@@ -1136,15 +2173,19 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   - **Phase F (research) — Equalizer / audio effects + ReplayGain.** QtMultimedia has no native EQ and Qt6 dropped gapless control; would need an audio-filter graph or a different audio backend. Spike + gauge demand before committing. **Spike done 2026-07-18** (`docs/research/2026-07-18-phase-f-audio-effects-spike.md`, sources verified against Qt 6.11 docs): (1) **EQ** stays deferred - QtMultimedia provides no audio DSP ("external dependencies are needed"), so an EQ means retiring `QMediaPlayer` for a raw-sample `QAudioSink` pipeline or a GStreamer/miniaudio backend; disproportionate for a curation-first app. (2) **Gapless/crossfade** stays deferred - `QMediaGaplessPlaybackControl` is Qt5-only; the dual-`QMediaPlayer` pre-roll fights the Spec 15 single-path invariant (own spec needed). (3) **ReplayGain volume-normalization is the one feasible/cheap piece** - it is tag-driven output scaling, not DSP: `domain/track.py` already reads ID3 via mutagen, so reading `REPLAYGAIN_*` / `R128_*` tags is free, and applying a `10**(dB/20)` factor to `QAudioOutput.setVolume` needs no new dependency and no pipeline change (tag *writing*/scanning stays out of scope - that's `rsgain`'s job). Recommendation: promote ReplayGain to its own small spec-first feature **iff there is user demand for loudness leveling**; EQ + gapless remain parked with the memo as rationale. **ReplayGain done 2026-07-18** (user requested it as a toggleable setting): Spec 21 authored + cold-eyes clean (3 loops - caught the restored-track-never-levelled gap, the qFatal-on-toggle risk, and a false "no change to Spec 18" before any code) + implemented in full. Landed: a `replaygain` settings block (`enabled`/`mode`), two read-only `Track` gain fields parsed from ID3 `TXXX` at scan time, a `Player` composite-volume refactor (user volume decoupled from the output level; an internal ReplayGain factor scales `QAudioOutput`, clamped, emitting no `volume_changed`), a pure `gain_factor` + `ReplayGainService` (caches the current track so the controller-bypassing restored last-played track is levelled too), and a **Playback -> Volume Levelling** menu (checkable toggle + Album/Track reference, guarded persistence mirroring `_apply_theme`). TC-21-01..09; EQ + gapless remain parked.
   - ✅ **Phase G — MPRIS2 / desktop integration (Linux).** D-Bus MPRIS2 interface so the player appears in the KDE Plasma media controller (tray + lock screen) and responds to hardware media keys; system-tray icon. New phase surfaced by the 2026-06-17 research; spec-first like the rest. **Spec 20 authored + cold-eyes clean (7 loops, 2026-07-18).** Design: zero new dependencies (PyQt6 ships `QtDBus` + `QSystemTrayIcon`); two `QDBusAbstractAdaptor`s (root + Player) on one host object driven by the existing `Player`/`PlaybackController`, with full transport + Seek/Volume/Position + bidirectional Shuffle/LoopStatus (reusing the Spec 18 broadcast signals), temp-file `mpris:artUrl` cover art, and a control-surface tray (close still quits). The cold-eyes loop caught a **fatal PyQt6 gotcha before any code**: returning a `QDBusArgument` from a `pyqtProperty('QVariantMap')` getter SIGABRTs on client read (confirmed against a live session bus) — the spec now mandates a plain dict with per-value typed carriers (int64 length, `as` artist, object-path trackid), verified conformant via `dbus-send`. Locked decisions (2026-07-18): full MPRIS2 scope; tray = control surface only; cover art via temp-file artUrl. **Done 2026-07-18:** implemented in full — `services/mpris.py` (two adaptors + `MprisService` + pure mapping helpers), `ui/tray.py`, `ui/window_util.py` (shared `bring_to_front`), one additive `Player.seeked` signal, wired into `MainWindow` with `closeEvent` teardown; TC-20-01..16 + an opt-in `AB_INTEGRATION_DBUS` live-bus wire-signature test (re-verified over a real session bus that the Metadata read is non-crashing and `x`/`o`/`as`-conformant); full suite green (804 passed).
   Sequencing: A->B->C deliver a usable player; D/E/F/G are follow-on. Each phase gets its own spec + TC contracts before any code lands.
+  Kind: implement.
 
-- 🚧 **Distribution & cross-platform packaging (downloadable, runnable builds).** (User request 2026-07-25.) Turn Album Builder from a source-only, Linux-only checkout into downloadable "one file, install and run" builds on Linux and Windows, plus store/repo presence. **Supersedes the "Windows port (cross-platform packaging)" bullet above** (folded in). Spec-first (Spec 22 implemented 2026-07-28 - Phase Dist-1 shipped) + `/cold-eyes` like every phase. Locked decisions (2026-07-25, resequenced 2026-07-28): sequence **Groundwork -> AppImage -> Windows -> Flatpak/Flathub -> OBS**; the heavy WhisperX/torch dependency stays an optional `pip` extra and is kept **out** of the bundles (keeps downloads to a few hundred MB, not GB). Phases:
+- 🚧 [MUSI-0355] **Distribution & cross-platform packaging (downloadable, runnable builds).**
+  (User request 2026-07-25.) Turn Album Builder from a source-only, Linux-only checkout into downloadable "one file, install and run" builds on Linux and Windows, plus store/repo presence. **Supersedes the "Windows port (cross-platform packaging)" bullet above** (folded in). Spec-first (Spec 22 implemented 2026-07-28 - Phase Dist-1 shipped) + `/cold-eyes` like every phase. Locked decisions (2026-07-25, resequenced 2026-07-28): sequence **Groundwork -> AppImage -> Windows -> Flatpak/Flathub -> OBS**; the heavy WhisperX/torch dependency stays an optional `pip` extra and is kept **out** of the bundles (keeps downloads to a few hundred MB, not GB). Phases:
   - ✅ **Phase Dist-1 — Portability groundwork (code). SHIPPED 2026-07-28.** Windows-safe export per Spec 22: made the numbered-symlink step in `services/export.py` conditional on filesystem support (`_supports_symlinks` probe) and, where symlinks are unavailable, emit **`playlist.m3u8` only** (WinAmp-style remembered paths - no hardlink/copy/consent-dialog, superseding Spec 08's deferred copy fallback); drift checks (`is_export_fresh`, `album_store._symlink_count_matches`) expect zero symlinks there; resolved the config dir via **`platformdirs`** (keeps `settings.py` Qt-free; preserves the relative-`XDG_CONFIG_HOME` guard); swapped the `xdg-open` folder-open for `QDesktopServices.openUrl`. Zero behavior change on Linux. Tests TC-22-01..07 (`tests/services/test_TC_22_distribution.py`, +13); Spec 08 + settings suites pass unmodified. Commits `4c20c44` (code) + `961ee4d` / `0981b84` (cross-spec doc amendments + cold-eyes gate). Prerequisite for AppImage, Windows, and Flatpak - now unblocked.
   - ✅ **Phase Dist-2 — AppImage (Linux single-file). SHIPPED 2026-07-28 - the project's first downloadable, runnable file.** [`AlbumBuilder-0.6.1-x86_64.AppImage`](https://github.com/milnet01/album-builder/releases/tag/v0.6.1) (~121 MB) is attached to the v0.6.1 GitHub Release, built by `appimage.yml` on the tag (build + extracted-bundle checks + a clean-`ubuntu:22.04` run of `--version`/`--selftest` + appimagelint, all green) and verified to launch + render on a clean system. Delivered: `packaging/build-appimage.sh` (containerised build, shellcheck-clean), `.github/workflows/appimage.yml` (tag + dispatch triggers, uploads to the Release), `app.py` `--version`/`--selftest` flags, `tests/test_TC_23_appimage.py` (TC-23-01/02/03), README Download section. Commits `d5fe75e` (code) + `5ce8fa8` (spec reconcile) + `702f885` (doc sync). Pinned build tooling (`ubuntu:22.04@sha256:` [deliberate glibc-floor hold-back, documented], `python-appimage` `python3.13.14` [== CI's tested interpreter], `appimagetool` `1.9.1` [latest stable]) - all pins corrected against live releases and **validated by a green manual dry-run (run `30361141983`, 2026-07-28): build + extracted-bundle checks + a clean-`ubuntu:22.04`-container run of `--version`/`--selftest` + appimagelint all pass** (upload skipped - no tag). The downloadable file is produced by cutting a `v*` tag. **Follow-up:** bump CI + the AppImage bundle to Python 3.14 (latest stable) once the suite is re-run on 3.14 - a dependency-currency sweep item. A self-contained `AlbumBuilder-<version>-x86_64.AppImage` that runs on most distros with no install. **Spec 23 refines the original approach** (cold-eyes-converged, loops 1-5): bundles the Python runtime + PyQt6 (Qt libs + platform + **FFmpeg** multimedia backend - the 6.11 wheel ships FFmpeg, *not* GStreamer, so no GStreamer plugins are bundled) + WeasyPrint's native stack (Pango / PangoFT2 / HarfBuzz / HarfBuzz-subset / fontconfig / gobject - WeasyPrint 69 drops **Cairo / GDK-PixBuf**); built via **`python-appimage`** (the `linuxdeploy`-or-python-appimage fork resolved to python-appimage; `linuxdeploy-plugin-python` is unmaintained) **inside a digest-pinned `ubuntu:22.04` container** (so a local build == the CI release; sets the glibc floor for broad reach). WhisperX/torch stays an optional `pip` extra, out of the bundle. One local script (`packaging/build-appimage.sh`) is the single source of truth; `appimage.yml` runs it on a `v*` tag + manual dispatch and attaches to the GitHub Release. The **simplest** "one downloadable Linux file" — no store account or review gate — so it ships first.
   - 🚧 **Phase Dist-3 — Windows bundle.** PyInstaller `.exe` bundling WeasyPrint's native libraries; audio uses the built-in Windows backend (no GStreamer); attached to GitHub Releases. **Spec 24 accepted + implemented 2026-07-28** (cold-eyes converged loops 1-4 + an implementation fold-back). Refinements over the original bullet: **one-folder zip, not one-file** (reliability for the fragile native stack); WeasyPrint's GTK/Pango DLLs **sourced from MSYS2 on a `windows-latest` runner** - PyInstaller can't cross-compile, so there is **no local reproducibility** (unlike the AppImage container), and CI `--version`/`--selftest` + a **manual Windows run** verify it; a **point-of-use HTML-only fallback** in `render_report` if the PDF engine can't load or a report won't render (Spec 24 §4.3b), with `scan_reports_dir` keeping a lone `.html` as a complete single-file report. Landed: `render_report`/`scan_reports_dir` code + `tests/services/test_TC_24_windows_bundle.py` (TC-24-01/02/03, full suite green) + `packaging/build-windows.ps1` + `packaging/album-builder.spec` + runtime hook + `.github/workflows/windows.yml`. The downloadable zip is produced by cutting a `v*` tag. Note: unsigned builds trip Windows SmartScreen until code-signing is arranged (deferred).
   - **Phase Dist-4 — Flatpak + Flathub.** Flatpak manifest bundling PyQt6 + WeasyPrint's Pango/Cairo/GDK-PixBuf runtime + GStreamer; an **AppStream metainfo** file (`packaging/` ships only a `.desktop` template today) + screenshots for the store; a single-file `.flatpak` bundle attached to GitHub Releases; and the Flathub submission PR. The **app-store** route for Linux (sandboxed, auto-updating via Flathub) — complements the AppImage single file with a discoverable, managed store listing.
   - **Phase Dist-5 — openSUSE Build Service (OBS).** Native RPM + DEB packages across distros via OBS for package-manager installs (zypper / apt) — distinct from the single-file AppImage/Flatpak. Integrate with the OBS project a companion session ("finbreak") already set up for the user rather than starting from scratch.
+  Kind: implement.
 
-- 📋 **Music player — standalone experience & popular-app feature parity (v2 epic; sequenced AFTER Distribution).** (User request 2026-07-25: "copy as many features as you can from Spotify / WinAmp / any popular music player.") Continues the shipped "Fully-featured music player mode" epic (Phases A-G) toward a player that stands on its own. **Locked direction (2026-07-25, refined):** stay **one program** (not two executables), but treat the **two tabs as separate "apps"** — each a self-sufficient surface with **its own library browser**. The song library stays a **single shared source of truth** (the existing `Library` + `LibraryWatcher`): songs added from either tab update that shared library and **both tabs' library views refresh live**. So each tab shows "its own" library, but over one dataset. The Player tab thus browses and starts songs in place, never needing the curation tab. **Reuse-before-rewrite** on `Player` / `PlaybackController` / `PlayQueue` / `PlaylistStore` / `Library` / `UsageIndex`; every phase is spec-first + `/cold-eyes`. *Already shipped, not re-listed here:* play queue, shuffle/repeat, saved playlists, MPRIS media-key + lock-screen integration, tray, synced lyrics, ReplayGain volume levelling, cover art, full transport, cross-album usage indicator. **Planned phases (rough value-first order):**
+- 📋 [MUSI-0356] **Music player — standalone experience & popular-app feature parity (v2 epic; sequenced AFTER Distribution).**
+  (User request 2026-07-25: "copy as many features as you can from Spotify / WinAmp / any popular music player.") Continues the shipped "Fully-featured music player mode" epic (Phases A-G) toward a player that stands on its own. **Locked direction (2026-07-25, refined):** stay **one program** (not two executables), but treat the **two tabs as separate "apps"** — each a self-sufficient surface with **its own library browser**. The song library stays a **single shared source of truth** (the existing `Library` + `LibraryWatcher`): songs added from either tab update that shared library and **both tabs' library views refresh live**. So each tab shows "its own" library, but over one dataset. The Player tab thus browses and starts songs in place, never needing the curation tab. **Reuse-before-rewrite** on `Player` / `PlaybackController` / `PlayQueue` / `PlaylistStore` / `Library` / `UsageIndex`; every phase is spec-first + `/cold-eyes`. *Already shipped, not re-listed here:* play queue, shuffle/repeat, saved playlists, MPRIS media-key + lock-screen integration, tray, synced lyrics, ReplayGain volume levelling, cover art, full transport, cross-album usage indicator. **Planned phases (rough value-first order):**
   - **Phase MP-1 — Session continuity & resume.** Persist + restore the last active tab, the last-played track (extend the existing paused-at-zero restore), and **playback position** (the `last_position_seconds` v2 item already earmarked in Spec 06 / the overview) so playback resumes exactly where it stopped; also last volume, shuffle/repeat state, and window size/position. (Spotify and WinAmp both resume on launch.)
   - **Phase MP-2 — Player-tab as its own app (own library view over shared data).** Give the Player tab **its own `LibraryPane`** bound to the **same** `Library` + `LibraryWatcher` the curation tab uses — so both tabs show "their own" library over one shared dataset, and songs added from either side update the shared library and refresh **both** views live. Add an **"Add music" on-ramp** (drag-and-drop files/folders onto either tab, or a folder/file picker) that writes into the shared library. From the Player's own library: double-click / Enter to play, "play from here", and enqueue — listening never requires the curation tab. Delivers the locked "two apps, shared library" direction and removes the "where's my library?" confusion. (Folds in the drag-and-drop "Add music" suggestion, 2026-07-25.)
   - **Phase MP-3 — Library browsing power.** Incremental search/filter box (with a `/` or Ctrl+L keyboard-focus shortcut — folds in the instant-search suggestion, 2026-07-25), multi-column sort (title / artist / album / duration / date-added / play-count), jump-to-letter, and optional group-by-artist/album (folds in the deferred "Group-by-artist tabs" bullet). (Spotify search; WinAmp / foobar2000 media library.)
@@ -1153,14 +2194,17 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   - **Phase MP-6 — Mini / compact player.** A small always-on-top compact window or bar for background listening. (WinAmp mini-mode; Spotify miniplayer.)
   - **Phase MP-7 — Audiophile engine (BIG — blocked on retiring `QMediaPlayer`).** Graphic equalizer + presets, gapless playback, crossfade, ReplayGain pre-amp, and optional visualizer/spectrum. All of these require replacing QtMultimedia's `QMediaPlayer` with a raw `QAudioSink` / GStreamer / miniaudio pipeline (per the 2026-07-18 Phase F audio-effects spike) — its own multi-phase, higher-risk sub-epic. (WinAmp EQ + visualizer; audiophile players' gapless/crossfade.)
   - **Phase MP-8 — Extras (survey; pick as desired).** Sleep timer, playback speed / pitch, A-B repeat, "play next" / queue history, drag-and-drop files or folders to enqueue (distinct from the library-add drop in MP-2), expanded global keyboard shortcuts, context-menu "go to album / artist", and optional Last.fm scrobbling. **Out of scope (carry-forward from the A-G epic):** streaming / Spotify integration, CD ripping, bulk tag editing, Discord presence.
+  Kind: implement.
 
-- 📋 **Polish & hardening (usability / performance / security).** (Suggestion sweep 2026-07-25; sequenced flexibly - small, high-value items surfaced while reviewing the app.)
+- 📋 [MUSI-0357] **Polish & hardening (usability / performance / security).**
+  (Suggestion sweep 2026-07-25; sequenced flexibly - small, high-value items surfaced while reviewing the app.)
   - **Usability - first-run onboarding.** A clear "point me at your music folder" welcome on first launch instead of an empty window.
   - **Usability - undo for destructive actions.** Undo (or confirm-with-restore) for deleting an album or removing tracks (verify the current safety net first).
   - **Performance - library-scan tag cache.** Cache parsed ID3 tags keyed by path + modified-time so restarts don't re-read every file's tags; a big win for large `Tracks/` libraries (verify current startup-scan behavior first).
   - **Performance - cover-art thumbnail cache.** Cache decoded/resized cover images instead of re-decoding them per use.
   - **Security - HTML report output escaping.** ✅ **Verified clean (2026-07-25):** `services/report.py:221` sets `autoescape=select_autoescape(["html", "xml"])` and no `| safe` / `Markup(` bypass exists, so track metadata + lyrics render inert in the shared report. No hardening needed. (Kept here as the audit-trail entry.)
   - **Docs - spec-vs-source drift sweep.** The 2026-07-25 `/audit` `contract_doc_drift` rule flagged 103 spec identifiers absent from source. Most are false positives (external-lib internals like `HUGGINGFACE_HUB_CACHE`/`torch.hub...`, forward/v2 refs like `last_position_seconds`, illustrative examples, hyphen-vs-underscore theme tokens, and citation-format misses such as `album_store.py:approve` which *does* exist). A small genuine subset is real drift worth fixing in a targeted sweep - confirmed examples: `Album.set_track_paths` (Spec 08; no such method exists) and the known Spec 06 `QSettings` -> `settings.json` wording. Filter the FPs, fix the real ones. (Best done via `/cold-eyes`, which verifies doc-vs-code.)
+  Kind: implement.
 
 ---
 

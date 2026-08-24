@@ -187,8 +187,8 @@ This is the single source of truth for `album.json`. Spec 02 owns the lifecycle 
   "status": "draft",
   "target_count": 12,
   "track_paths": [
-    "/mnt/Games/Scripts/Linux/Music_Production/Tracks/intro.mpeg",
-    "/mnt/Games/Scripts/Linux/Music_Production/Tracks/something more (calm).mpeg"
+    "/mnt/Games/Scripts/Linux/Album_Builder/Tracks/intro.mpeg",
+    "/mnt/Games/Scripts/Linux/Album_Builder/Tracks/something more (calm).mpeg"
   ],
   "updated_at": "2026-04-27T17:02:14.514Z"
 }
@@ -255,7 +255,7 @@ Spec 12 owns *what settings exist*; this spec owns the bytes. Lives at `<config-
 
 ```json
 {
-  "albums_folder": "/mnt/Games/Scripts/Linux/Music_Production/Albums",
+  "albums_folder": "/mnt/Games/Scripts/Linux/Album_Builder/Albums",
   "alignment": {
     "auto_align_on_play": false,
     "model_size": "medium.en"
@@ -263,7 +263,7 @@ Spec 12 owns *what settings exist*; this spec owns the bytes. Lives at `<config-
   "audio": { "muted": false, "volume": 80 },
   "replaygain": { "enabled": false, "mode": "album" },
   "schema_version": 1,
-  "tracks_folder": "/mnt/Games/Scripts/Linux/Music_Production/Tracks",
+  "tracks_folder": "/mnt/Games/Scripts/Linux/Album_Builder/Tracks",
   "ui": {
     "open_report_folder_on_approve": true,
     "theme": "dark-colourful"

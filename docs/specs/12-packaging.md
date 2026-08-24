@@ -161,7 +161,7 @@ It explicitly **preserves**:
 - `~/.cache/album-builder/` (Whisper models)
 - `~/.local/share/applications/` (other apps' .desktop files)
 
-It does **not** touch the project tree (`Music_Production/Tracks/`, `Albums/`, `.album-builder/`).
+It does **not** touch the project tree (`Album_Builder/Tracks/`, `Albums/`, `.album-builder/`).
 
 `uninstall.sh --purge` additionally removes the user's `~/.config/album-builder/` and `~/.cache/album-builder/`.
 
