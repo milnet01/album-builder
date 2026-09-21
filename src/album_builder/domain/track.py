@@ -7,7 +7,9 @@ from pathlib import Path
 
 import mutagen
 from mutagen import File as MutagenFile
+from mutagen.asf import ASFTags
 from mutagen.id3 import APIC, COMM, ID3, USLT
+from mutagen.mp4 import MP4Tags
 
 
 @dataclass(frozen=True)
@@ -41,16 +43,34 @@ class Track:
 
         size = path.stat().st_size
         mf = _open_tags(MutagenFile, path)
-        duration = float(mf.info.length) if mf and mf.info else 0.0
-        id3 = _open_tags(ID3, path)
+        # `mf` is dict-like: bool() counts TAGS, so a tagless file is falsy while
+        # still carrying a perfectly good stream length (MUSI-0360).
+        duration = float(mf.info.length) if mf is not None and mf.info is not None else 0.0
 
-        title = _text(id3, "TIT2") or path.name
-        artist = _text(id3, "TPE1") or "Unknown artist"
-        album_artist = _text(id3, "TPE2") or artist
-        album = _text(id3, "TALB") or ""
-        composer = _text(id3, "TCOM") or ""
-        comment = _comment_text(id3)
-        lyrics_text = _lyrics_text(id3)
+        id3 = _open_tags(ID3, path)
+        tags = mf.tags if mf is not None else None
+        # WAV and AIFF carry ID3 in a chunk, which `ID3(path)` does not reach but
+        # `mutagen.File` does. Same frames either way, so route them to the same reader.
+        if id3 is None and isinstance(tags, ID3):
+            id3 = tags
+
+        if id3 is not None:
+            title = _text(id3, "TIT2") or path.name
+            artist = _text(id3, "TPE1") or "Unknown artist"
+            album_artist = _text(id3, "TPE2") or artist
+            album = _text(id3, "TALB") or ""
+            composer = _text(id3, "TCOM") or ""
+            comment = _comment_text(id3)
+            lyrics_text = _lyrics_text(id3)
+        else:
+            # Vorbis comments, MP4 atoms and ASF attributes onto the same fields.
+            title = _container_text(tags, "title") or path.name
+            artist = _container_text(tags, "artist") or "Unknown artist"
+            album_artist = _container_text(tags, "album_artist") or artist
+            album = _container_text(tags, "album")
+            composer = _container_text(tags, "composer")
+            comment = _container_text(tags, "comment")
+            lyrics_text = _container_text(tags, "lyrics") or None
         cover_data, cover_mime = _first_apic_image(id3)
         rg_track, rg_album = _read_replaygain(id3)
 
@@ -109,6 +129,60 @@ def _open_tags(opener, path: Path):
         if isinstance(underlying, OSError):
             raise underlying from exc
         return None
+
+
+# Per-container tag names for the fields `Track` exposes. Vorbis comments
+# (FLAC, Ogg Vorbis, Opus, .oga) are the lowercase convention and the default;
+# MP4 and ASF each use their own. Cover art and ReplayGain are deliberately not
+# here - they need per-container decoding rather than a name, and are their own
+# items (MUSI-0362, MUSI-0363).
+_VORBIS_KEYS = {
+    "title": "title",
+    "artist": "artist",
+    "album_artist": "albumartist",
+    "album": "album",
+    "composer": "composer",
+    "comment": "comment",
+    "lyrics": "lyrics",
+}
+_MP4_KEYS = {
+    "title": "\xa9nam",
+    "artist": "\xa9ART",
+    "album_artist": "aART",
+    "album": "\xa9alb",
+    "composer": "\xa9wrt",
+    "comment": "\xa9cmt",
+    "lyrics": "\xa9lyr",
+}
+_ASF_KEYS = {
+    "title": "Title",
+    "artist": "Author",
+    "album_artist": "WM/AlbumArtist",
+    "album": "WM/AlbumTitle",
+    "composer": "WM/Composer",
+    "comment": "Description",
+    "lyrics": "WM/Lyrics",
+}
+
+
+def _container_text(tags, field: str) -> str:
+    """Read one field from a non-ID3 tag block, or "" if it is absent.
+
+    Values arrive as a list in every container - str of the first element is
+    right for Vorbis and MP4 alike, and for ASF's attribute objects.
+    """
+    if tags is None:
+        return ""
+    if isinstance(tags, MP4Tags):
+        keys = _MP4_KEYS
+    elif isinstance(tags, ASFTags):
+        keys = _ASF_KEYS
+    else:
+        keys = _VORBIS_KEYS
+    values = tags.get(keys[field])
+    if not values:
+        return ""
+    return str(values[0]).strip()
 
 
 def _text(id3: ID3 | None, key: str) -> str:
