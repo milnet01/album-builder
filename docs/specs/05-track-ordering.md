@@ -2,6 +2,20 @@
 
 **Status:** Implemented (Phase 2) · **Last updated:** 2026-05-18 · **Depends on:** 00, 02, 04, 10, 11
 
+> **Cold-eyes loop log (2026-09-21, `review-contract`, run L-20260921-05):** 2 loops,
+> 3 cold lanes each, all briefed cold (no prior-loop findings shared), against a context
+> packet of executed source facts. Cap reached (2 for a spec) — a normal exit.
+> **Phase 1b (packet build):** the Coverage sentence claimed TC-05-01..13 while four
+> clauses carry no marker. Caught before a lane was billed.
+> **Loop 1 (5 fixed, 1 dismissed):** drag visual feedback asserted as shipped but
+> implemented nowhere; TC-05-07's visual half unfalsifiable; TC-05-08 named an event not
+> observable headlessly; TC-05-03 left the exception type unpinned. Dismissed: the
+> `flags()` model-level claim — two lanes called it false, a third ran the test and showed
+> `model().flags()` does exclude the bit, so the claim holds.
+> **Loop 2 (1 fixed):** two lanes independently found loop 1's own repair false — it said
+> the UI binds to the `IndexError`/`ValueError` distinction, and no caller discriminates
+> them. Corrected to describe the blanket catch as the known gap it is.
+
 ## Purpose
 
 Allow the user to set the order of tracks within an album. The order matters — it's what the artist sees in the report, what the M3U plays in, and how the symlinks are numbered.
@@ -14,7 +28,10 @@ Allow the user to set the order of tracks within an album. The order matters —
   - Drag handle (`⋮⋮` six-dot grip glyph) on the left — anchored in Spec 11 §Glyphs.
   - Title, duration, on/off toggle (the toggle here mirrors the library toggle — toggling off in the middle pane is identical to deselecting in the library)
 - The user picks up a row by the drag handle and drops it elsewhere in the list. Numbers re-index automatically.
-- Visual feedback during drag (anchored in Spec 11 palette tokens):
+- Visual feedback during drag. **Not implemented as of this writing** — the pane
+  uses Qt's default `InternalMove` drag rendering, and nothing in
+  `ui/album_order_pane.py` or `ui/theme.py` sets item opacity or paints a drop
+  indicator. The target, should it be built:
   - The grabbed row goes semi-transparent (50% opacity).
   - A 2 px `accent-primary-1` line shows the drop position.
   - Other rows shift to make room.
@@ -58,16 +75,31 @@ Same 250 ms debounce window as Spec 04 — see Spec 10 §Debounce. Drop-complete
 
 Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-05-NN` marker.
 
-**Phase status — shipped in v0.2.0 (Phase 2).** Coverage: `tests/domain/test_album.py` (TC-05-01..06) and `tests/ui/test_album_order_pane.py` (TC-05-07..13).
+**Phase status — shipped in v0.2.0 (Phase 2).** Coverage: `tests/domain/test_album.py`
+and `tests/ui/test_album_order_pane.py`. **Not every clause carries a marker.**
+TC-05-04, TC-05-05, TC-05-08 and TC-05-12 have no `# Spec: TC-05-NN` marker anywhere
+in `tests/`, so they are unverified by the suite whatever it reports.
 
 - **TC-05-01** — `Album.reorder(from_idx, to_idx)` produces the expected permutation of `track_paths` (e.g. `reorder(2, 0)` on `[A,B,C,D]` yields `[C,A,B,D]`).
 - **TC-05-02** — `Album.reorder` with `from_idx` or `to_idx` outside `[0, len(track_paths))` raises `IndexError`.
-- **TC-05-03** — `Album.reorder` raises (or no-ops with warning) when `album.status == APPROVED`.
+- **TC-05-03** — `Album.reorder` raises **`ValueError`** when `album.status == APPROVED`
+  (via `_require_draft`), distinct from TC-05-02's `IndexError`. **No caller
+  discriminates them today**: `ui/album_order_pane.py` catches `(IndexError, ValueError)`
+  together and returns, so an out-of-range index arriving from a Qt event is discarded as
+  silently as an approved-album guard. The type is pinned so a caller *can* separate them;
+  the blanket catch is a known gap, not behaviour this clause endorses.
 - **TC-05-04** — `Album.select` on a draft appends to the *end* of `track_paths`, not at a random position.
 - **TC-05-05** — `Album.deselect` closes the gap; subsequent track-number prefixes re-index automatically.
 - **TC-05-06** — `Album.reorder` does not change *which* tracks are selected — only their order. `set(track_paths)` is invariant under reorder.
-- **TC-05-07** — UI: dragging row N onto row M reorders + emits the reorder; during drag, the grabbed row is semi-transparent and a 2 px `accent-primary-1` line shows the drop position.
-- **TC-05-08** — UI: drag canceled by dropping outside the list returns the row to its original position; no write is fired.
+- **TC-05-07** — UI: dragging row N onto row M reorders `track_paths` and emits
+  `reordered`. **This clause covers the functional half only.** The drag visuals above
+  are not implemented and no test observes them; a clause asserting them would be
+  unfalsifiable, so it is deliberately not stated here.
+- **TC-05-08** — UI: a drag that does not complete leaves `track_paths` unchanged and
+  fires no `reordered` signal and no write. **The literal drop-outside-the-list event is
+  not observable headlessly** — the Phase 2 plan records it as best-effort and substitutes
+  this invariant. Stated as the invariant so the clause is falsifiable by a run that
+  exists.
 - **TC-05-09** — UI: approved album → drag handles are hidden; the model's `flags()` excludes `Qt.ItemFlag.ItemIsDragEnabled` so drag does not start.
 - **TC-05-10** — UI: dragging row 1 onto itself is a no-op; no write fired.
 - **TC-05-11** — UI: 1-track album shows the drag handle but reorder has no effect.

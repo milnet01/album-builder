@@ -1,2 +1,3 @@
-date	arm	subject	kind	loop	agents	parent_tokens	verified	dismissed	executed	outcome
-2026-09-21	draft	docs/specs/20-mpris-tray-integration.md	spec	1	10	28981081	7	1	yes	complete
+date	arm	subject	kind	loop	agents	new_tokens	cache_reads	verified	dismissed	executed	outcome
+2026-09-21	draft	docs/specs/20-mpris-tray-integration.md	spec	1	10	427323	29405914	7	1	yes	complete
+2026-09-21	live	docs/specs/05-track-ordering.md	spec	1	6	298722	27527874	6	1	no	complete
