@@ -1,6 +1,6 @@
 # 20 — MPRIS2 + system-tray desktop integration (Linux)
 
-**Status:** Implemented (Phase G of the music-player epic) · **Last updated:** 2026-07-18 · **Depends on:** 00, 06, 14, 15, 16, 18 · **Blocks:** none (final planned phase of the epic)
+**Status:** Implemented (Phase G of the music-player epic) · **Last updated:** 2026-07-18 · **Depends on:** 00, 01, 06, 14, 15, 16, 18 · **Blocks:** none (final planned phase of the epic)
 
 > **Cold-eyes loop log (2026-07-18):** 7 loops, 2-3 independent reviewers per loop
 > (MPRIS2/D-Bus-conformance, PyQt6-QtDBus-feasibility, app-integration, cross-spec+tests
@@ -155,7 +155,11 @@ def seek(self, seconds: float) -> None:
   when the track changes. MPRIS requires a valid object path, **never** an empty
   string. On a track: adds `mpris:length`
   (duration in **microseconds**, int64-pinned — see the type-pin note below),
-  `xesam:title` (str), `xesam:artist` (a list `[str]` in the dict — the property getter
+  `xesam:title` (str), `xesam:artist` (a list `[str]` in the dict, built from
+  `Track.artist` — **not** `Track.album_artist`, a separate field that falls back to
+  `artist` when TPE2 is absent, so the wrong choice looks correct on most files and
+  breaks on compilations; the `Track` schema is defined in
+  `src/album_builder/domain/track.py`, owned by Spec 01 — the property getter
   emits it as `as` via the `QDBusArgument` carrier; a bare string is a conformance
   bug), `xesam:album` (str), and
   `mpris:artUrl` (str) **iff** `art_url` is not None. On `None` track: an **empty map
@@ -527,7 +531,13 @@ bus; it is skipped by default (mirrors the audio-integration gating in
   for length, `o` for trackid, `as` for artist) — the load-bearing pin the plain-int/
   bare-list traps would silently violate — are asserted by the `AB_INTEGRATION_DBUS`
   wire-signature test (introspection / demarshal against the real bus), since a
-  no-bus unit test sees only the Python values.
+  no-bus unit test sees only the Python values. That test is skipped by default
+  (above), and **nothing sets `AB_INTEGRATION_DBUS=1` — not `local-CI.sh`, not any
+  workflow** — so a default run reports this clause passing while the wire types go
+  unchecked. Running it needs a live session bus. **This paragraph is a disclosure,
+  not a requirement: it locks nothing, and the wire-type guarantee stays unverified
+  by the default gate until someone decides to enable the variable there.** That
+  decision is open and is not taken here.
 - **TC-20-04** — `Player.seek(pos)` emits `seeked` once, carrying the **clamped input
   value** (the local `seconds` after `Player.seek`'s `[0, dur-1]` clamp — not a
   `player.position()` read-back, which lags asynchronously). The pulse is
@@ -547,15 +557,17 @@ bus; it is skipped by default (mirrors the audio-integration gating in
   on read) whose `mpris:trackid` value is a `QDBusObjectPath` and whose `mpris:length` /
   `xesam:artist` values are `QDBusArgument` carriers (not a plain int / list). The
   logical values are asserted via the pure `track_metadata` dict (TC-20-03); the int64 /
-  `as` **wire** signatures — opaque in-process — only by `AB_INTEGRATION_DBUS`.
+  `as` **wire** signatures — opaque in-process — only by `AB_INTEGRATION_DBUS`,
+  which a default run skips (see TC-20-03).
 - **TC-20-06** — Writing the adaptor's `LoopStatus="Track"` calls
   `controller.set_repeat(ONE)`; `Shuffle=True` calls `controller.set_shuffle(True)`;
   `Volume=0.4` calls `player.set_volume(40)`; writing `Rate=2.0` is accepted (no
   raise) and changes nothing (`Rate` still reads `1.0`). (Spy the setter on a fake.)
   Out-of-range + mute independence: `Volume=1.5` -> `set_volume(150)` clamps to 100
   (`Volume` reads `1.0`) and `Volume=-0.2` -> `set_volume(-20)` clamps to 0 (`Volume`
-  reads `0.0`); muting the player leaves the `Volume` getter reflecting the underlying
-  level (not `0.0`) — MPRIS has no mute.
+  reads `0.0`); with the player muted, the `Volume` getter still reads the underlying
+  level (not `0.0`) — MPRIS has no mute. **Mute the fake player and assert the getter:
+  a comment on the clamping assertions is not an observable for this clause.**
 - **TC-20-07** — The adaptor methods `Next/Previous/Play/Pause/PlayPause/Stop` call the
   matching `controller`/`player` command exactly once; `Seek(2_000_000)` seeks to
   `position()+2.0`s; `SetPosition(current_id, 3_000_000)` seeks to 3.0s while
@@ -567,7 +579,14 @@ bus; it is skipped by default (mirrors the audio-integration gating in
   `play_order()`; `CanPlay`/`CanPause` reflect a non-None `current_track()`;
   `CanSeek` reflects `duration()>0`; `CanControl` is always `True`.
 - **TC-20-09** — `MprisService` on a bus-unavailable path sets `available=False` and
-  registers nothing on the bus. The chokepoint's guard is tested at the bus-send seam
+  registers nothing on the bus. **Assert the value `_register()` actually computed, and
+  that `registerService` / `registerObject` were not called — a test that assigns
+  `available = False` itself before asserting checks nothing about bus detection.**
+  `__init__` takes no bus parameter, so the seam is `QDBusConnection.sessionBus`,
+  patched to return a disconnected stub **before** `MprisService` is constructed
+  (verified patchable on this PyQt6 build). Without naming that seam the assertion
+  above has no route to the state it asserts on a machine that has a live bus.
+  The chokepoint's guard is tested at the bus-send seam
   (not by patching the chokepoint itself, which would bypass the guard): with the
   low-level send spied, firing a wired app-signal (e.g. `state_changed`) while
   `available=False` invokes the send **zero** times; forcing `available=True` with a
