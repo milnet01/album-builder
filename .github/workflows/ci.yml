@@ -37,12 +37,15 @@ jobs:
         # need GL/EGL/xkbcommon/dbus and the ALSA/Pulse client libs to load.
         # No audio *server* is required: the suite runs headless via the
         # offscreen QPA and the real QMediaPlayer reaches its states without a
-        # sink (verified locally with the audio device masked).
+        # sink (verified locally with the audio device masked). `dbus` (not
+        # just libdbus-1-3) supplies dbus-run-session, which local-CI.sh uses
+        # to give the suite a private session bus so the MPRIS wire-signature
+        # test runs here rather than skipping.
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libpango-1.0-0 libpangoft2-1.0-0 fonts-dejavu-core \
-            libgl1 libegl1 libxkbcommon0 libdbus-1-3 \
+            libgl1 libegl1 libxkbcommon0 libdbus-1-3 dbus \
             libpulse0 libasound2t64
 
       - name: Create virtualenv and install dependencies

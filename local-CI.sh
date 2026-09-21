@@ -43,6 +43,19 @@ echo "== pytest (full suite) =="
 # tests/conftest.py sets QT_QPA_PLATFORM=offscreen via setdefault at import
 # time; export it here too so a headless runner is covered even before that
 # module is imported, and so the intent is visible at the call site.
-QT_QPA_PLATFORM=offscreen "$PY" -m pytest
+#
+# The MPRIS wire-signature test is gated behind AB_INTEGRATION_DBUS because it
+# needs a session bus. dbus-run-session gives the suite a private one, so it
+# runs here instead of skipping: it is the only guard on the D-Bus type pins,
+# and a wrongly-typed Metadata return once aborted the process on client read.
+if command -v dbus-run-session >/dev/null 2>&1; then
+    QT_QPA_PLATFORM=offscreen AB_INTEGRATION_DBUS=1 \
+        dbus-run-session -- "$PY" -m pytest
+else
+    echo "local-CI: WARNING - dbus-run-session not found, so the MPRIS"
+    echo "local-CI:   wire-signature test will SKIP and the D-Bus type pins"
+    echo "local-CI:   go unchecked. Install the dbus package to close this."
+    QT_QPA_PLATFORM=offscreen "$PY" -m pytest
+fi
 
 echo "== local-CI: PASSED =="

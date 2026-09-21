@@ -513,9 +513,11 @@ the wired app-signals invoke it with the right `(interface, changed, invalidated
 so the wiring is exercised **without** a live bus (the handlers connect
 unconditionally; only the send inside the chokepoint is bus-gated). Where a test needs
 the send path itself, it forces `available=True` and injects a fake bus. A single
-opt-in integration test (`AB_INTEGRATION_DBUS=1`) may register against the real session
-bus; it is skipped by default (mirrors the audio-integration gating in
-`test_player.py`).
+integration test (`AB_INTEGRATION_DBUS=1`) registers against a real session bus.
+`local-CI.sh` wraps the suite in `dbus-run-session` and sets that variable, so the
+test runs in the gate rather than skipping; where `dbus-run-session` is absent the
+gate warns and the test skips. The audio and lyrics tiers in `test_player.py` and
+`test_alignment_worker.py` stay opt-in — they need a device and a model, not a bus.
 
 - **TC-20-01** — `playback_status` maps `PLAYING/PAUSED/STOPPED/ERROR` to
   `"Playing"/"Paused"/"Stopped"/"Stopped"`.
@@ -531,13 +533,11 @@ bus; it is skipped by default (mirrors the audio-integration gating in
   for length, `o` for trackid, `as` for artist) — the load-bearing pin the plain-int/
   bare-list traps would silently violate — are asserted by the `AB_INTEGRATION_DBUS`
   wire-signature test (introspection / demarshal against the real bus), since a
-  no-bus unit test sees only the Python values. That test is skipped by default
-  (above), and **nothing sets `AB_INTEGRATION_DBUS=1` — not `local-CI.sh`, not any
-  workflow** — so a default run reports this clause passing while the wire types go
-  unchecked. Running it needs a live session bus. **This paragraph is a disclosure,
-  not a requirement: it locks nothing, and the wire-type guarantee stays unverified
-  by the default gate until someone decides to enable the variable there.** That
-  decision is open and is not taken here.
+  no-bus unit test sees only the Python values. The gate runs that test: `local-CI.sh`
+  wraps the suite in `dbus-run-session` and sets `AB_INTEGRATION_DBUS=1`, and the CI
+  workflow installs `dbus` so the runner can do the same. **A skip here means the wire
+  types went unchecked on that run, not that they passed** — the gate warns when
+  `dbus-run-session` is missing rather than skipping quietly.
 - **TC-20-04** — `Player.seek(pos)` emits `seeked` once, carrying the **clamped input
   value** (the local `seconds` after `Player.seek`'s `[0, dur-1]` clamp — not a
   `player.position()` read-back, which lags asynchronously). The pulse is
@@ -558,7 +558,7 @@ bus; it is skipped by default (mirrors the audio-integration gating in
   `xesam:artist` values are `QDBusArgument` carriers (not a plain int / list). The
   logical values are asserted via the pure `track_metadata` dict (TC-20-03); the int64 /
   `as` **wire** signatures — opaque in-process — only by `AB_INTEGRATION_DBUS`,
-  which a default run skips (see TC-20-03).
+  which the gate runs under `dbus-run-session` (see TC-20-03).
 - **TC-20-06** — Writing the adaptor's `LoopStatus="Track"` calls
   `controller.set_repeat(ONE)`; `Shuffle=True` calls `controller.set_shuffle(True)`;
   `Volume=0.4` calls `player.set_volume(40)`; writing `Rate=2.0` is accepted (no
