@@ -2383,6 +2383,14 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   which does not\nexist - a hand-edited duplicate path loads unchanged,
   and the spec\nnow says so. The ambiguous and not_checked rows were not
   reviewed.\nThe other sub-items of this bullet stay open.
+  Decisions (2026-09-25, with the user): work order is undo for
+  deleted\nalbums first, then first-run onboarding. Undo: deleting
+  already moves\nthe album to Albums/.trash (services/album_store.py
+  TRASH_DIRNAME), and\nno UI restores it - that button is the gap.
+  Library-scan tag cache:\nSKIPPED for now. A warm scan of 36 MP3s took
+  about 0.25 s (1.7 s cold\nwas disk wake-up). It is worth it only for
+  libraries of thousands.\nfrom_path opens ID3 twice per file, a cheap
+  trim for later.
   **Layman:** Small improvements: a friendlier first launch, undo for deletions, faster startup, and fixing documents that no longer match the app.
   Kind: implement.
 
