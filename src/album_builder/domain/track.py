@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import base64
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 
 import mutagen
 from mutagen import File as MutagenFile
 from mutagen.asf import ASFTags
+from mutagen.flac import Picture
 from mutagen.id3 import APIC, COMM, ID3, USLT
-from mutagen.mp4 import MP4Tags
+from mutagen.mp4 import MP4Cover, MP4Tags
 
 
 @dataclass(frozen=True)
@@ -27,8 +30,8 @@ class Track:
     duration_seconds: float
     file_size_bytes: int
     is_missing: bool
-    # Spec 21: ReplayGain loudness offsets in dB, read from ID3 TXXX frames at
-    # scan time; None when the file carries no ReplayGain tag. Appended last with
+    # Spec 21: ReplayGain loudness offsets in dB, read from the container's own
+    # ReplayGain tags at scan time; None when the file carries no ReplayGain tag. Appended last with
     # defaults so the frozen dataclass's non-default fields still precede them.
     replaygain_track_gain: float | None = None
     replaygain_album_gain: float | None = None
@@ -62,6 +65,8 @@ class Track:
             composer = _text(id3, "TCOM") or ""
             comment = _comment_text(id3)
             lyrics_text = _lyrics_text(id3)
+            cover_data, cover_mime = _first_apic_image(id3)
+            rg_track, rg_album = _read_replaygain(id3)
         else:
             # Vorbis comments, MP4 atoms and ASF attributes onto the same fields.
             title = _container_text(tags, "title") or path.name
@@ -71,8 +76,8 @@ class Track:
             composer = _container_text(tags, "composer")
             comment = _container_text(tags, "comment")
             lyrics_text = _container_text(tags, "lyrics") or None
-        cover_data, cover_mime = _first_apic_image(id3)
-        rg_track, rg_album = _read_replaygain(id3)
+            cover_data, cover_mime = _container_cover(mf, tags)
+            rg_track, rg_album = _container_replaygain(tags)
 
         return cls(
             path=path,
@@ -133,9 +138,9 @@ def _open_tags(opener, path: Path):
 
 # Per-container tag names for the fields `Track` exposes. Vorbis comments
 # (FLAC, Ogg Vorbis, Opus, .oga) are the lowercase convention and the default;
-# MP4 and ASF each use their own. Cover art and ReplayGain are deliberately not
-# here - they need per-container decoding rather than a name, and are their own
-# items (MUSI-0362, MUSI-0363).
+# MP4 and ASF each use their own. Cover art and ReplayGain are not here - they
+# need per-container decoding rather than a name (`_container_cover`,
+# `_container_replaygain`).
 _VORBIS_KEYS = {
     "title": "title",
     "artist": "artist",
@@ -183,6 +188,60 @@ def _container_text(tags, field: str) -> str:
     if not values:
         return ""
     return str(values[0]).strip()
+
+
+def _container_cover(mf, tags) -> tuple[bytes | None, str | None]:
+    """Return (data, mime) for the first ``image/*`` picture in a non-ID3 file.
+
+    Same contract as `_first_apic_image`. FLAC keeps pictures in its own
+    metadata blocks; Ogg Vorbis and Opus carry the same block base64-encoded in
+    a ``metadata_block_picture`` comment; MP4 uses ``covr`` atoms; ASF a
+    ``WM/Picture`` byte array (MUSI-0362).
+    """
+    pictures = list(getattr(mf, "pictures", None) or [])
+    if isinstance(tags, MP4Tags):
+        for cover in tags.get("covr", []):
+            mime = "image/png" if cover.imageformat == MP4Cover.FORMAT_PNG else "image/jpeg"
+            return bytes(cover), mime
+    elif isinstance(tags, ASFTags):
+        for attr in tags.get("WM/Picture", []):
+            found = _parse_asf_picture(attr.value)
+            if found is not None and found[1].startswith("image/"):
+                return found
+    elif tags is not None:
+        for encoded in tags.get("metadata_block_picture", []):
+            try:
+                pictures.append(Picture(base64.b64decode(encoded)))
+            except (ValueError, struct.error, mutagen.MutagenError):
+                continue  # a corrupt block is skipped, like an unparseable tag
+    for picture in pictures:
+        mime = (picture.mime or "").lower()
+        if mime.startswith("image/"):
+            return picture.data, mime
+    return None, None
+
+
+def _parse_asf_picture(data: bytes) -> tuple[bytes, str] | None:
+    """Decode a WM/Picture payload: a type byte, the image length as uint32 LE,
+    NUL-terminated UTF-16LE mime and description, then the image bytes."""
+    try:
+        (size,) = struct.unpack_from("<I", data, 1)
+        mime, pos = _utf16z(data, 5)
+        _description, pos = _utf16z(data, pos)
+    except (struct.error, ValueError):
+        return None
+    image = data[pos:pos + size]
+    if len(image) != size:
+        return None
+    return image, mime.lower()
+
+
+def _utf16z(data: bytes, pos: int) -> tuple[str, int]:
+    """Read a NUL-terminated UTF-16LE string at `pos`; return it and the offset past it."""
+    for end in range(pos, len(data) - 1, 2):
+        if data[end:end + 2] == b"\x00\x00":
+            return data[pos:end].decode("utf-16-le"), end + 2
+    raise ValueError("unterminated UTF-16 string")
 
 
 def _text(id3: ID3 | None, key: str) -> str:
@@ -258,8 +317,8 @@ def _read_replaygain(id3: ID3 | None) -> tuple[float | None, float | None]:
     and match the description case-insensitively rather than indexing one fixed
     key. The value is the frame's first text string ("-6.48 dB"); the gain is its
     leading float. A value that doesn't parse (non-numeric / empty) is skipped,
-    treated as absent. RVA2 / Vorbis-comment / MP4 forms are out of scope this
-    phase - a file with only those reads (None, None).
+    treated as absent. The RVA2 frame is out of scope - a file with only that
+    reads (None, None). Non-ID3 containers go through `_container_replaygain`.
     """
     if id3 is None:
         return None, None
@@ -270,14 +329,41 @@ def _read_replaygain(id3: ID3 | None) -> tuple[float | None, float | None]:
             continue
         desc = key[len("TXXX:"):].lower()
         if desc == "replaygain_track_gain":
-            track_gain = _parse_gain_db(id3[key])
+            track_gain = _parse_gain_db(id3[key].text)
         elif desc == "replaygain_album_gain":
-            album_gain = _parse_gain_db(id3[key])
+            album_gain = _parse_gain_db(id3[key].text)
     return track_gain, album_gain
 
 
-def _parse_gain_db(frame) -> float | None:
+# MP4 stores ReplayGain as an iTunes freeform atom under this prefix.
+_MP4_FREEFORM_PREFIX = "----:com.apple.itunes:"
+
+
+def _container_replaygain(tags) -> tuple[float | None, float | None]:
+    """Return (track_gain, album_gain) in dB from a non-ID3 tag block.
+
+    Vorbis comments and ASF attributes carry `replaygain_track_gain` /
+    `replaygain_album_gain` as plain names; MP4 as freeform atoms. Names are
+    matched case-insensitively, as in `_read_replaygain` (MUSI-0363).
+    """
+    track_gain: float | None = None
+    album_gain: float | None = None
+    if tags is None:
+        return track_gain, album_gain
+    for key in tags.keys():
+        name = key.lower().removeprefix(_MP4_FREEFORM_PREFIX)
+        if name == "replaygain_track_gain":
+            track_gain = _parse_gain_db(tags[key])
+        elif name == "replaygain_album_gain":
+            album_gain = _parse_gain_db(tags[key])
+    return track_gain, album_gain
+
+
+def _parse_gain_db(values) -> float | None:
+    """Leading float of the first value ("-6.48 dB" -> -6.48), else None."""
     try:
-        return float(str(frame.text[0]).split()[0])
+        first = values[0]
+        text = bytes(first).decode("utf-8") if isinstance(first, bytes) else str(first)
+        return float(text.split()[0])
     except (ValueError, IndexError):
         return None

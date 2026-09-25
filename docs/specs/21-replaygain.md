@@ -1,6 +1,6 @@
 # 21 - ReplayGain volume normalization (opt-in loudness levelling)
 
-**Status:** Implemented (Phase F of the music-player epic) - **Last updated:** 2026-07-18 - **Depends on:** 00, 01, 06, 10, 15, 18, 19 - **References (does not extend):** 20 - **Blocks:** none
+**Status:** Implemented (Phase F of the music-player epic) - **Last updated:** 2026-09-25 - **Depends on:** 00, 01, 06, 10, 15, 18, 19 - **References (does not extend):** 20 - **Blocks:** none
 
 > **Cold-eyes loop log (2026-07-18):** 3 loops, 3 independent reviewers per loop
 > (feasibility/PyQt6+mutagen, cross-spec-drift, completeness/testability lenses), all
@@ -78,9 +78,11 @@ back to today's behavior (no offset; the track plays at the user's set volume).
   equivalents) writes. **The `TXXX` description is case-sensitive in mutagen's key**
   (a file may carry `TXXX:replaygain_track_gain` *or* `TXXX:REPLAYGAIN_TRACK_GAIN`), so
   the reader iterates the `TXXX` frames and matches the description **case-insensitively**
-  rather than indexing one fixed key. The `RVA2` frame and Vorbis-comment / MP4
-  ReplayGain forms are **out of scope** for this phase (see §Out of scope) - a file
-  carrying only those reads as untagged and plays unlevelled.
+  rather than indexing one fixed key. A file with no ID3 block carries the same two
+  names in its own tag block - Vorbis comments (FLAC/Ogg/Opus), ASF attributes (WMA),
+  MP4 iTunes freeform atoms - and those are read too (MUSI-0363). The `RVA2` frame is
+  **out of scope** (see §Out of scope) - a file carrying only that reads as untagged and
+  plays unlevelled.
 - **Gain factor (dB -> linear)** - a `+/- N dB` offset becomes a linear multiplier
   `10 ** (dB / 20)`. `-6 dB` -> ~0.5 (quieter), `+3 dB` -> ~1.41 (louder), `0 dB` ->
   `1.0`. This factor scales the output level.
@@ -135,7 +137,8 @@ back to today's behavior (no offset; the track plays at the user's set volume).
   all non-default, so a defaulted field must come last (Python's "no non-default after
   default" rule), and the defaults keep the existing keyword-`Track(...)` construction
   sites across the test suite (~18) compiling unchanged. Populated in `from_path` from the
-  already-opened `id3` object; `_missing` leaves both at their `None` default.
+  already-opened `id3` object, or from the container's own tag block when the file has
+  no ID3 (`_container_replaygain`, below); `_missing` leaves both at their `None` default.
 - A module helper `_read_replaygain(id3: ID3 | None) -> tuple[float | None, float | None]`
   returns `(track_gain, album_gain)`:
   - Iterate `id3.keys()` for `TXXX` frames whose description (the part after
@@ -148,10 +151,12 @@ back to today's behavior (no offset; the track plays at the user's set volume).
     carries both a lower- and upper-case desc for the same field, the last-iterated
     wins - acceptable, since no real tagger writes both.
   - Returns `(None, None)` when `id3` is `None` or neither `TXXX` form is present.
-    **ID3 `TXXX` only** in this phase - `RVA2`, Vorbis-comment (FLAC/OGG/Opus), and MP4
-    freeform ReplayGain are out of scope (such a file reads `None`, so it plays
-    unlevelled; see §Out of scope). This keeps the reader a few lines over the existing
-    `id3` object rather than branching per container/frame-type.
+    `RVA2` is out of scope (such a file reads `None`, so it plays unlevelled; see §Out of
+    scope).
+- A second helper `_container_replaygain(tags)` reads the same two names from a non-ID3
+  tag block (MUSI-0363). Each key is lowercased and stripped of the MP4 freeform prefix
+  `----:com.apple.itunes:`, then matched as above. An MP4 freeform value is bytes and is
+  decoded as UTF-8 first. The same skip-on-unparseable rule applies.
 
 ### `services/replaygain.py` - `gain_factor` (pure) + `ReplayGainService`
 
@@ -333,7 +338,8 @@ reaches the device.
 | Track has no ReplayGain tags | `_read_replaygain` returns `(None, None)`; `gain_factor` -> `1.0`; plays at user volume. |
 | A `TXXX` gain value that does not parse (e.g. `"loud"`) | That tag is treated as absent (skipped, not raised); the other `TXXX` value (or `1.0`) is used. |
 | Only `TRACK_GAIN` present, mode `album` (or vice versa) | Falls back to the present value (symmetric fallback). |
-| File with only `RVA2` / Vorbis-comment / MP4 ReplayGain (no `TXXX`) | Reads `None` in this phase (ID3 `TXXX`-only); plays unlevelled. Documented follow-up. |
+| File with only `RVA2` ReplayGain (no `TXXX`) | Reads `None` (`RVA2` is out of scope); plays unlevelled. |
+| FLAC / Ogg / Opus / WMA / M4A with ReplayGain in its own tag block | Read by `_container_replaygain`, same names, case-insensitive (TC-21-10). |
 | Settings write fails (full / read-only disk) on a toggle or mode change | The menu handler catches `OSError` and toasts (`"Couldn't save levelling choice: ..."`); the runtime state + applied factor still change for this session, exactly as `_apply_theme` degrades. The app does **not** crash (an uncaught raise in a `triggered` slot `qFatal`s Qt). |
 | Levelling enabled while a track is playing | The setter re-applies immediately for the current track; the composite output level updates without changing the slider. |
 | Boost gain at user volume 100 | Composite clamps to `1.0` (no overdrive). |
@@ -451,15 +457,18 @@ playback).
   `self._replaygain.on_track_changed(track)`. This is the **only** coverage that the one
   added `main_window.py` line exists; without it the service can be perfect (TC-21-06/07
   green) while the restored first track ships unlevelled.
+- **TC-21-10** - `Track.from_path` reads `replaygain_track_gain` / `replaygain_album_gain`
+  from a non-ID3 container's own tags, names matched case-insensitively: Vorbis comments
+  on `.flac` / `.ogg` / `.opus`, ASF attributes on `.wma`, and MP4 freeform atoms
+  `----:com.apple.iTunes:<name>` on `.m4a`. `"-6.48 dB"` reads `-6.48` in each.
 
 ## Out of scope
 
 - **Scanning / writing ReplayGain tags** - external tools (`rsgain`, `r128gain`) own
   that; Album Builder only *reads* pre-existing tags.
-- **Non-`TXXX` ReplayGain** - the ID3 `RVA2` frame, Vorbis-comment (FLAC/OGG/Opus), and
-  MP4 freeform gain tags - a follow-up; this phase reads the ID3 `TXXX` form only (the
-  dominant one). `RVA2`'s per-desc/channel model and Vorbis/MP4's per-container tag
-  layouts each add a lookup variant not worth the surface for v1.
+- **`RVA2` ReplayGain** - the ID3 `RVA2` frame's per-desc/channel model adds a lookup
+  variant not worth the surface. (The Vorbis-comment, ASF and MP4 forms were listed here
+  as a follow-up and shipped as MUSI-0363.)
 - **Peak-based clip limiting** - using `REPLAYGAIN_*_PEAK` to pre-attenuate; the
   in-app composite clamp already prevents an over-1.0 output level.
 - **Pre-amp / target-loudness offset** - a global dB trim on top of the tag gain; not a

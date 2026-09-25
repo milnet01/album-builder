@@ -1,6 +1,6 @@
 # 01 — Track Library & Metadata
 
-**Status:** Implemented (Phase 1 + 2); the extension widening (MUSI-0358) is specified, not yet implemented · **Last updated:** 2026-08-24 · **Depends on:** 00, 10, 11 · **Blocks:** 03, 04, 06, 07, 08
+**Status:** Implemented (Phase 1 + 2; MUSI-0358 to MUSI-0363) · **Last updated:** 2026-09-25 · **Depends on:** 00, 10, 11 · **Blocks:** 03, 04, 06, 07, 08
 
 ## Purpose
 
@@ -31,6 +31,9 @@ Discover the audio files in `Tracks/`, parse their metadata, and present a live,
   - `COMM` → comment
   - `USLT::eng` (or any USLT) → lyrics_text
   - `APIC` (any `image/*` mime) → cover_data (bytes), cover_mime (str)
+- A file with no ID3 block takes its cover art from its own container: FLAC picture
+  blocks, the Ogg / Opus `metadata_block_picture` comment, MP4 `covr` atoms, ASF
+  `WM/Picture` (TC-01-19). The first `image/*` picture wins, as with `APIC`.
 
 ## Outputs
 
@@ -53,13 +56,13 @@ class Track:
     album: str                          # "" if missing
     comment: str                        # "" if missing
     lyrics_text: str | None             # None if no USLT frame
-    cover_data: bytes | None            # None if no APIC frame or non-image mime
+    cover_data: bytes | None            # None if no image/* picture (APIC or the container's own)
     cover_mime: str | None              # e.g. "image/png", "image/jpeg"; None mirrors cover_data
     duration_seconds: float
     file_size_bytes: int
     is_missing: bool                    # True if path no longer exists
-    replaygain_track_gain: float | None = None   # Spec 21: dB, None if no TXXX tag
-    replaygain_album_gain: float | None = None   # Spec 21: dB, None if no TXXX tag
+    replaygain_track_gain: float | None = None   # Spec 21: dB, None if no ReplayGain tag
+    replaygain_album_gain: float | None = None   # Spec 21: dB, None if no ReplayGain tag
 ```
 
 The two `replaygain_*` fields (Spec 21) carry `= None` defaults and are appended last so the frozen dataclass's non-default fields still precede them; they are read from ID3 `TXXX` ReplayGain frames at scan time.
@@ -119,9 +122,10 @@ convention, MP4 uses atom keys, ASF its own. `.wav` and `.aiff` carry ID3 in a c
 that `ID3(path)` does not reach but `mutagen.File` does, so they route to the same ID3
 reader.
 
-**Cover art and ReplayGain did not move** and remain ID3-only - they need per-container
-decoding rather than a name. Filed as MUSI-0362 and MUSI-0363. A tagged `.flac` therefore
-yields title, artist, album and composer but no artwork.
+Cover art and ReplayGain followed (MUSI-0362, MUSI-0363). They need per-container
+decoding rather than a name: FLAC picture blocks, Ogg / Opus `metadata_block_picture`,
+MP4 `covr` and ASF `WM/Picture` reach `cover_data`, and each container's ReplayGain tags
+reach the two gain fields (Spec 21).
 
 `.aac` is the only one of the twelve where this is permanent: a raw ADTS stream has
 nowhere to put tags at all. (`mutagen` raises `AACError: doesn't support tags` if asked
@@ -161,6 +165,10 @@ how reviewers confirm coverage validates the spec, not the implementation.
 - **TC-01-18** — `Track.duration_seconds` is the stream length for a file carrying **no
   tags at all**. A mutagen `FileType` is dict-like, so its truthiness counts tags; the
   duration read must test for `None`, not truthiness, or a tagless file reports `0.0`.
+- **TC-01-19** — `Track.from_path` reads cover art from a non-ID3 container: FLAC
+  picture blocks on `.flac`, a base64 `metadata_block_picture` comment on `.ogg`/`.oga`/
+  `.opus`, a `covr` atom on `.m4a`, a `WM/Picture` attribute on `.wma`. `cover_data` is
+  the image bytes unchanged and `cover_mime` its `image/*` type.
 - **TC-01-04** — `Track.from_path(audio)` parses ID3v2 tags: `TIT2→title`, `TPE1→artist`, `TPE2→album_artist`, `TALB→album`, `TCOM→composer`, `COMM→comment`, `USLT→lyrics_text`, `APIC (image/*)→cover_data + cover_mime`.
 - **TC-01-05** — When tags are absent, `Track.from_path` populates placeholders: `title = path.name`, `artist = "Unknown artist"`, `album_artist` cascades from `artist`, `album/composer/comment = ""`, `lyrics_text/cover_data/cover_mime = None`, and (Spec 21) `replaygain_track_gain/replaygain_album_gain = None`.
 - **TC-01-06** — `Track.album_artist` falls back to `Track.artist` when `TPE2` is missing.
@@ -217,7 +225,8 @@ The watcher mechanism (TC-01-P2-01, TC-01-P2-02) ships in Phase 2 via the `Libra
 
 Both were found by the `review-contract` gate on this amendment, both predate it,
 and both are code rather than contract - so this document records them and changes
-nothing about them.
+nothing about them. **Both were fixed on 2026-09-21 in commit `db6fb7f`**, pinned by
+TC-01-17 and TC-01-18; this section is kept as the record of what the gate found.
 
 - **Non-ID3 tag families are not read** (MUSI-0359). `Track.from_path` routes every field through
   `mutagen.id3.ID3(path)`, so `.flac` / `.ogg` / `.oga` / `.opus` (Vorbis comments),

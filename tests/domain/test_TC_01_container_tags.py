@@ -11,10 +11,15 @@ no tags at all - so an untagged file reported 0.0 seconds however long it was.
 
 from __future__ import annotations
 
+import base64
+import struct
 from pathlib import Path
 
 import pytest
 from mutagen import File as MutagenFile
+from mutagen.asf import ASFByteArrayAttribute
+from mutagen.flac import Picture
+from mutagen.mp4 import MP4Cover, MP4FreeForm
 
 from album_builder.domain.track import Track
 
@@ -119,3 +124,83 @@ def test_untagged_file_still_reports_its_duration(tmp_path: Path, name: str) -> 
     track = Track.from_path(target)
 
     assert track.duration_seconds == pytest.approx(1.0, abs=0.1)
+
+
+# Bytes are passed through, never decoded, so any payload with an image mime will do.
+_COVER = b"\x89PNG\r\n\x1a\n" + b"cover-bytes"
+
+
+def _asf_picture(data: bytes, mime: str) -> bytes:
+    """WM/Picture payload: type byte, uint32 LE length, UTF-16LE NUL-terminated
+    mime and description, then the image bytes."""
+    return (
+        bytes([3])
+        + struct.pack("<I", len(data))
+        + mime.encode("utf-16-le") + b"\x00\x00"
+        + "front".encode("utf-16-le") + b"\x00\x00"
+        + data
+    )
+
+
+def _with_cover(tmp_path: Path, ext: str) -> Path:
+    source = FIXTURES / ("silent_1s.ogg" if ext == ".oga" else f"silent_1s{ext}")
+    target = tmp_path / f"track{ext}"
+    target.write_bytes(source.read_bytes())
+    audio = MutagenFile(target)
+    picture = Picture()
+    picture.type = 3
+    picture.mime = "image/png"
+    picture.data = _COVER
+    if ext == ".flac":
+        audio.add_picture(picture)
+    elif ext == ".m4a":
+        audio["covr"] = [MP4Cover(_COVER, imageformat=MP4Cover.FORMAT_PNG)]
+    elif ext == ".wma":
+        audio["WM/Picture"] = [ASFByteArrayAttribute(_asf_picture(_COVER, "image/png"))]
+    else:  # Vorbis comment carrying a base64 FLAC picture block
+        audio["metadata_block_picture"] = [base64.b64encode(picture.write()).decode("ascii")]
+    audio.save()
+    return target
+
+
+@pytest.mark.parametrize("ext", [".flac", ".ogg", ".oga", ".opus", ".m4a", ".wma"])
+# Spec: TC-01-19
+def test_container_cover_art_is_read(tmp_path: Path, ext: str) -> None:
+    track = Track.from_path(_with_cover(tmp_path, ext))
+
+    assert track.cover_data == _COVER
+    assert track.cover_mime == "image/png"
+
+
+_RG_KEYS = {
+    ".flac": ("replaygain_track_gain", "replaygain_album_gain"),
+    ".ogg": ("REPLAYGAIN_TRACK_GAIN", "REPLAYGAIN_ALBUM_GAIN"),
+    ".opus": ("replaygain_track_gain", "replaygain_album_gain"),
+    ".m4a": (
+        "----:com.apple.iTunes:REPLAYGAIN_TRACK_GAIN",
+        "----:com.apple.iTunes:replaygain_album_gain",
+    ),
+    ".wma": ("replaygain_track_gain", "REPLAYGAIN_ALBUM_GAIN"),
+}
+
+
+@pytest.mark.parametrize("ext", list(_RG_KEYS))
+# Spec: TC-21-10
+def test_container_replaygain_is_read(tmp_path: Path, ext: str) -> None:
+    """Each container's own ReplayGain convention, matched case-insensitively."""
+    target = tmp_path / f"track{ext}"
+    target.write_bytes((FIXTURES / f"silent_1s{ext}").read_bytes())
+    audio = MutagenFile(target)
+    track_key, album_key = _RG_KEYS[ext]
+    if ext == ".m4a":
+        audio[track_key] = [MP4FreeForm(b"-6.48 dB")]
+        audio[album_key] = [MP4FreeForm(b"-8.30 dB")]
+    else:
+        audio[track_key] = ["-6.48 dB"]
+        audio[album_key] = ["-8.30 dB"]
+    audio.save()
+
+    track = Track.from_path(target)
+
+    assert track.replaygain_track_gain == pytest.approx(-6.48)
+    assert track.replaygain_album_gain == pytest.approx(-8.30)

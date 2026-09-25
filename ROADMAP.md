@@ -176,7 +176,7 @@ extension set was the only gate.
   Source: review-contract-2026-08-24 spec-01 gate.
   Lanes: domain.
 
-- 📋 [MUSI-0362] **Cover art is read only from ID3 APIC, so non-MP3 containers show no artwork.**
+- ✅ [MUSI-0362] **Cover art is read only from ID3 APIC, so non-MP3 containers show no artwork.**
   MUSI-0359 mapped the text fields per container and deliberately
   stopped there. Cover art needs per-container decoding rather than a
   key name: FLAC exposes `pictures`, Vorbis and Opus a base64
@@ -184,12 +184,17 @@ extension set was the only gate.
 
   `_first_apic_image` remains ID3-only. The report and the MPRIS
   `mpris:artUrl` both bind to the result.
+  Resolved (2026-09-25): `_container_cover` reads FLAC picture blocks,
+  Ogg/Opus `metadata_block_picture`, MP4 `covr` and ASF `WM/Picture`.
+  Pinned by TC-01-19. FLAC and M4A were also checked against
+  ffmpeg-attached covers; no tool here writes WM/Picture, so WMA is
+  checked against the published layout only.
   **Layman:** Album artwork embedded in a FLAC, M4A or WMA file is ignored - only MP3 artwork shows up in the report.
   Kind: fix.
   Source: in-session-2026-09-21 MUSI-0359 fix.
   Lanes: domain.
 
-- 📋 [MUSI-0363] **ReplayGain is read only from ID3 TXXX, so non-MP3 containers play at unadjusted level.**
+- ✅ [MUSI-0363] **ReplayGain is read only from ID3 TXXX, so non-MP3 containers play at unadjusted level.**
   Same split as MUSI-0362: the text fields moved per container, this did
   not. Vorbis comments carry `replaygain_track_gain` and
   `replaygain_album_gain` as ordinary tags; MP4 and ASF use their own
@@ -197,6 +202,9 @@ extension set was the only gate.
 
   `_read_replaygain` remains ID3-TXXX-only. Spec 21 owns the
   behaviour that binds to it.
+  Resolved (2026-09-25): `_container_replaygain` reads the same two
+  names from Vorbis comments, ASF attributes and MP4 freeform atoms,
+  case-insensitively. Pinned by TC-21-10. RVA2 stays out of scope.
   **Layman:** Volume levelling tags written into FLAC or Ogg files are ignored, so those tracks can play louder or quieter than the rest of the album.
   Kind: fix.
   Source: in-session-2026-09-21 MUSI-0359 fix.
