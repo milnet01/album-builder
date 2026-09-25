@@ -9,6 +9,10 @@ order, and a printable report.
 It is a desktop app for Linux (built on KDE Plasma), with a Windows
 download too.
 
+![Album Builder's main screen: the song library on the left, the album's
+track order in the middle, and the song now playing with its cover art on the
+right.](docs/screenshots/album-builder-curate.png)
+
 ## Status
 
 **v0.8.0 (2026-09-25): many more music file types now work properly.**
