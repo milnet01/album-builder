@@ -22,6 +22,10 @@ testpaths = ["tests"]
 # the Python (GIL-taking) handler and the deadlock with it.
 addopts = "-ra -q --no-qt-log"
 qt_api = "pyqt6"
+# A pre-push gate run on 2026-09-25 hung for 10+ minutes in a futex wait and
+# did not reproduce in three reruns. If a test hangs again, print every
+# thread's stack after 120 s so the next occurrence names itself.
+faulthandler_timeout = 120
 pythonpath = ["src"]
 markers = [
     "slow: real WeasyPrint render or other > 1s setup; opt out via `-m 'not slow'`",

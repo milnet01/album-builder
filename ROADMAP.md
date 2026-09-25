@@ -2470,3 +2470,10 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   Kind: fix.
   Source: in-session-2026-09-25 demo screenshot.
   Lanes: ui.
+
+- 📋 [MUSI-0367] **The test suite hung once in the pre-push gate and did not reproduce.**
+  2026-09-25: the pre-push gate's pytest (dbus-run-session, offscreen,\nin a ~/.cache/pre-push/tmp.* worktree) sat 10+ minutes in a futex wait\nat about 1.8% CPU. The stack was lost: the push output was piped to\n`tail -1`. Three reruns of the same command passed in 13-24 s.\nAnother project's pre-push gate was running at the same time. It\nmatches the class of the FFmpeg-backend teardown deadlock noted in\npyproject.toml. An earlier push that day was also rejected once, with\nno visible reason. faulthandler_timeout = 120 is now set in\npyproject.toml. The next hang prints every thread's stack - read that\nbefore guessing.
+  **Layman:** Once, the automatic checks that run before each upload froze instead of finishing; we added a watchdog so the next freeze explains itself.
+  Kind: investigate.
+  Source: in-session-2026-09-25 pre-push hang.
+  Lanes: tests.
