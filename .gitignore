@@ -28,3 +28,7 @@ venv/
 .DS_Store
 Thumbs.db
 .directory
+
+# Generated: AppImage build output, audit tool cache
+dist/
+.audit_cache/
