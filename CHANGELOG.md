@@ -8,6 +8,10 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-25
+
+**Theme:** The Linux download is back, plus display fixes.
+
 ### Fixed
 
 - **The Linux download is back.**

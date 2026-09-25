@@ -15,7 +15,9 @@ right.](docs/screenshots/album-builder-curate.png)
 
 ## Status
 
-**v0.8.0 (2026-09-25): many more music file types now work properly.**
+**v0.8.1 (2026-09-25): the Linux download is back, and song titles and
+small buttons display properly.** It builds on v0.8.0, where many more
+music file types started working properly:
 FLAC, Ogg, Opus, M4A, WMA, WAV and AIFF files now show their song
 details, artwork and volume levelling, not just MP3. AAC, AIFF, `.oga`
 and WMA files are now picked up too. Dragging a track to reorder an
