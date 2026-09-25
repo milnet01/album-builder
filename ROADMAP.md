@@ -2420,3 +2420,45 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   Kind: ux.
   Source: review-contract-2026-09-21 spec-05 gate L-20260921-05.
   Lanes: ui.
+
+- ✅ [MUSI-0364] **Library Title column collapses to zero width at normal window sizes.**
+  `ui/library_pane.py` sets Title to `QHeaderView.ResizeMode.Stretch` and
+  the other columns to fixed Interactive widths that add up to about
+  610 px. Below that table width the stretch section gets no space.
+  Seen in a 1280x800 demoreel shot: header shows only the sort
+  indicator where Title should be. Present before 2026-09-25 (same
+  image from commit 9d32630).
+  Resolved (2026-09-25): Title has a 220 px default width and Composer
+  is the stretch column. Pinned by TC-01-20; checked in a 1280x800 shot.
+  **Layman:** In the song list, the Title column disappears unless the window is very wide, so you can't see song names.
+  Kind: fix.
+  Source: in-session-2026-09-25 demo screenshot.
+  Lanes: ui.
+
+- ✅ [MUSI-0365] **Album-order rows draw their text twice, under and beside the row widget.**
+  Each QListWidgetItem carries the full row text (kept for tests and
+  screen readers) and the default delegate paints it. The
+  `_OrderRowWidget` on top has a transparent background and is offset
+  by the play button, so both texts show. Likely fix: a delegate that
+  paints selection but no text, keeping `item.text()` for
+  accessibility. Present before 2026-09-25.
+  Resolved (2026-09-25): the order list's delegate paints selection but
+  no text; item.text() is kept. Pinned by TC-05-16.
+  **Layman:** Each track in the album-order list shows its number and name twice, overlapping.
+  Kind: fix.
+  Source: in-session-2026-09-25 demo screenshot.
+  Lanes: ui.
+
+- ✅ [MUSI-0366] **Album-order preview-play button shows no glyph.**
+  `QPushButton#RowPlay` is fixed at 24x24, but the base `QPushButton`
+  rule in `ui/theme.py` gives 12 px padding each side, which leaves no
+  room for the glyph. Likely fix: `padding: 0` on `#RowPlay`.
+  Present before 2026-09-25.
+  Resolved (2026-09-25): a `glyphButton` property gives padding 0 to
+  the row play, track-count -/+ and toast close buttons. The toast
+  close also needed padding 0 in its own ID rule (measured). Pinned by
+  TC-06-27, which fails for all four without the theme change.
+  **Layman:** The small play button next to each track in the album-order list is blank.
+  Kind: fix.
+  Source: in-session-2026-09-25 demo screenshot.
+  Lanes: ui.

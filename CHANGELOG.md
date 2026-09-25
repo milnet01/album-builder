@@ -8,6 +8,26 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Linux download is back.**
+  The 0.8.0 Linux AppImage failed to build because a part it downloads
+  had been replaced upstream, so 0.8.0 shipped with only the Windows
+  download. This release has both.
+
+- **Song titles now show in the library.** (MUSI-0364)
+  The Title column shrank to nothing unless the window was very wide.
+  It now always has room, and the Composer column gives way instead.
+
+- **Album-order rows no longer show their text twice.** (MUSI-0365)
+  Each track's number and name appeared twice, overlapping. Now each
+  row reads once.
+
+- **Small buttons now show their symbols.** (MUSI-0366)
+  The play button beside each album-order track, the - and + buttons
+  for the track count, and the x that closes a notification were blank
+  or cut to a thin line. They now show properly.
+
 ## [0.8.0] - 2026-09-25
 
 **Theme:** Many more music file types now work properly.

@@ -526,18 +526,22 @@ class LibraryPane(QFrame):
         self.table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
         self.table.setShowGrid(False)
         self.table.verticalHeader().setVisible(False)
-        # Title gets the leftover space; metadata columns size to content.
+        # Composer takes the leftover space. Title keeps a fixed default width:
+        # as the stretch column it collapsed to nothing whenever the fixed
+        # columns outgrew the table, which at an ordinary window size they do
+        # (MUSI-0364).
         header = self.table.horizontalHeader()
+        composer_col = _column_index("composer")
         for col in range(len(COLUMNS)):
-            if col == title_col:
+            if col == composer_col:
                 header.setSectionResizeMode(col, QHeaderView.ResizeMode.Stretch)
             else:
                 header.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
         # Default widths by name (resilient to column reorder).
         self.table.setColumnWidth(play_col, 30)
+        self.table.setColumnWidth(title_col, 220)
         self.table.setColumnWidth(_column_index("artist"), 140)
         self.table.setColumnWidth(_column_index("album"), 160)
-        self.table.setColumnWidth(_column_index("composer"), 140)
         self.table.setColumnWidth(_column_index("duration_seconds"), 70)
         self.table.setColumnWidth(toggle_col, 30)
         # Spec 13 §The badge: column-scoped delegate attachment.

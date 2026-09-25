@@ -226,6 +226,12 @@ def qt_stylesheet(p: Palette) -> str:
         padding: 5px 12px;
         color: {p.text_primary};
     }}
+    /* Fixed-width glyph buttons (24-28 px). The 12 px side padding above left
+       them no room, so the glyph was clipped to a sliver or vanished
+       (MUSI-0366). A button opts in with setProperty("glyphButton", True). */
+    QPushButton[glyphButton="true"] {{
+        padding: 0;
+    }}
     QPushButton:hover {{
         background-color: {p.bg_pane};
     }}
@@ -421,6 +427,9 @@ def qt_stylesheet(p: Palette) -> str:
     QPushButton#ToastClose {{
         background: transparent;
         border: none;
+        /* Needed here as well: the glyphButton rule alone left this button's
+           content area 2 px wide, measured (MUSI-0366). */
+        padding: 0;
         color: {p.text_secondary};
         font-weight: 600;
     }}

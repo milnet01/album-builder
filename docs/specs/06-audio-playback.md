@@ -114,6 +114,10 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-06-24** — A late `state_changed(STOPPED)` arriving after a preview-without-play populated the now-playing pane does **not** repaint the now-playing block. Verified by: load track A + play, stop, preview track B (now-playing pane shows B), then synthetically re-emit `state_changed(STOPPED)` — assert `now_playing_pane.title_label.text() == B.title`.
 - **TC-06-25** — Keyboard-arrow row navigation in the library or middle pane changes the focused row but does **not** populate the now-playing pane and does **not** mutate the player. Verified by: focus the library table, press `Down` three times, assert `Player.source()` and `now_playing_pane.title_label` are unchanged from before the key presses.
 - **TC-06-26** — When `Player.state() == STOPPED`, the row-body hit-zone uses `Qt.CursorShape.PointingHandCursor`; when the player is in any other state, the row-body hit-zone uses the default cursor. The cursor flips on `state_changed`.
+- **TC-06-27** — Fixed-width glyph buttons (the album-order row play button, the
+  track-count − and +, the toast close) leave room for their glyph: the style's
+  content area is at least the glyph's width. The base button padding had left
+  them none (MUSI-0366).
 
 (Visual-regression and "real audio" smoke tests stay out of the test contract — they're manual.)
 

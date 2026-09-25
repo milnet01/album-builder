@@ -110,6 +110,9 @@ in `tests/`, so they are unverified by the suite whatever it reports.
   `accent-primary-1` at the insertion point: above a row when the pointer is in its
   top half, below it otherwise, after the last row when below every row. The line
   clears when the drag leaves or drops.
+- **TC-05-16** — Each album-order row's text is painted once, by its row widget.
+  The item keeps its full text for screen readers and tests, but the list's
+  delegate paints no text under the widget (MUSI-0365).
 
 ## Out of scope (v1)
 

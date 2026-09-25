@@ -27,6 +27,7 @@ class Toast(QFrame):
         self.message_label.setAccessibleName("Notification")
         self.btn_close = QPushButton(Glyphs.CLOSE, objectName="ToastClose")
         self.btn_close.setFixedSize(24, 24)
+        self.btn_close.setProperty("glyphButton", True)
         self.btn_close.setAccessibleName("Dismiss notification")
         self.btn_close.clicked.connect(self.hide)
         layout = QHBoxLayout(self)

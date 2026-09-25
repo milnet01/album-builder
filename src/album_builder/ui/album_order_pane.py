@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QStyledItemDelegate,
     QVBoxLayout,
     QWidget,
 )
@@ -53,6 +54,7 @@ class _OrderRowWidget(QWidget):
         self._title = title
         self.btn_play = QPushButton(Glyphs.PLAY, objectName="RowPlay")
         self.btn_play.setFixedSize(24, 24)
+        self.btn_play.setProperty("glyphButton", True)
         self.btn_play.setAccessibleName(f"Preview-play {self._title}")
         self.btn_play.setToolTip("Preview-play this track")
         self.btn_play.clicked.connect(lambda: on_preview(self._path))
@@ -113,6 +115,20 @@ class _OrderRowWidget(QWidget):
             self.btn_play.setToolTip("Preview-play this track")
 
 
+class _NoTextDelegate(QStyledItemDelegate):
+    """Paint the row's background and selection, but not its text.
+
+    Each item keeps its full row text for screen readers and tests, while the
+    visible label is the `_OrderRowWidget` on top. The default delegate drew
+    that text too, and the transparent row widget let it show through beside
+    its own label, so every row read twice (MUSI-0365).
+    """
+
+    def initStyleOption(self, option, index) -> None:
+        super().initStyleOption(option, index)
+        option.text = ""
+
+
 class _OrderList(QListWidget):
     """The order list, plus the drag feedback Spec 05 describes (MUSI-0361).
 
@@ -126,6 +142,7 @@ class _OrderList(QListWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setDropIndicatorShown(False)
+        self.setItemDelegate(_NoTextDelegate(self))
         self._drop_y: int | None = None
         # Set from the theme stylesheet via `qproperty-dropLineColor`, so a
         # theme switch recolours the line; this default is Spec 11's accent.

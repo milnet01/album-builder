@@ -29,6 +29,7 @@ class TargetCounter(QFrame):
         layout.addWidget(QLabel("Tracks"))
         self.btn_down = QPushButton(Glyphs.DOWN)
         self.btn_down.setFixedWidth(28)
+        self.btn_down.setProperty("glyphButton", True)
         self.btn_down.clicked.connect(self._decrement)
         layout.addWidget(self.btn_down)
 
@@ -41,6 +42,7 @@ class TargetCounter(QFrame):
 
         self.btn_up = QPushButton(Glyphs.UP)
         self.btn_up.setFixedWidth(28)
+        self.btn_up.setProperty("glyphButton", True)
         self.btn_up.clicked.connect(self._increment)
         layout.addWidget(self.btn_up)
 

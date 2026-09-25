@@ -169,6 +169,10 @@ how reviewers confirm coverage validates the spec, not the implementation.
   picture blocks on `.flac`, a base64 `metadata_block_picture` comment on `.ogg`/`.oga`/
   `.opus`, a `covr` atom on `.m4a`, a `WM/Picture` attribute on `.wma`. `cover_data` is
   the image bytes unchanged and `cover_mime` its `image/*` type.
+- **TC-01-20** — The library table's Title column keeps a usable width (at least
+  150 px) in a narrow pane. Title has a fixed default width and Composer takes the
+  leftover space; as the stretch column, Title collapsed to nothing whenever the
+  fixed columns outgrew the table (MUSI-0364).
 - **TC-01-04** — `Track.from_path(audio)` parses ID3v2 tags: `TIT2→title`, `TPE1→artist`, `TPE2→album_artist`, `TALB→album`, `TCOM→composer`, `COMM→comment`, `USLT→lyrics_text`, `APIC (image/*)→cover_data + cover_mime`.
 - **TC-01-05** — When tags are absent, `Track.from_path` populates placeholders: `title = path.name`, `artist = "Unknown artist"`, `album_artist` cascades from `artist`, `album/composer/comment = ""`, `lyrics_text/cover_data/cover_mime = None`, and (Spec 21) `replaygain_track_gain/replaygain_album_gain = None`.
 - **TC-01-06** — `Track.album_artist` falls back to `Track.artist` when `TPE2` is missing.
