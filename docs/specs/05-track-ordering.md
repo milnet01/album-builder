@@ -1,6 +1,6 @@
 # 05 — Track Ordering (Drag-to-Reorder)
 
-**Status:** Implemented (Phase 2) · **Last updated:** 2026-05-18 · **Depends on:** 00, 02, 04, 10, 11
+**Status:** Implemented (Phase 2; drag feedback MUSI-0361) · **Last updated:** 2026-09-25 · **Depends on:** 00, 02, 04, 10, 11
 
 > **Cold-eyes loop log (2026-09-21, `review-contract`, run L-20260921-05):** 2 loops,
 > 3 cold lanes each, all briefed cold (no prior-loop findings shared), against a context
@@ -28,13 +28,12 @@ Allow the user to set the order of tracks within an album. The order matters —
   - Drag handle (`⋮⋮` six-dot grip glyph) on the left — anchored in Spec 11 §Glyphs.
   - Title, duration, on/off toggle (the toggle here mirrors the library toggle — toggling off in the middle pane is identical to deselecting in the library)
 - The user picks up a row by the drag handle and drops it elsewhere in the list. Numbers re-index automatically.
-- Visual feedback during drag. **Not implemented as of this writing** — the pane
-  uses Qt's default `InternalMove` drag rendering, and nothing in
-  `ui/album_order_pane.py` or `ui/theme.py` sets item opacity or paints a drop
-  indicator. The target, should it be built:
-  - The grabbed row goes semi-transparent (50% opacity).
-  - A 2 px `accent-primary-1` line shows the drop position.
-  - Other rows shift to make room.
+- Visual feedback during drag (MUSI-0361):
+  - The grabbed row goes semi-transparent (50% opacity) for the length of the drag.
+  - A 2 px `accent-primary-1` line shows the drop position, in the active theme's
+    accent. Qt's own drop indicator is switched off, so only this line shows.
+  - **Not built:** other rows shifting to make room. The line already shows where
+    the row lands; animating the gap was judged not worth the code.
 - Dropping outside the list (anywhere outside the middle pane) cancels the drag — the row returns to its original position.
 - Selecting a new track in the library appends it to the **end** of the current album order.
 - Deselecting a track removes it; the remaining tracks close the gap; numbering re-indexes.
@@ -76,7 +75,8 @@ Same 250 ms debounce window as Spec 04 — see Spec 10 §Debounce. Drop-complete
 Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-05-NN` marker.
 
 **Phase status — shipped in v0.2.0 (Phase 2).** Coverage: `tests/domain/test_album.py`
-and `tests/ui/test_album_order_pane.py`. **Not every clause carries a marker.**
+`tests/ui/test_album_order_pane.py` and `tests/ui/test_TC_05_drag_feedback.py`.
+**Not every clause carries a marker.**
 TC-05-04, TC-05-05, TC-05-08 and TC-05-12 have no `# Spec: TC-05-NN` marker anywhere
 in `tests/`, so they are unverified by the suite whatever it reports.
 
@@ -92,9 +92,8 @@ in `tests/`, so they are unverified by the suite whatever it reports.
 - **TC-05-05** — `Album.deselect` closes the gap; subsequent track-number prefixes re-index automatically.
 - **TC-05-06** — `Album.reorder` does not change *which* tracks are selected — only their order. `set(track_paths)` is invariant under reorder.
 - **TC-05-07** — UI: dragging row N onto row M reorders `track_paths` and emits
-  `reordered`. **This clause covers the functional half only.** The drag visuals above
-  are not implemented and no test observes them; a clause asserting them would be
-  unfalsifiable, so it is deliberately not stated here.
+  `reordered`. **This clause covers the functional half only**; the drag visuals are
+  TC-05-14 and TC-05-15.
 - **TC-05-08** — UI: a drag that does not complete leaves `track_paths` unchanged and
   fires no `reordered` signal and no write. **The literal drop-outside-the-list event is
   not observable headlessly** — the Phase 2 plan records it as best-effort and substitutes
@@ -105,6 +104,12 @@ in `tests/`, so they are unverified by the suite whatever it reports.
 - **TC-05-11** — UI: 1-track album shows the drag handle but reorder has no effect.
 - **TC-05-12** — Persistence: drop-completed → debounced atomic write to `album.json`; export pipeline (Spec 08) re-runs to renumber symlink filenames and re-emit `playlist.m3u8`.
 - **TC-05-13** — A track in the order whose file is missing on disk shows missing-state styling but remains reorderable; toggle-off via the row's toggle is also still allowed.
+- **TC-05-14** — While a drag is in progress the grabbed row's widget carries a 50%
+  opacity effect; when the drag ends, dropped or cancelled, no row carries one.
+- **TC-05-15** — A drag over the list paints a 2 px line in the theme's
+  `accent-primary-1` at the insertion point: above a row when the pointer is in its
+  top half, below it otherwise, after the last row when below every row. The line
+  clears when the drag leaves or drops.
 
 ## Out of scope (v1)
 

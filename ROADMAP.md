@@ -2384,7 +2384,7 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 
 *Round-1 spec sweep landed 2026-04-28 (32 issues across all 13 specs: schema-ownership canonicalised to Spec 10, approve-with-missing contradiction resolved, Specs 06–12 received TC-NN-MM IDs at speccing time, global keyboard-shortcuts table added to Spec 00, canonical approve sequence pinned in Spec 09, Spec 11 §Glyphs added to single-source `⋮⋮ ▲▼ ●○ 🔒 ✓ ▶ ⏸` etc.). Round-2 sweep landed 2026-04-28 (28 follow-ups: timestamp-encoding precision pin, atomic-write-tmp-strategy alignment, plan timestamp helper, approve/unapprove side-effect ordering, plan TC crosswalk extended to TC-10/TC-11/TC-01-P2). Round-3 sweep landed 2026-04-28 (15 follow-ups: state-diagram terminology, splitter ratios on save, glyph literals in widgets, approved-album badge, rename self-collision, UTC normalisation, TC-10-09 + TC-10-20 strengthened, delete emit order). Round-4 confirmation pass 2026-04-28 verified all fixes landed cleanly with 0 surviving HIGH issues and 0 new contradictions. **Documentation set is implementation-ready for Phase 2.**
 
-- 📋 [MUSI-0361] **Drag visual feedback in the album-order pane was specified but never built.**
+- ✅ [MUSI-0361] **Drag visual feedback in the album-order pane was specified but never built.**
   Spec 05 described this under a Status: Implemented heading and the
   gate found no implementation: no opacity handling, no drop-indicator
   styling, no stylesheet rule in `ui/album_order_pane.py` or
@@ -2399,6 +2399,11 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   `accent-primary-1` line at the drop position, other rows shifting to
   make room. Deciding whether it is wanted is the open question; the
   values are already pinned so there is no contract left to invent.
+  Resolved (2026-09-25, user chose to build it): the grabbed row dims
+  to\n50% for the drag, and a 2 px line in the theme accent marks the
+  drop\npoint. Pinned by TC-05-14 and TC-05-15. The line position
+  matched\nQt's own drop decision at every one of 355 positions. Rows
+  shifting\nto make room was not built; Spec 05 records that.
   **Layman:** Dragging a track to reorder it uses Qt's plain default look - the spec described a nicer effect (the row you grab going half-transparent, a coloured line showing where it will land) that was never actually built.
   Kind: ux.
   Source: review-contract-2026-09-21 spec-05 gate L-20260921-05.

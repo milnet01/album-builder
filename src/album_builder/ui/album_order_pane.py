@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, pyqtProperty, pyqtSignal
+from PyQt6.QtGui import QColor, QPainter, QPen
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -111,6 +113,99 @@ class _OrderRowWidget(QWidget):
             self.btn_play.setToolTip("Preview-play this track")
 
 
+class _OrderList(QListWidget):
+    """The order list, plus the drag feedback Spec 05 describes (MUSI-0361).
+
+    The grabbed row is dimmed to 50% opacity for the length of the drag, and a
+    2 px line in the theme's accent marks where the row will land. Qt's own drop
+    indicator is switched off so only one marker shows. The rows are item
+    widgets, so the dimming is a graphics effect on the widget rather than a
+    delegate paint.
+    """
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setDropIndicatorShown(False)
+        self._drop_y: int | None = None
+        # Set from the theme stylesheet via `qproperty-dropLineColor`, so a
+        # theme switch recolours the line; this default is Spec 11's accent.
+        self._drop_line_color = QColor("#6e3df0")
+
+    def _get_drop_line_color(self) -> QColor:
+        return self._drop_line_color
+
+    def _set_drop_line_color(self, color: QColor) -> None:
+        self._drop_line_color = QColor(color)
+        self.viewport().update()
+
+    dropLineColor = pyqtProperty(QColor, fget=_get_drop_line_color, fset=_set_drop_line_color)
+
+    def drop_line_y(self) -> int | None:
+        """Viewport y of the drop line, or None when no drag is over the list."""
+        return self._drop_y
+
+    def startDrag(self, supported_actions) -> None:
+        dimmed = [
+            w for w in (self.itemWidget(item) for item in self.selectedItems())
+            if w is not None
+        ]
+        for widget in dimmed:
+            effect = QGraphicsOpacityEffect(widget)
+            effect.setOpacity(0.5)
+            widget.setGraphicsEffect(effect)
+        try:
+            super().startDrag(supported_actions)  # blocks until the drop or cancel
+        finally:
+            for widget in dimmed:
+                widget.setGraphicsEffect(None)
+            self._set_drop_y(None)
+
+    def dragMoveEvent(self, e) -> None:
+        super().dragMoveEvent(e)
+        self._set_drop_y(self._line_y_for(e.position().toPoint()) if e.isAccepted() else None)
+
+    def dragLeaveEvent(self, e) -> None:
+        super().dragLeaveEvent(e)
+        self._set_drop_y(None)
+
+    def dropEvent(self, e) -> None:
+        self._set_drop_y(None)
+        super().dropEvent(e)
+
+    def _line_y_for(self, pos) -> int | None:
+        """Viewport y where Qt will insert the row dropped at `pos`.
+
+        Qt stops tracking its drop position once its own indicator is hidden,
+        so this applies Qt's rule directly: the rows are not drop targets, so a
+        drop over a row lands above it in its top half and below it otherwise,
+        and a drop below the last row appends.
+        """
+        index = self.indexAt(pos)
+        if index.isValid():
+            rect = self.visualRect(index)
+            return rect.top() if pos.y() < rect.center().y() else rect.bottom() + 1
+        if self.count():
+            return self.visualItemRect(self.item(self.count() - 1)).bottom() + 1
+        return None
+
+    def _set_drop_y(self, y: int | None) -> None:
+        if y != self._drop_y:
+            self._drop_y = y
+            self.viewport().update()
+
+    def paintEvent(self, e) -> None:
+        super().paintEvent(e)
+        if self._drop_y is None:
+            return
+        painter = QPainter(self.viewport())
+        pen = QPen(self._drop_line_color)
+        pen.setWidth(2)
+        painter.setPen(pen)
+        # A 2 px pen centred on y + 1 covers rows y and y + 1.
+        painter.drawLine(0, self._drop_y + 1, self.viewport().width(), self._drop_y + 1)
+        painter.end()
+
+
 class AlbumOrderPane(QFrame):
     reordered = pyqtSignal()                          # Type: caller schedules save
     preview_play_requested = pyqtSignal(object)       # Type: Path
@@ -127,7 +222,7 @@ class AlbumOrderPane(QFrame):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.addWidget(QLabel("Album order", objectName="PaneTitle"))
 
-        self.list = QListWidget()
+        self.list = _OrderList()
         self.list.setObjectName("AlbumOrderList")
         self.list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)

@@ -273,6 +273,11 @@ def qt_stylesheet(p: Palette) -> str:
             stop:0 {p.accent_primary_2}, stop:1 {p.accent_primary_1}
         );
     }}
+    /* Spec 05 drag feedback (MUSI-0361): the album-order drop line takes the
+       theme accent. The list paints it; this only sets the colour property. */
+    QListWidget#AlbumOrderList {{
+        qproperty-dropLineColor: {p.accent_primary_1};
+    }}
     /* Spec 11 focus ring: 2 px outline at accent_primary_1. Qt QSS does not
        support outline-offset, so we widen the existing border and shrink
        padding by the same amount to avoid layout shift on focus. */
