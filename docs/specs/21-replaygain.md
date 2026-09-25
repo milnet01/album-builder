@@ -367,8 +367,8 @@ reaches the device.
   persistence is unchanged (it is the user volume). **Also strike ReplayGain from Spec
   06's Out-of-scope** (the line `Equalizer, ReplayGain, or any DSP` -> `Equalizer or any
   audio DSP`), since read-only ReplayGain volume scaling is now in scope. (Pre-existing,
-  out of Spec 21's scope: Spec 06 still says volume is "stored in `QSettings`" - it is
-  `settings.json`; flagged for a later docs sweep.)
+  out of Spec 21's scope: Spec 06 said volume is "stored in `QSettings`" - it is
+  `settings.json`; fixed in the 2026-09-25 docs sweep, MUSI-0357.)
 - **Spec 18 (`18-player-mode-surface.md`)** - the INV-18-1 echo-guard rationale there
   states *"`self.volume()` reads `round(self._output.volume() * 100)` ... keeps `_output`
   the single source of truth"*. Spec 21 **supersedes** that read-back rationale: with the

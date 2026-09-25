@@ -59,7 +59,7 @@ Play tracks for preview and karaoke-style listening. Provide play/pause, seek, p
 - Backed by `QMediaPlayer` with a `QAudioOutput`. Single instance for the lifetime of the app.
 - Track loading: `setSource(QUrl.fromLocalFile(str(path)))`. Position-tick uses `positionChanged` signal at the player's native cadence (~50 ms).
 - Seek granularity: ms (Qt's API). UI rounds to seconds for display.
-- Volume: stored in `QSettings` under `audio/volume` (0–100, default 80).
+- Volume: stored in `settings.json` under `audio.volume` (0–100, default 80).
 - Mute is a separate boolean flag layered on top of the volume value.
 - **ReplayGain composite (Spec 21).** The user volume (0–100) is the source of truth: `Player.volume()` returns it, and it is what `set_volume` / `volume_changed` / the MPRIS `Volume` all speak. The **applied** `QAudioOutput` level is the composite `clamp(user_volume/100 * replaygain_factor, 0, 1)`, where the factor comes from `set_replaygain_factor` (default `1.0`, no factor). A factor change emits **no** `volume_changed`. Consequently **TC-06-02** (`set_volume(50)` → `QAudioOutput.volume() == 0.5`) holds when the factor is `1.0` (the default; levelling off).
 

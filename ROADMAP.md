@@ -2371,6 +2371,14 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   - **Performance - cover-art thumbnail cache.** Cache decoded/resized cover images instead of re-decoding them per use.
   - **Security - HTML report output escaping.** ✅ **Verified clean (2026-07-25):** `services/report.py:221` sets `autoescape=select_autoescape(["html", "xml"])` and no `| safe` / `Markup(` bypass exists, so track metadata + lyrics render inert in the shared report. No hardening needed. (Kept here as the audit-trail entry.)
   - **Docs - spec-vs-source drift sweep.** The 2026-07-25 `/audit` `contract_doc_drift` rule flagged 103 spec identifiers absent from source. Most are false positives (external-lib internals like `HUGGINGFACE_HUB_CACHE`/`torch.hub...`, forward/v2 refs like `last_position_seconds`, illustrative examples, hyphen-vs-underscore theme tokens, and citation-format misses such as `album_store.py:approve` which *does* exist). A small genuine subset is real drift worth fixing in a targeted sweep - confirmed examples: `Album.set_track_paths` (Spec 08; no such method exists) and the known Spec 06 `QSettings` -> `settings.json` wording. Filter the FPs, fix the real ones. (Best done via `/cold-eyes`, which verifies doc-vs-code.)
+  Progress (2026-09-25), docs drift sweep: doc_symbols over
+  docs/specs\nleft 115 names unresolved. All but a handful are Qt,
+  Python,\nmutagen or tag-frame names this project does not define.
+  Real\ndrift fixed: Spec 06's `QSettings` (it is
+  settings.json\naudio.volume), and Spec 08's `Album.set_track_paths`,
+  which does not\nexist - a hand-edited duplicate path loads unchanged,
+  and the spec\nnow says so. The ambiguous and not_checked rows were not
+  reviewed.\nThe other sub-items of this bullet stay open.
   **Layman:** Small improvements: a friendlier first launch, undo for deletions, faster startup, and fixing documents that no longer match the app.
   Kind: implement.
 
