@@ -9,7 +9,13 @@ from pathlib import Path
 from uuid import UUID
 
 from PyQt6.QtCore import Qt, QTimer, QUrl
-from PyQt6.QtGui import QActionGroup, QDesktopServices, QKeySequence, QShortcut
+from PyQt6.QtGui import (
+    QActionGroup,
+    QDesktopServices,
+    QGuiApplication,
+    QKeySequence,
+    QShortcut,
+)
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
@@ -72,6 +78,7 @@ from album_builder.ui.theme import THEMES, Glyphs, palette_for, qt_stylesheet
 from album_builder.ui.toast import Toast
 from album_builder.ui.top_bar import TopBar
 from album_builder.ui.tray import TrayIcon
+from album_builder.ui.window_util import fit_to_screen
 from album_builder.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -152,8 +159,17 @@ class MainWindow(QMainWindow):
         # state.json with width=10 would open a 10 px wide window). Spec 10
         # documents minimum 100px implicit; explicit here so a corrupt cache
         # doesn't make the app unusable.
-        self.resize(max(400, state.window.width), max(300, state.window.height))
-        self.move(max(0, state.window.x), max(0, state.window.y))
+        # Then keep it on the screen: a size saved on a bigger monitor would
+        # otherwise push the menu and tabs off the edge (MUSI-0381).
+        width, height = max(400, state.window.width), max(300, state.window.height)
+        screen = QGuiApplication.primaryScreen()
+        if screen is not None:
+            self.setGeometry(fit_to_screen(
+                width, height, state.window.x, state.window.y, screen.availableGeometry(),
+            ))
+        else:
+            self.resize(width, height)
+            self.move(max(0, state.window.x), max(0, state.window.y))
         # Spec 19: the stylesheet is applied by _apply_theme at the end of
         # __init__ (once the menu + palette-caching widgets exist), from the
         # persisted ui.theme, rather than a hardcoded dark-colourful here.

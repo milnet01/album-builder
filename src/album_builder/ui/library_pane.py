@@ -564,7 +564,7 @@ class LibraryPane(QFrame):
         self._usage_delegate = UsageBadgeDelegate(self.table)
         self.table.setItemDelegateForColumn(used_col, self._usage_delegate)
         self.table.setColumnWidth(used_col, 40)
-        self.table.setMinimumWidth(450)
+        self.table.setMinimumWidth(300)  # fits a 1280 px screen (MUSI-0381)
         # Spec 01: default sort is Title ascending.
         self.table.sortByColumn(title_col, Qt.SortOrder.AscendingOrder)
         self.table.clicked.connect(self._on_table_clicked)

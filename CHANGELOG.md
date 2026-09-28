@@ -8,6 +8,13 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The window now fits on smaller screens.** (MUSI-0381)
+  On a 1280-pixel-wide screen the window used to spill off the right
+  edge, hiding the menu and the tabs. It now fits, and a window saved on
+  a bigger screen opens inside the current one.
+
 ## [0.9.2] - 2026-09-28
 
 **Theme:** The Windows download works again.

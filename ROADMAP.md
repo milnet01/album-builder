@@ -185,7 +185,7 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: test.
   Source: windows-check-2026-09-28.
 
-## 0.9.3 — Add music
+## 0.9.4 — Add music
 
 - 📋 [MUSI-0371] **"Add music" on-ramp: drop or pick files to add to the library.**
   Deferred out of MUSI-0356 Phase MP-2 (Spec 18 §Out of scope). It
@@ -198,7 +198,9 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: feature.
   Source: in-session-2026-09-28.
 
-- 📋 [MUSI-0381] **The main window is wider than a 1280-pixel screen, hiding the menu and tabs.**
+## 0.9.3 — Window fits smaller screens
+
+- ✅ [MUSI-0381] **The main window is wider than a 1280-pixel screen, hiding the menu and tabs.**
   Seen on the Windows test machine (1280x1024, work area 1280x984) with
   v0.9.2 in Arabic: the window came up 1451 px wide. WindowState defaults
   to 1400x900 at (100, 80), MainWindow.__init__ resizes to it without
@@ -207,6 +209,14 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   buttons and 120 px volume slider, the 280 px cover). So clamping alone
   cannot fit it: the layout minimum must shrink too. Serves S6. Evidence:
   screenshot from the test run (not committed; the demo library only).
+  Resolved (2026-09-28): window minimum width 1457 -> 1173 (en) / 1179
+  (ar) by library table min 450 -> 300, volume slider 120 -> 90, and
+  glyph-style 28 px playlist arrows (which took the right column from
+  about 406 to 302). MainWindow places the saved geometry through
+  window_util.fit_to_screen. Tests in
+  tests/ui/test_window_fits_small_screen.py (its own contract); a
+  planted 450 made the width test fail at 1323. 3 full gate runs green
+  (942). Shipping as v0.9.3; recheck on the Windows test machine.
   **Layman:** On smaller screens the window spills off the right edge, so the File menu and tabs can't be reached.
   Kind: fix.
   Source: windows-check-2026-09-28.

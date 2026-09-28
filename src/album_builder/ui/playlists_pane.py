@@ -100,6 +100,11 @@ class PlaylistsPane(QFrame):
         self.btn_track_down.setAccessibleName(tr("Move track down"))
         self.btn_track_remove = QPushButton(tr("Remove"))
         self.btn_track_remove.setAccessibleName(tr("Remove track from playlist"))
+        # Glyph-only arrows stay narrow so the pane fits a 1280 px screen
+        # (MUSI-0381).
+        for b in (self.btn_track_up, self.btn_track_down):
+            b.setProperty("glyphButton", True)
+            b.setFixedWidth(28)
         for b in (self.btn_play, self.btn_track_up, self.btn_track_down, self.btn_track_remove):
             tr_header.addWidget(b)
         layout.addLayout(tr_header)

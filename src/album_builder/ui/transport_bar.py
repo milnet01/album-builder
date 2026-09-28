@@ -98,7 +98,7 @@ class TransportBar(QWidget):
         self.volume_slider = QSlider(Qt.Orientation.Horizontal, objectName="TransportVolume")
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setValue(player.volume())
-        self.volume_slider.setFixedWidth(120)
+        self.volume_slider.setFixedWidth(90)  # fits a 1280 px screen (MUSI-0381)
         self.volume_slider.setAccessibleName(tr("Volume"))
         self.volume_slider.valueChanged.connect(player.set_volume)
 
