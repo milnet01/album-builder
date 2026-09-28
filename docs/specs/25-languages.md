@@ -2,7 +2,15 @@
 
 **Status:** draft · **Last updated:** 2026-09-28 · **Roadmap:** MUSI-0368 · **Depends on:** 00, 09, 10, 11, 16, 19 · **Amends:** 09, 10, 16, 23, 24
 
-> **Cold-eyes loop log:** none yet.
+> **Cold-eyes loop log:**
+> **Loop 1 (2026-09-28, review-contract):** 2 `review-lane` lanes, each holding every
+> question. Q1 2 · Q2 2 · Q3 1 · Q4 3 — verified 8 / fixed 8 / dismissed 0. Both lanes
+> found the constants-vs-TC-25-03 clash and the Language-menu labels failing TC-25-07.
+> Fixed: `N_` marker for constants; `set_catalog` and `CATALOG_DIR` named as the test
+> seam; menu order matched to `SUPPORTED`; `ui.language` validated against
+> `i18n.SUPPORTED` (the literal-list reason did not hold); TC-25-07 allow-list; TC-25-11
+> made observable; report date pattern `d MMMM yyyy` so English is unchanged (measured;
+> raised as an open question by both lanes).
 
 To be implemented in a new `src/album_builder/i18n.py`, a new
 `src/album_builder/translations/` directory of JSON catalogs, the language resolution
@@ -66,10 +74,17 @@ template.
   `setting` when it is in `SUPPORTED`; else `system_code` when it is in `SUPPORTED`;
   else `"en"`. `setting == "system"` takes the second branch.
 
-`tr` is the one name every module imports (`from album_builder.i18n import tr`). A
-module-level constant that holds display text (a column header list, for instance) is
-translated where it is shown, not where it is defined, because module constants are
-built at import time, before `set_language` runs.
+- `N_(source: str) -> str` — returns `source` unchanged. It marks display text held in
+  a module-level constant (a column header list, theme display names), which is built at
+  import time, before `set_language` runs. The constant is written `N_("Title")` and
+  translated where it is shown, with `tr(value)`.
+- `set_catalog(mapping: dict[str, str]) -> None` — installs `mapping` as the active
+  catalog directly. For tests (the pseudo catalog of TC-25-07); production code calls
+  `set_language`.
+- `CATALOG_DIR: Path` — the directory `set_language` reads, `translations/` beside
+  `i18n.py`. Tests may point it elsewhere.
+
+`tr` is the one name every module imports (`from album_builder.i18n import tr`).
 
 ### `translations/*.json` (new)
 
@@ -81,8 +96,9 @@ see §Out of scope.
 ### `persistence/settings.py` — `ui.language`
 
 `UiSettings` gains `language: str = "system"`. `read_ui` accepts `"system"` or a code
-in an `ALLOWED_LANGUAGES` whitelist, listed literally for the same layering reason as
-`ALLOWED_THEMES`; anything else reads as `"system"`. `write_ui` writes it back beside
+in `i18n.SUPPORTED`, imported from `i18n` (a Qt-free module outside `ui/`, so the
+layering rule behind `ALLOWED_THEMES`' literal list does not apply); anything else reads
+as `"system"`. `write_ui` writes it back beside
 `theme`.
 
 ### `app.py` — resolution at startup
@@ -105,9 +121,12 @@ The Jinja environment gets `_ = i18n.tr` as a global, and every piece of fixed t
 the template becomes `{{ _("...") }}`. The root element becomes
 `<html lang="{{ lang }}" dir="{{ dir }}">`, with `lang` the active code and `dir`
 `"rtl"` or `"ltr"`. `approved_date_human` comes from
-`QLocale(code).toString(date, QLocale.FormatType.LongFormat)`, which names the month in
-the active language (measured: `ar` gives Arabic month and digits, `de` gives
-"Montag, 28. September 2026"). The report's file name keeps its ISO date and is not
+`QLocale(code).toString(date, "d MMMM yyyy")` (a Python `date` is accepted), which
+keeps today's English form and names the month in the active language. Measured
+2026-09-28: `en` gives "28 September 2026", as `strftime("%d %B %Y")` does now; `he`
+gives "28 ספטמבר 2026"; `ar` gives Arabic month and digits. Qt's `LongFormat` is not
+used: for `en` it gives "Monday, September 28, 2026", which would change the English
+report. The report's file name keeps its ISO date and is not
 translated (Spec 10 §Atomic pair keys on it).
 
 ### `ui/main_window.py` — *View > Language*
@@ -152,10 +171,10 @@ View
                      ○ English
                      ○ Afrikaans
                      ○ العربية
-                     ○ Deutsch
+                     ○ עברית
                      ○ Español
                      ○ Français
-                     ○ עברית
+                     ○ Deutsch
                      ○ Português
 ```
 
@@ -211,11 +230,11 @@ marker.
 - **TC-25-02** — `set_language("de")` makes `tr` return the German entry for a key the
   `de` catalog holds; `set_language("xx")` and a catalog path that does not exist both
   leave English active without raising.
-- **TC-25-03** — Coverage: the set of string literals passed as the first argument to
-  `tr(...)` anywhere under `src/album_builder/` (found by walking the AST) plus every
-  `_("...")` in `report.html.j2`, **equals** each catalog's key set minus
-  `"@language_name"` — no missing key and no stale one. A call whose first argument is
-  not a literal fails the test.
+- **TC-25-03** — Coverage: the set of string literals passed to `tr(...)` or `N_(...)`
+  anywhere under `src/album_builder/` (found by walking the AST) plus every `_("...")`
+  in `report.html.j2`, **equals** each catalog's key set minus `"@language_name"` — no
+  missing key and no stale one. An `N_` call whose argument is not a literal fails the
+  test; `tr(<expression>)` is allowed, since it translates a value an `N_` marked.
 - **TC-25-04** — For every catalog entry, the set of `str.format` field names in the
   translation equals the set in its source string.
 - **TC-25-05** — `resolve`: `("system", "de") -> "de"`, `("system", "ja") -> "en"`,
@@ -227,8 +246,8 @@ marker.
   UI text. Walk every `QLabel`, `QAbstractButton`, `QAction`, `QTabBar` tab,
   `QHeaderView` section, `QLineEdit` placeholder, tooltip and accessible name and
   description; each non-empty value either contains `⟦` or is on an allow-list of
-  non-translatable forms (glyph-only text, digits and `:`, track metadata from the test
-  library). *Breaks if:* a new label is added without `tr`.
+  non-translatable forms: glyph-only text, digits and `:`, track metadata from the test
+  library, album and playlist names, and the Language menu's `language_name` labels. *Breaks if:* a new label is added without `tr`.
 - **TC-25-08** — RTL: after the startup sequence with `ar`,
   `QApplication.layoutDirection() == RightToLeft`, and the `TransportBar`'s own
   `layoutDirection() == LeftToRight`. With `de` the application is left to right.
@@ -241,7 +260,7 @@ marker.
   non-empty file.
 - **TC-25-11** — Qt's own strings: with `de` active, a `qtbase_de` translator is
   installed (`QApplication` translation of `"&Yes"` in context `QPlatformTheme` is not
-  `"&Yes"`); with `af` active startup completes and no translator is installed.
+  `"&Yes"`); with `af` active, startup completes and that translation is `"&Yes"`.
 
 ## Out of scope
 
@@ -250,6 +269,5 @@ marker.
 - **Switching language without a restart.** Every widget would need to rebuild its
   text on a signal; the restart toast avoids that.
 - **Arabic's full plural rules**, and localised digits in the UI (§Behavior rules).
-- **More languages.** Adding one is a new catalog plus a code in `SUPPORTED` and
-  `ALLOWED_LANGUAGES`; TC-25-03 then demands the catalog be complete.
+- **More languages.** Adding one is a new catalog plus a code in `SUPPORTED`; TC-25-03 then demands the catalog be complete.
 - Translating track metadata, file names or log output.
