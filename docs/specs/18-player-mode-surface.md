@@ -1,6 +1,6 @@
 # 18 — Player-mode surface (ui)
 
-**Status:** Implemented (Phase E of the music-player epic); **amended 2026-09-28 for Phase MP-2 (MUSI-0356), amendment not yet implemented** · **Last updated:** 2026-09-28 · **Depends on:** 00, 01, 06, 07, 11, 14, 15, 16, 17 (references Spec 10 persistence but does not extend it) · **Blocks:** music-player Phases F-G
+**Status:** Implemented (Phase E of the music-player epic); **amended 2026-09-28 for Phase MP-2 (MUSI-0356), amendment accepted 2026-09-28, not yet implemented** · **Last updated:** 2026-09-28 · **Depends on:** 00, 01, 06, 07, 11, 14, 15, 16, 17 (references Spec 10 persistence but does not extend it) · **Blocks:** music-player Phases F-G
 
 > **Cold-eyes loop log (2026-07-04):** 5 loops, 3 independent reviewers per loop
 > (services-signals / UI-composition / cross-spec+tests lenses), all briefed cold (no
@@ -38,6 +38,16 @@
 > from player-mode activation, measured: a double-click also fires `clicked`);
 > `set_row_body_cursor_for_state` made curation-only; accessible description made a
 > listed player-mode difference; TC-18-31 asserts the theme half.
+>
+> **Loop 7 (2026-09-28, same run, cap 2 for a spec):** 2 fresh cold lanes, same brief.
+> Q2 1 — verified 1 / fixed 1 / dismissed 0. Both lanes: loop 6's exclusion of `_play`
+> from activation left Enter dead on that column, against the accessible description and
+> "per-row play button ... unchanged". Fixed: activation plays from here on every column;
+> a double-click on `_play` measured offscreen as `clicked`, `doubleClicked`, `activated`.
+> Not fixed, non-material: §UI surface still says "the two columns" (three since MP-2).
+> Cap reached. The final loop's finding landed on this run's own loop-6 text (1 of 1):
+> a repair of a repair, so this text is not re-gated; implementation is the next check.
+> All 8 findings fell inside the MP-2 amendment (span `2859197`). Accepted 2026-09-28.
 
 To be implemented across a new `src/album_builder/ui/player_pane.py` (the Player-tab
 listening surface), a new `src/album_builder/ui/now_playing_card.py` (the cover +
@@ -398,16 +408,16 @@ else:
   (`table.setColumnHidden`). They belong to album curation: a tick adds a track to the
   current album, and the badge counts approved albums. `COLUMNS` and the model are
   unchanged, so column indices stay shared between the two modes.
-- **Activation plays.** `table.activated` on any column of row *r* **except `_play`**
-  emits `play_tracks_requested(view_order_tracks(), r)` — "play from here" in view
+- **Activation plays.** `table.activated` on any column of row *r* emits `play_tracks_requested(view_order_tracks(), r)` — "play from here" in view
   order, honouring the search filter and sort. Qt decides what activates: double-click
   and Enter / Return, and a single click where the desktop style sets
   `SH_ItemView_ActivateItemOnSingleClick` — so on such a desktop a single click plays,
-  as it opens a file in that desktop's file manager. Activation on `_play` does
-  nothing in player mode: that column's click already routes to
-  `preview_play_requested`, and a double-click there also fires `clicked`, so letting
-  it activate too would request two different playbacks. The curation pane keeps its
-  activation rule (only `_play` / `_toggle` react).
+  as it opens a file in that desktop's file manager. `_play` is included, so Enter
+  works on every column. A mouse double-click on `_play` first delivers that
+  column's click (`preview_play_requested`, load-or-toggle) and then the activation
+  (measured offscreen: `clicked`, `doubleClicked`, `activated`, in that order), so it
+  ends with row *r* playing from here. The curation pane keeps its activation rule
+  (only `_play` / `_toggle` react).
 - **No row-body preview.** A click on a row body never emits `row_body_clicked`.
   Where the style does not activate on single click, the click only selects the row. The Spec 06 preview-without-play rule exists to
   let a curator read metadata without committing to playback. In the Player the row
@@ -415,7 +425,7 @@ else:
   now-playing card would fight the card showing what is playing.
 - **Accessible description.** The table's accessible description reads
   "Searchable list of tracks. Double-click a track or press Enter to play from it.
-  The first column plays or pauses that track." — the curation text describes the
+  Click the first column to play or pause that track." — the curation text describes the
   selection column, which is hidden here.
 
 A player-mode pane is never given a `UsageIndex` (`set_usage_index` is not called).
@@ -822,14 +832,13 @@ Two-bar sync tests build two `TransportBar(player, controller)` on one real
   startup, and after `library_watcher.tracks_changed` emits a changed `Library` both
   list the new set.
 - **TC-18-28** *(MP-2)* — Activating row *r* of a player-mode pane on the title
-  column (and on the duration column) emits `play_tracks_requested` with
+  column (and on the `_play` column) emits `play_tracks_requested` with
   `(view_order_tracks(), r)`; with a search filter applied the list is the filtered
   view. `MainWindow` routes it to `controller.play_tracks`. Activating the title
   column of a curation pane emits nothing (unchanged).
 - **TC-18-29** *(MP-2)* — A single click on a player-mode row body emits no
   `row_body_clicked`; under a style without single-click activation (the offscreen
-  test style) it also leaves both now-playing cards unchanged. Activating the `_play`
-  column of a player-mode pane emits no `play_tracks_requested`.
+  test style) it also leaves both now-playing cards unchanged.
 - **TC-18-30** *(MP-2)* — The player library's context-menu actions reach the same
   controller calls as the curation pane's ("Add to queue" -> `enqueue`), and its
   "Add to playlist" submenu lists the stored playlists.
