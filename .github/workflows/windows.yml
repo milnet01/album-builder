@@ -21,6 +21,8 @@ concurrency:
 jobs:
   windows:
     runs-on: windows-latest
+    # ~3-4 min measured; sized for a cold MSYS2/pip download with a wide margin.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 

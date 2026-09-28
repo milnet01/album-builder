@@ -25,6 +25,8 @@ concurrency:
 jobs:
   ci:
     runs-on: ubuntu-24.04
+    # ~1 min warm; sized for a cold pip cache with a wide margin.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
