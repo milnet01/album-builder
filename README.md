@@ -67,6 +67,13 @@ app. Arabic and Hebrew lay the whole window out right to left.
 The translations were drafted by an AI and have not yet been checked by
 native speakers, so some wording may be off. Corrections are welcome.
 
+## How we know it works
+
+[`docs/discovery.md`](docs/discovery.md) lists the signs of success: for
+example, lyrics that light up within half a second of being sung, and
+an approved playlist that plays in the order you set. It also says who the app
+is for and what it deliberately does not do.
+
 ## Where your music and albums live
 
 - **Your music** is read from `~/Music` unless you choose another
