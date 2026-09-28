@@ -2377,6 +2377,12 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   plays from here; curation-only columns hidden; card order Title /
   Artist / Album. TC-18-25..32. The Add-music drop/picker is deferred to
   its own item: it writes into Tracks/, which needs its own decision.
+  Follow-up owed (2026-09-28): promised the Hub website session
+  (ants-projects-hub-website) new Player-tab screenshots once MP-2 ships
+  in a release. After the next release: shoot with the demo library
+  (~/.cache/album-builder-demo), put PNGs in
+  /mnt/Emulators/aph-handoff/album-builder/ with a one-line description
+  each, and message that session. It already has the page corrections.
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 
