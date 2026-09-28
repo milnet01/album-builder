@@ -8,6 +8,16 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Better wording in every translated language.**
+  A second proofread corrected words that read oddly or wrongly: the
+  exported song links no longer share a name with keyboard shortcuts,
+  Afrikaans says "pouseer" for pause, and Arabic calls a composer a
+  composer. In Arabic and Hebrew, the lyrics status line now reads right
+  to left. The translations are still AI drafts awaiting native
+  speakers.
+
 ## [0.9.0] - 2026-09-28
 
 **Theme:** More languages including Arabic and Hebrew, a Player-tab library, and choosing your music folder.
