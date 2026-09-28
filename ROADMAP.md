@@ -2538,6 +2538,10 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   were machine-drafted (Spec 25 §Out of scope; README says so). A
   native speaker per language should read them in the running app.
   TC-25-03/04 keep the files complete; they cannot judge wording.
+  Progress (2026-09-28): second AI proofread by two other sessions
+  (es/fr/de/pt; ar/he/af). 36 of 39 suggestions applied after checking
+  each against its call site; 3 rejected (New, System default, Track).
+  Commit 8a90021. Native-speaker review still owed.
   **Layman:** Have a fluent speaker of each language check the app's wording.
   Kind: doc.
   Source: in-session-2026-09-28.
