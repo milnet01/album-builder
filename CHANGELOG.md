@@ -8,6 +8,10 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-09-28
+
+**Theme:** The Windows download works again.
+
 ### Fixed
 
 - **The Windows download no longer closes itself right after starting.** (MUSI-0379)

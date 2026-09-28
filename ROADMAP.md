@@ -200,12 +200,16 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
 
 ## 0.9.2 — Windows crash fix
 
-- 📋 [MUSI-0379] **Windows app crashed on its first save (os.O_DIRECTORY missing).**
+- ✅ [MUSI-0379] **Windows app crashed on its first save (os.O_DIRECTORY missing).**
   Found running the v0.9.1 Windows zip on the test machine: the post-rename
   directory fsync in persistence/atomic_io.py used os.O_DIRECTORY, which
   Windows lacks; the AttributeError escaped a Qt slot and aborted the app
   (0xC0000409 in Qt6Core.dll) on the first state save. Likely every Windows
   build since 0.8.0. Serves S6. Fix + TC-24-04 land with this item.
+  Resolved (2026-09-28): commit 9948d89, shipping as v0.9.2. _fsync_dir
+  skips where os.O_DIRECTORY is absent. TC-24-04 red before, green
+  after. Confirm on the Windows test machine once the v0.9.2 zip is
+  built.
   **Layman:** The Windows download closed itself right after starting; fixed so it saves normally.
   Kind: fix.
   Source: windows-check-2026-09-28.
