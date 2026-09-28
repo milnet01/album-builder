@@ -2351,6 +2351,8 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   - 🚧 **Phase Dist-3 — Windows bundle.** PyInstaller `.exe` bundling WeasyPrint's native libraries; audio uses the built-in Windows backend (no GStreamer); attached to GitHub Releases. **Spec 24 accepted + implemented 2026-07-28** (cold-eyes converged loops 1-4 + an implementation fold-back). Refinements over the original bullet: **one-folder zip, not one-file** (reliability for the fragile native stack); WeasyPrint's GTK/Pango DLLs **sourced from MSYS2 on a `windows-latest` runner** - PyInstaller can't cross-compile, so there is **no local reproducibility** (unlike the AppImage container), and CI `--version`/`--selftest` + a **manual Windows run** verify it; a **point-of-use HTML-only fallback** in `render_report` if the PDF engine can't load or a report won't render (Spec 24 §4.3b), with `scan_reports_dir` keeping a lone `.html` as a complete single-file report. Landed: `render_report`/`scan_reports_dir` code + `tests/services/test_TC_24_windows_bundle.py` (TC-24-01/02/03, full suite green) + `packaging/build-windows.ps1` + `packaging/album-builder.spec` + runtime hook + `.github/workflows/windows.yml`. The downloadable zip is produced by cutting a `v*` tag. Note: unsigned builds trip Windows SmartScreen until code-signing is arranged (deferred).
   - **Phase Dist-4 — Flatpak + Flathub.** Flatpak manifest bundling PyQt6 + WeasyPrint's Pango/Cairo/GDK-PixBuf runtime + GStreamer; an **AppStream metainfo** file (`packaging/` ships only a `.desktop` template today) + screenshots for the store; a single-file `.flatpak` bundle attached to GitHub Releases; and the Flathub submission PR. The **app-store** route for Linux (sandboxed, auto-updating via Flathub) — complements the AppImage single file with a discoverable, managed store listing.
   - **Phase Dist-5 — openSUSE Build Service (OBS).** Native RPM + DEB packages across distros via OBS for package-manager installs (zypper / apt) — distinct from the single-file AppImage/Flatpak. Integrate with the OBS project a companion session ("finbreak") already set up for the user rather than starting from scratch.
+  Serves S6 (docs/discovery.md): the downloads run and build an album on
+  a fresh machine with nothing else installed. Tagged 2026-09-28.
   **Layman:** Make the app a simple download you install and run on Linux or Windows, with app-store listings.
   Kind: implement.
 
@@ -2425,6 +2427,8 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   button, in both library panes. Spec 01 section Choosing the music
   folder, TC-01-21..23. Still open in this bullet: library-scan tag cache
   (skipped by decision), cover-art thumbnail cache.
+  Serves S1 (docs/discovery.md): a 1,000-song library opens within a few
+  seconds and search keeps up. Tagged 2026-09-28.
   **Layman:** Small improvements: a friendlier first launch, undo for deletions, faster startup, and fixing documents that no longer match the app.
   Kind: implement.
 
@@ -2566,3 +2570,54 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   **Layman:** Let people add songs by dragging them onto the app, once we decide how it should treat the music folder.
   Kind: feature.
   Source: in-session-2026-09-28.
+
+- 📋 [MUSI-0372] **S1 check: time opening and searching a 1,000-song library.**
+  Serves S1 (docs/discovery.md). Generate a 1,000-song demo library
+  (extend ~/.cache/album-builder-demo/make_demo.sh), then measure time to
+  a loaded library and search response while typing. Record the numbers
+  here; turn them into a regression test if cheap.
+  **Layman:** Proves the app stays quick with a big music folder.
+  Kind: test.
+  Source: check-queue-2026-09-28.
+
+- 📋 [MUSI-0373] **S2 check: exported numbering and playlist order match the app's order.**
+  Serves S2 (docs/discovery.md). Find the Spec 08 tests that cover
+  export order; if any gap remains (numbered symlink names and M3U lines
+  both equal the album order after a reorder), add a test.
+  **Layman:** Proves the approved album comes out in exactly the order you set.
+  Kind: test.
+  Source: check-queue-2026-09-28.
+
+- 📋 [MUSI-0374] **S3 check: measure lyric timing against the half-second bar.**
+  Serves S3 (docs/discovery.md). On a few aligned songs, compare each
+  LRC line time against a hand-marked start time; report how many lines
+  fall within 0.5 s. Needs WhisperX installed.
+  **Layman:** Checks that lyrics light up within half a second of being sung.
+  Kind: test.
+  Source: check-queue-2026-09-28.
+
+- 📋 [MUSI-0375] **S4 check: approved playlist plays in order in VLC and the default player.**
+  Serves S4 (docs/discovery.md). Approve a demo album, open its .m3u in
+  VLC and in the desktop's default player, confirm every track plays in
+  the set order. Manual check; note the players and versions used.
+  **Layman:** Checks the finished playlist really plays, in order, in common players.
+  Kind: test.
+  Source: check-queue-2026-09-28.
+
+- 📋 [MUSI-0376] **S5 check: approval report prints on A4 in every language.**
+  Serves S5 (docs/discovery.md). Approve a demo album in each of the
+  eight languages; print or print-preview the PDF on A4 and confirm
+  nothing is cut off, with right-to-left layout for Arabic and Hebrew.
+  **Layman:** Checks the printed report looks right in every language, Arabic and Hebrew included.
+  Kind: test.
+  Source: check-queue-2026-09-28.
+
+- 📋 [MUSI-0377] **S7 check: nothing ever writes to the music folder.**
+  Serves S7 (docs/discovery.md). Confirm tests prove that approve,
+  reopen, delete, restore and alignment leave the Tracks folder
+  byte-identical (e.g. snapshot hashes before and after). Add one where a
+  path is uncovered. MUSI-0371 will add a deliberate copy-in path; its
+  test belongs there.
+  **Layman:** Proves the app never renames, moves, changes or deletes your songs.
+  Kind: test.
+  Source: check-queue-2026-09-28.
