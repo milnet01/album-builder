@@ -15,6 +15,10 @@ Discover the audio files in `Tracks/`, parse their metadata, and present a live,
 - *(Phase 2)* New files dropped into `Tracks/` appear within ~2 seconds without restarting; the removal half - marking files **missing**, greying them out and excluding them from search - remains **deferred** (TC-01-P2-03/04), so a removed file currently just disappears on the next scan.
 - Duration is shown as `m:ss` for under an hour, `h:mm:ss` otherwise.
 
+### Choosing the music folder
+
+*(MUSI-0357, 2026-09-28.)* **File > Choose Music Folder...** opens a folder picker. A chosen folder is saved as `tracks_folder` in `settings.json` (`settings.write_tracks_folder`) and `LibraryWatcher.set_folder` rescans it at once, so both library panes (Spec 18) refresh without a restart. Cancelling changes nothing. When the scanned folder holds no supported files, each library pane shows "No music found in <folder>." with a **Choose music folder...** button in place of the search box and table; this is the first-run welcome on a fresh install.
+
 ## Inputs
 
 - The configured tracks folder (default: `Tracks/` relative to project root; configurable in Settings, persisted in `~/.config/album-builder/settings.json`).
@@ -193,6 +197,9 @@ The watcher mechanism (TC-01-P2-01, TC-01-P2-02) ships in Phase 2 via the `Libra
 - **TC-01-P2-01** — `LibraryWatcher` exposes `signal tracks_changed` emitted when the watched folder content changes. *(Phase 2)*
 - **TC-01-P2-02** — A new file added to `Tracks/` appears in `LibraryWatcher.library().tracks` within ~2 s without restart. *(Phase 2)*
 - **TC-01-P2-03** — A file removed from `Tracks/` is marked `is_missing=True`; not removed from any album that already referenced it. *(deferred — requires scan-diffing; tracked for a later phase)*
+- **TC-01-21** — `settings.write_tracks_folder(path)` round-trips through `read_tracks_folder()`; `LibraryWatcher.set_folder(path)` rescans `path` and emits `tracks_changed` with the new library.
+- **TC-01-22** — `LibraryPane.set_library` with an empty library shows the empty state (message naming the folder, a button emitting `choose_folder_requested`) and hides the table; a non-empty library shows the table again.
+- **TC-01-23** — File > Choose Music Folder...: a picked folder is saved and both library panes show its contents; a cancelled picker saves nothing and leaves the panes as they were.
 - **TC-01-P2-04** — `Library.search()` excludes `is_missing` tracks by default; opt-in via `include_missing=True`. *(deferred — requires search-filter parameter; tracked for a later phase)*
 
 ### Coverage map (Phase 1)

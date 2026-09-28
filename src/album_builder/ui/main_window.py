@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
     QDateTimeEdit,
+    QFileDialog,
     QInputDialog,
     QLineEdit,
     QMainWindow,
@@ -38,6 +39,7 @@ from album_builder.persistence.settings import (
     read_ui,
     write_audio,
     write_replaygain,
+    write_tracks_folder,
     write_ui,
 )
 from album_builder.persistence.state_io import AppState, WindowState, save_state
@@ -340,6 +342,7 @@ class MainWindow(QMainWindow):
         self.playlists_pane.play_requested.connect(self._on_play_playlist)
         for pane in self._library_panes:
             pane.add_to_playlist_requested.connect(self._on_add_to_playlist)
+            pane.choose_folder_requested.connect(self._on_choose_music_folder)
         # Lyrics: tracker → each panel (current-line index); each panel → service
         # (Align-now). Spec 18 fans both to every now-playing surface's panel;
         # the align handler acts on the loaded track, not the sending panel.
@@ -428,6 +431,9 @@ class MainWindow(QMainWindow):
         file_menu.addAction(tr("New Album"), lambda: self._on_new_album())
         file_menu.addAction(
             tr("Restore Deleted Album..."), lambda: self._on_restore_album(),
+        )
+        file_menu.addAction(
+            tr("Choose Music Folder..."), lambda: self._on_choose_music_folder(),
         )
         file_menu.addSeparator()
         file_menu.addAction(tr("Quit"), lambda: self.close())
@@ -705,6 +711,22 @@ class MainWindow(QMainWindow):
         self.album_order_pane.set_album(
             self._store.get(album_id), list(self._library_watcher.library().tracks)
         )
+
+    def _on_choose_music_folder(self) -> None:
+        """Spec 01: pick the folder the library scans, save it, rescan now."""
+        current = self._library_watcher.library().folder
+        chosen = QFileDialog.getExistingDirectory(
+            self, tr("Choose music folder"), str(current),
+        )
+        if not chosen:
+            return
+        folder = Path(chosen)
+        try:
+            write_tracks_folder(folder)
+        except OSError as exc:
+            self._show_toast(tr("Couldn't save music folder: {error}", error=exc))
+            return
+        self._library_watcher.set_folder(folder)
 
     def _on_language_chosen(self, code: str, name: str) -> None:
         """Spec 25: save the language; it takes effect on the next start."""

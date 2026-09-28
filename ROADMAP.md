@@ -2408,6 +2408,13 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   Restore Deleted Album lists Albums/.trash newest first and moves the
   pick back (AlbumStore.trashed/restore; Spec 02 §restore,
   TC-02-22..26). Undo for removing a track is not built. Next sub-item: first-run onboarding.
+  Progress (2026-09-28), first-run onboarding: SHIPPED. There was no
+  in-app way to set the music folder at all (settings.json by hand).
+  Added File > Choose Music Folder... (saves tracks_folder, rescans live
+  via LibraryWatcher.set_folder) and an empty-library welcome with a
+  button, in both library panes. Spec 01 section Choosing the music
+  folder, TC-01-21..23. Still open in this bullet: library-scan tag cache
+  (skipped by decision), cover-art thumbnail cache.
   **Layman:** Small improvements: a friendlier first launch, undo for deletions, faster startup, and fixing documents that no longer match the app.
   Kind: implement.
 

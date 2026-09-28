@@ -153,6 +153,14 @@ def read_albums_folder() -> Path | None:
     return _read_path_key("albums_folder")
 
 
+def write_tracks_folder(folder: Path) -> None:
+    """Save the music folder the user chose (Spec 01, Choosing the music
+    folder), preserving the other top-level keys."""
+    data = _read_settings_dict()
+    data["tracks_folder"] = str(folder)
+    _write_settings(data)
+
+
 def _read_path_key(key: str) -> Path | None:
     data = _read_settings_dict()
     folder = data.get(key)

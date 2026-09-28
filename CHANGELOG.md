@@ -10,6 +10,12 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Added
 
+- **Choose your music folder from inside the app.** (MUSI-0357)
+  Use File > Choose Music Folder..., and your library reloads straight
+  away. When no music is found, the library shows a friendly message
+  with a button to pick the right folder, so a fresh install no longer
+  opens to an empty window. No more editing settings files by hand.
+
 - **The app now speaks eight languages, including Arabic and Hebrew.** (MUSI-0368)
   English, Afrikaans, Arabic, Hebrew, Spanish, French, German and
   Portuguese. It follows your computer's language, or choose one under

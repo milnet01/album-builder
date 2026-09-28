@@ -73,8 +73,10 @@ native speakers, so some wording may be off. Corrections are welcome.
 ## Where your music and albums live
 
 - **Your music** is read from `~/Music` unless you choose another
-  folder. (Run from this source folder, it reads the `Tracks` folder
-  here instead.)
+  folder with **File > Choose Music Folder...** (or the button that
+  appears when no music is found). The change applies straight away.
+  (Run from this source folder, it reads the `Tracks` folder here
+  instead.)
 - **Your albums** are saved in an `Albums` folder. Set `albums_folder`
   below so they always land in the same place.
 

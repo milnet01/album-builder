@@ -80,6 +80,13 @@ class LibraryWatcher(QObject):
             return
         self._debounce.start()
 
+    def set_folder(self, folder: Path) -> None:
+        """Point the watcher at a new folder and rescan now (Spec 01,
+        Choosing the music folder). Emits tracks_changed."""
+        self._debounce.stop()
+        self._folder = Path(folder)
+        self.refresh()
+
     def library(self) -> Library:
         return self._library
 

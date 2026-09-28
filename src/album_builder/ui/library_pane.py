@@ -24,10 +24,12 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMenu,
+    QPushButton,
     QStyledItemDelegate,
     QStyleOptionViewItem,
     QTableView,
     QVBoxLayout,
+    QWidget,
 )
 
 from album_builder.domain.album import Album, AlbumStatus
@@ -491,6 +493,8 @@ class LibraryPane(QFrame):
     # Spec 17 (Phase D) "Add to playlist" submenu. Payload is
     # (playlist_id | None, list[Track]); None means "a new playlist".
     add_to_playlist_requested = pyqtSignal(object, object)  # Type: (str | None, list[Track])
+    # Spec 01 (Choosing the music folder): the empty-library welcome's button.
+    choose_folder_requested = pyqtSignal()
 
     def __init__(self, parent=None, *, player_mode: bool = False):
         super().__init__(parent)
@@ -593,8 +597,31 @@ class LibraryPane(QFrame):
             )
         layout.addWidget(self.table)
 
+        # Spec 01: shown instead of the table when the folder holds no music -
+        # the first-run welcome and the "wrong folder" hint in one.
+        self.empty_state = QWidget()
+        empty_layout = QVBoxLayout(self.empty_state)
+        empty_layout.addStretch(1)
+        self.empty_label = QLabel("", objectName="PlaceholderText")
+        self.empty_label.setWordWrap(True)
+        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addWidget(self.empty_label)
+        self.choose_folder_button = QPushButton(tr("Choose music folder..."))
+        self.choose_folder_button.clicked.connect(self.choose_folder_requested.emit)
+        empty_layout.addWidget(self.choose_folder_button, alignment=Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addStretch(2)
+        layout.addWidget(self.empty_state)
+        self.empty_state.setVisible(False)
+
     def set_library(self, library: Library) -> None:
         self._model.set_tracks(library.tracks)
+        empty = not library.tracks
+        self.empty_label.setText(
+            tr("No music found in {folder}.", folder=library.folder) if empty else ""
+        )
+        self.empty_state.setVisible(empty)
+        self.table.setVisible(not empty)
+        self.search_box.setVisible(not empty)
 
     def set_palette(self, palette: Palette) -> None:
         """Spec 19: adopt a new theme palette. The usage-badge fill is painted
