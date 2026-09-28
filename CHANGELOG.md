@@ -8,6 +8,12 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **On Windows, the "Album Builder" and "Player" tabs are readable again.** (MUSI-0382)
+  They showed as white boxes with faint text. They now follow the
+  chosen colour theme, like the rest of the window.
+
 ## [0.9.3] - 2026-09-28
 
 **Theme:** The window fits smaller screens.

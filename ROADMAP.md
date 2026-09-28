@@ -198,13 +198,18 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: feature.
   Source: in-session-2026-09-28.
 
-- 📋 [MUSI-0382] **On Windows the main tabs are white with nearly invisible labels.**
+- ✅ [MUSI-0382] **On Windows the main tabs are white with nearly invisible labels.**
   Seen on the Windows test machine with v0.9.3 (English and Arabic): the
   main QTabWidget draws native white tabs with pale text and a white frame
   round the pane, while Linux shows them themed. The theme QSS in
   ui/theme.py likely has no QTabBar::tab / QTabWidget::pane rules, so the
   Windows style shows through. Verify on the test machine after the fix
   (Linux cannot show it).
+  Resolved (2026-09-28): commit ad0e29e adds QTabWidget::pane and
+  QTabBar::tab rules from each palette. Verified on the Windows test
+  machine in English and Arabic, using a workflow_dispatch build of main
+  (artifact step added in the same session). Ships with the next
+  release.
   **Layman:** On Windows the "Album Builder" and "Player" tab names are almost unreadable; they should match the dark theme.
   Kind: fix.
   Source: windows-check-2026-09-28.
