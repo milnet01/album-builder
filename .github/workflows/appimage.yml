@@ -45,7 +45,7 @@ jobs:
           root=squashfs-root
           # INV-23-4: no writable state leaks into the read-only mount.
           test -z "$(find "$root" -name pyproject.toml)"
-          ! grep -q ALBUM_BUILDER_DEV_MODE "$root/AppRun"
+          if grep -q ALBUM_BUILDER_DEV_MODE "$root/AppRun"; then echo "AppRun sets dev mode"; exit 1; fi
           # INV-23-5: the heavy ML stack is absent.
           test -z "$(find "$root" -maxdepth 6 \( -name torch -o -name whisperx \))"
           # INV-23-2 (real bundle): the five required sonames + a font + fonts.conf.
