@@ -8,7 +8,7 @@ fact). The numbered specs in `docs/specs/` own each feature's detail; this
 document owns only the parts, their dependency rules and the shared ways of
 working. Signs of success are in [`discovery.md`](discovery.md).
 
-**Status:** draft (2026-09-28), awaiting the owner's agreement.
+**Status:** agreed (2026-09-28).
 
 ## The parts
 
@@ -38,8 +38,8 @@ Source lives in `src/album_builder/`.
 - **persistence** may import domain, `i18n`, and PyQt6's `QtCore` (for the
   debounce timer) — never `QtWidgets`, services or ui.
 - **services** may import domain, persistence and `i18n`, and never ui. One
-  known exception: `services/alignment_status.py` imports `Glyphs` from
-  `ui/theme.py` to keep the status glyphs in one place.
+  current breach, `services/alignment_status.py` importing `Glyphs` from
+  `ui/theme.py`, is MUSI-0383.
 - **ui** may import services, domain and `i18n`. It reaches persistence
   only from `ui/main_window.py`, for settings, app state and reading a
   lyrics file.

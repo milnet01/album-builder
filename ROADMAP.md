@@ -214,6 +214,17 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: fix.
   Source: windows-check-2026-09-28.
 
+- 📋 [MUSI-0383] **Move the Glyphs constants out of ui/theme.py so services never import ui.**
+  docs/design.md: services never import ui. The one breach is
+  services/alignment_status.py importing Glyphs from ui/theme.py (kept
+  there so Spec 11's glyphs have one home). Move Glyphs to a module both
+  layers may use, keep ui.theme re-exporting it so ui imports do not
+  change, and delete the exception from docs/design.md. The owner chose
+  the fix over a standing exception (2026-09-28).
+  **Layman:** Tidy-up so the app's background code no longer borrows icons from the screen code.
+  Kind: refactor.
+  Source: design-2026-09-28.
+
 ## 0.9.3 — Window fits smaller screens
 
 - ✅ [MUSI-0381] **The main window is wider than a 1280-pixel screen, hiding the menu and tabs.**
