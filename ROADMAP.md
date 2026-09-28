@@ -198,6 +198,19 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: feature.
   Source: in-session-2026-09-28.
 
+- 📋 [MUSI-0381] **The main window is wider than a 1280-pixel screen, hiding the menu and tabs.**
+  Seen on the Windows test machine (1280x1024, work area 1280x984) with
+  v0.9.2 in Arabic: the window came up 1451 px wide. WindowState defaults
+  to 1400x900 at (100, 80), MainWindow.__init__ resizes to it without
+  clamping to the screen, and the panes' minimum widths sum past 1280
+  (library table setMinimumWidth(450), the transport bar's fixed-width
+  buttons and 120 px volume slider, the 280 px cover). So clamping alone
+  cannot fit it: the layout minimum must shrink too. Serves S6. Evidence:
+  screenshot from the test run (not committed; the demo library only).
+  **Layman:** On smaller screens the window spills off the right edge, so the File menu and tabs can't be reached.
+  Kind: fix.
+  Source: windows-check-2026-09-28.
+
 ## 0.9.2 — Windows crash fix
 
 - ✅ [MUSI-0379] **Windows app crashed on its first save (os.O_DIRECTORY missing).**
