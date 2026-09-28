@@ -2654,3 +2654,13 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   **Layman:** Proves the app never renames, moves, changes or deletes your songs.
   Kind: test.
   Source: check-queue-2026-09-28.
+
+- 📋 [MUSI-0378] **S6 check: a fresh machine runs the download and builds an album.**
+  Serves S6 (docs/discovery.md). On a clean Linux machine (glibc 2.35+)
+  and a clean 64-bit Windows 10+ machine, run the release download, make
+  an album from a few songs, approve it. CI already proves --version and
+  --selftest; this proves the whole job. Needed for 1.0
+  (docs/standards/versioning-overrides.md).
+  **Layman:** Proves the Linux and Windows downloads work on a clean computer with nothing else installed.
+  Kind: test.
+  Source: review-contract-2026-09-28 versioning-overrides loop 1.

@@ -10,18 +10,19 @@ project: which surfaces count as breaking (§ 3) and what makes this project
 ## What makes it 1.0
 
 MAJOR stays `0` until every sign of success in [`docs/discovery.md`](../discovery.md)
-(S1–S7) has a passing check, recorded on its roadmap item.
+(S1–S7) has a passing check, recorded on a roadmap item that names that sign.
 
 ## Breaking surfaces
 
 A release that makes any of these stop working for an existing user is
-breaking. "Stop working" includes the app refusing, resetting or silently
-rewriting the file, as well as a changed layout that other tools rely on.
+breaking. "Stop working" includes the app refusing or resetting a file, losing
+anything stored in it, or changing a layout that other tools rely on.
+Upgrading an older file forward on load, with nothing lost, is not breaking
+for any file on this list. `persistence/schema.py` runs these upgrades for
+albums, app state and playlists.
 
 - **Saved albums** — `Albums/<album>/album.json`, and the `.approved` marker
-  (`persistence/album_io.py`). An older album must still open. A schema step
-  the migration runner (`persistence/schema.py`) upgrades forward is not
-  breaking.
+  (`persistence/album_io.py`). An older album must still open.
 - **Settings** — `settings.json` in the config folder, and its keys
   (`persistence/settings.py`), including the chosen music folder.
 - **App state and saved playlists** — `.album-builder/state.json` and
@@ -40,3 +41,7 @@ rewriting the file, as well as a changed layout that other tools rely on.
 
 A surface missing from this list is still a surface: if users rely on it and
 it breaks, the release was breaking (`versioning.md` § 3).
+
+## Cold-eyes loop log
+
+Kept in [`docs/reviews/C-20260928-versioning-overrides.md`](../reviews/C-20260928-versioning-overrides.md).
