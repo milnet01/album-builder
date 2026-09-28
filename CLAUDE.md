@@ -90,3 +90,13 @@ Global rules apply in full unless this file overrides them — don't restate, fo
 - **`/mnt/Games/CLAUDE.md`** — privileged commands use `SUDO_ASKPASS=/usr/libexec/ssh/ksshaskpass sudo -A -p "Claude Code: <action>"`.
 
 Public GitHub repo (`milnet01/album-builder`) — push freely on main; free Linux CI minutes. CI is `.github/workflows/ci.yml`; its single check step runs `./local-CI.sh` (ruff + full pytest), so running that script locally reproduces the CI gate exactly.
+
+Documentation-only pushes (every path matches `*.md`, `docs/*` or `LICENSE`) skip the tests: the pre-push hook runs `./local-CI.sh --docs` (a Markdown link check) and `ci.yml`'s `paths-ignore` skips GitHub CI. The hook learns this from local git config, which a fresh clone lacks — restore it with:
+
+```bash
+git config ants.gate.docsGlob '*.md|docs/*|LICENSE'
+git config ants.gate.docsMode --docs
+git config ants.gate.inPlace true
+```
+
+If a test ever reads a Markdown file, remove its pattern from both the glob and `paths-ignore`.

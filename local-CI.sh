@@ -9,6 +9,13 @@
 # Run it locally exactly as CI does:
 #     ./local-CI.sh
 #
+# Documentation-only mode, chosen by the pre-push hook when every pushed path
+# matches `git config ants.gate.docsGlob` ('*.md|docs/*|LICENSE'):
+#     ./local-CI.sh --docs
+# It checks relative Markdown links and nothing else. That is every check a
+# docs edit can reach: no test reads a .md file and ruff reads only Python.
+# GitHub skips the same paths (ci.yml `paths-ignore`).
+#
 # It invokes tools via `python -m <tool>` (not the `.venv/bin/<tool>` console
 # scripts) because those scripts carry an absolute shebang that broke when the
 # repo moved drives; `python -m` is path-independent.
@@ -32,12 +39,23 @@ if [[ ! -x "$PY" ]]; then
   fi
 fi
 
+if [[ "${1:-}" == "--docs" ]]; then
+  echo "== markdown links (documentation-only push) =="
+  "$PY" tools/check_md_links.py
+  echo "== local-CI --docs: PASSED =="
+  exit 0
+fi
+
 echo "== environment =="
 "$PY" --version
 "$PY" -m ruff --version
 
 echo "== ruff (lint: E,F,W,I,B,UP,RUF) =="
-"$PY" -m ruff check src/ tests/
+"$PY" -m ruff check src/ tests/ tools/
+
+# Cheap, and a code push can move a file that a doc links to.
+echo "== markdown links =="
+"$PY" tools/check_md_links.py
 
 echo "== pytest (full suite) =="
 # tests/conftest.py sets QT_QPA_PLATFORM=offscreen via setdefault at import
