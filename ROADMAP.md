@@ -2383,6 +2383,10 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   (~/.cache/album-builder-demo), put PNGs in
   /mnt/Emulators/aph-handoff/album-builder/ with a one-line description
   each, and message that session. It already has the page corrections.
+  Follow-up done (2026-09-28): v0.9.0 released; Player-tab screenshots
+  (English + Arabic, demo library) put in
+  /mnt/Emulators/aph-handoff/album-builder/ and the Hub website session
+  messaged (mailbox id 145).
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 
