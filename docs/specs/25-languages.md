@@ -1,6 +1,6 @@
 # 25 — Languages, including right-to-left (i18n)
 
-**Status:** draft · **Last updated:** 2026-09-28 · **Roadmap:** MUSI-0368 · **Depends on:** 00, 09, 10, 11, 16, 19 · **Amends:** 09, 10, 16, 23, 24
+**Status:** accepted (2026-09-28), not yet implemented · **Last updated:** 2026-09-28 · **Roadmap:** MUSI-0368 · **Depends on:** 00, 09, 10, 11, 16, 19 · **Amends:** 09, 10, 16, 23, 24
 
 > **Cold-eyes loop log:**
 > **Loop 1 (2026-09-28, review-contract):** 2 `review-lane` lanes, each holding every
@@ -11,6 +11,15 @@
 > `i18n.SUPPORTED` (the literal-list reason did not hold); TC-25-07 allow-list; TC-25-11
 > made observable; report date pattern `d MMMM yyyy` so English is unchanged (measured;
 > raised as an open question by both lanes).
+>
+> **Loop 2 (2026-09-28, cap 2 for a spec):** 2 fresh cold lanes, same brief. Q1 1 · Q2 1 ·
+> Q3 2 — verified 4 / fixed 4 / dismissed 1. Fixed: `dd` day pattern (loop 1's `d` lost
+> the leading zero; both lanes); `SUPPORTED` stated as the fixed set; the `ui` block's
+> two writers carry each other's field forward (theme switch would reset the language);
+> bundled-font coverage named and tested (TC-25-12; both lanes). Dismissed,
+> non-material: the header's Amends list omits 19, which §Cross-spec amendments lists.
+> Cap reached. 1 of 4 final findings landed on loop-1 text (the date pattern): a calm
+> cap. Accepted 2026-09-28.
 
 To be implemented in a new `src/album_builder/i18n.py`, a new
 `src/album_builder/translations/` directory of JSON catalogs, the language resolution
@@ -45,8 +54,8 @@ template.
   string to its translation. One per supported language. The reserved key
   `"@language_name"` holds the language's name in its own script ("Deutsch",
   "العربية"), used by the menu.
-- **Language code** — one of `en`, `af`, `ar`, `he`, `es`, `fr`, `de`, `pt`. The
-  supported set is exactly the codes with a catalog, plus `en`.
+- **Language code** — one of `en`, `af`, `ar`, `he`, `es`, `fr`, `de`, `pt`: the fixed
+  tuple `i18n.SUPPORTED`. Every non-`en` code in it has a catalog.
 - **Active language** — resolved once at startup, before any widget is built, and fixed
   for the life of the process.
 - **RTL language** — `ar` and `he`. For these the application's layout direction is
@@ -101,6 +110,11 @@ layering rule behind `ALLOWED_THEMES`' literal list does not apply); anything el
 as `"system"`. `write_ui` writes it back beside
 `theme`.
 
+**Every write of the `ui` block carries the other fields forward.** Today the theme
+handler builds a fresh `UiSettings` from its own fields, which would reset `language`
+to `"system"` on every theme switch. Both the theme and the language handlers write
+`dataclasses.replace(read_ui(), <field>=<value>)`, so neither undoes the other.
+
 ### `app.py` — resolution at startup
 
 After `QApplication` is constructed and before the single-instance lock hands off or
@@ -121,10 +135,11 @@ The Jinja environment gets `_ = i18n.tr` as a global, and every piece of fixed t
 the template becomes `{{ _("...") }}`. The root element becomes
 `<html lang="{{ lang }}" dir="{{ dir }}">`, with `lang` the active code and `dir`
 `"rtl"` or `"ltr"`. `approved_date_human` comes from
-`QLocale(code).toString(date, "d MMMM yyyy")` (a Python `date` is accepted), which
-keeps today's English form and names the month in the active language. Measured
-2026-09-28: `en` gives "28 September 2026", as `strftime("%d %B %Y")` does now; `he`
-gives "28 ספטמבר 2026"; `ar` gives Arabic month and digits. Qt's `LongFormat` is not
+`QLocale(code).toString(date, "dd MMMM yyyy")` (a Python `date` is accepted), which
+keeps today's English form, leading zero included, and names the month in the active
+language. Measured 2026-09-28: `en` gives "08 September 2026" for the 8th, as
+`strftime("%d %B %Y")` does now; `he` gives "28 ספטמבר 2026"; `ar` gives Arabic month
+and digits. Qt's `LongFormat` is not
 used: for `en` it gives "Monday, September 28, 2026", which would change the English
 report. The report's file name keeps its ISO date and is not
 translated (Spec 10 §Atomic pair keys on it).
@@ -218,7 +233,11 @@ Each is edited in the same change set as this spec's implementation.
 - **Spec 19**: the *View* menu gains *Language* after *Theme*.
 - **Specs 23 and 24** (AppImage, Windows bundle): the `translations/` directory ships
   with the package, as `services/templates/` does. The PyInstaller spec must list it
-  as data; the AppImage copies the package tree and needs no change beyond a check.
+  as data; the AppImage copies the package tree. Both bundles draw every glyph from
+  the one bundled `DejaVuSans.ttf` (the AppImage's fontconfig lists only its own
+  fonts directory), so that font must cover every character in every catalog —
+  TC-25-12. Measured 2026-09-28: `fc-query` on this machine's `DejaVuSans.ttf` lists
+  `ar` and `he`.
 
 ## Test contract
 
@@ -254,13 +273,19 @@ marker.
 - **TC-25-09** — Menu: *View > Language* lists "System default" then one action per
   `SUPPORTED` code labelled with `language_name`; triggering "Deutsch" writes
   `ui.language == "de"` and shows the restart toast; triggering the checked action
-  writes nothing.
+  writes nothing. After picking "Deutsch", switching theme leaves `ui.language == "de"`,
+  and picking a language leaves `ui.theme` unchanged.
 - **TC-25-10** — Report: rendered with `he` active, the HTML root carries `lang="he"`
   and `dir="rtl"`, a fixed heading appears in Hebrew, and the PDF renders to a
   non-empty file.
 - **TC-25-11** — Qt's own strings: with `de` active, a `qtbase_de` translator is
   installed (`QApplication` translation of `"&Yes"` in context `QPlatformTheme` is not
   `"&Yes"`); with `af` active, startup completes and that translation is `"&Yes"`.
+- **TC-25-12** — Font coverage: every character in every catalog's values is in the
+  character map of the `DejaVuSans.ttf` that `fc-match -f '%{file}' "DejaVu Sans"`
+  returns (read with `fontTools`, already a WeasyPrint dependency). The test skips, and
+  says so, where no DejaVu Sans is installed. *Breaks if:* a catalog gains a script the
+  bundled font cannot draw, which would show as empty boxes in the AppImage.
 
 ## Out of scope
 
