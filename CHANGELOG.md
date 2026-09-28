@@ -8,6 +8,10 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-09-28
+
+**Theme:** The window fits smaller screens.
+
 ### Fixed
 
 - **The window now fits on smaller screens.** (MUSI-0381)
