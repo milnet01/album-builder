@@ -15,10 +15,11 @@ right.](docs/screenshots/album-builder-curate.png)
 
 ## Status
 
-**v0.9.0 (2026-09-28): the app speaks more languages, including Arabic
-and Hebrew, which mirror the window right to left.** The Player tab has
-its own music library. You can choose your music folder from the File
-menu, and bring back an album you deleted.
+**v0.9.1 (2026-09-28): better wording in every language, and a smoother
+shutdown.** It builds on v0.9.0, where the app learned more languages,
+including Arabic and Hebrew, which mirror the window right to left. The
+Player tab has its own music library. You can choose your music folder
+from the File menu, and bring back an album you deleted.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for what changed in each release.
 

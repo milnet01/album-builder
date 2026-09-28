@@ -8,7 +8,15 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-28
+
+**Theme:** Better translations, and a smoother shutdown.
+
 ### Fixed
+
+- **Closing the app no longer waits on your desktop's media controls.** (MUSI-0367)
+  The app now disconnects from the desktop's play/pause controls before
+  it stops the music, so closing it cannot get stuck there.
 
 - **The "WhisperX not installed" message now appears in your language.** (MUSI-0370)
   It was the one message still shown in English. The install help
