@@ -2511,6 +2511,20 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 
 - 📋 [MUSI-0367] **The test suite hung once in the pre-push gate and did not reproduce.**
   2026-09-25: the pre-push gate's pytest (dbus-run-session, offscreen,\nin a ~/.cache/pre-push/tmp.* worktree) sat 10+ minutes in a futex wait\nat about 1.8% CPU. The stack was lost: the push output was piped to\n`tail -1`. Three reruns of the same command passed in 13-24 s.\nAnother project's pre-push gate was running at the same time. It\nmatches the class of the FFmpeg-backend teardown deadlock noted in\npyproject.toml. An earlier push that day was also rejected once, with\nno visible reason. faulthandler_timeout = 120 is now set in\npyproject.toml. The next hang prints every thread's stack - read that\nbefore guessing.
+  Reproduced (2026-09-28 15:31, pre-push gate for 42e4dbc, machine load
+  average ~19): the 120 s stack dump fired at ~84% of the suite. The
+  main thread was blocked in MprisService._send (mpris.py,
+  self._bus.send(msg)) <- _emit_properties_changed <- _on_state_changed
+  <- Player._on_playback_state <- Player.stop <- MainWindow.closeEvent
+  <- pytest-qt _close_widgets, during a test's teardown. The other
+  thread had no Python frame (likely Qt's D-Bus thread). So
+  QDBusConnection.send on the private dbus-run-session bus blocked for
+  10+ minutes. Oddity: the dumped pytestqt frames came from
+  /mnt/Games/Scripts/Linux/Music_Production/.venv, not this venv;
+  unexplained so far. Full log:
+  ~/.cache/album-builder-ci/hang-2026-09-28.log. Leads: skip MPRIS emits
+  once closeEvent starts (unregister before player.stop), or give the
+  test session no MPRIS bus unless AB_INTEGRATION_DBUS is set.
   **Layman:** Once, the automatic checks that run before each upload froze instead of finishing; we added a watchdog so the next freeze explains itself.
   Kind: investigate.
   Source: in-session-2026-09-25 pre-push hang.
