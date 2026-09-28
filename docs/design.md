@@ -37,9 +37,10 @@ Source lives in `src/album_builder/`.
 - **domain** depends on nothing in the app, and never imports PyQt6.
 - **persistence** may import domain, `i18n`, and PyQt6's `QtCore` (for the
   debounce timer) — never `QtWidgets`, services or ui.
-- **services** may import domain, persistence and `i18n`, and never ui. One
-  current breach, `services/alignment_status.py` importing `Glyphs` from
-  `ui/theme.py`, is MUSI-0383.
+- **services** may import domain, persistence and `i18n`, and never ui. Two
+  current breaches are MUSI-0383: `services/alignment_status.py` imports
+  `Glyphs` from `ui/theme.py`, and `services/mpris.py` imports
+  `bring_to_front` from `ui/window_util.py` inside `Raise()`.
 - **ui** may import services, domain and `i18n`. It reaches persistence
   only from `ui/main_window.py`, for settings, app state and reading a
   lyrics file.
@@ -58,9 +59,10 @@ Source lives in `src/album_builder/`.
   folder or temp file, then renamed into place.
 - **Song files are read-only.** The only files the app adds to the music
   folder are lyrics sidecars (`<song>.lrc`, `.lrc.bak`).
-- **Saved-file versions** — each JSON file carries `schema_version` and
-  loads through `persistence/schema.py`, which upgrades older files forward
-  and refuses newer ones.
+- **Saved-file versions** — each JSON file carries `schema_version`.
+  Albums, app state and playlists load through `persistence/schema.py`,
+  which upgrades older files forward and refuses newer ones. Settings only
+  stamp the version on save, and do not check it on load (MUSI-0384).
 - **Errors** — a service reports a failure through a signal or a return
   value; the ui shows it as a toast or dialog. No exception may leave a Qt
   slot: on Windows an escaping exception ends the app (MUSI-0379).
@@ -106,4 +108,4 @@ exist). The specs hold the reasoning for past choices.
 
 ## Cold-eyes loop log
 
-Kept in `docs/reviews/`, beside this project's other review records.
+Kept in [`docs/reviews/C-20260928-design.md`](reviews/C-20260928-design.md).

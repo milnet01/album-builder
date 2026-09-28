@@ -221,9 +221,24 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   layers may use, keep ui.theme re-exporting it so ui imports do not
   change, and delete the exception from docs/design.md. The owner chose
   the fix over a standing exception (2026-09-28).
+  Scope widened (2026-09-28, review of docs/design.md): a second
+  services->ui import, services/mpris.py Raise() does a function-level
+  import of bring_to_front from ui/window_util.py. A line-anchored grep
+  misses imports inside functions; search with leading whitespace
+  allowed.
   **Layman:** Tidy-up so the app's background code no longer borrows icons from the screen code.
   Kind: refactor.
   Source: design-2026-09-28.
+
+- 📋 [MUSI-0384] **settings.json does not go through the schema runner, so a newer file is read silently.**
+  persistence/settings.py stamps SETTINGS_SCHEMA_VERSION on save but
+  _read_settings_dict only json.loads it: no migrate_forward, no refusal
+  of a newer version (albums, state and playlists do use
+  persistence/schema.py). Found by both review lanes on docs/design.md.
+  Wire settings through the runner before any settings v2.
+  **Layman:** An older copy of the app could quietly misread or overwrite settings saved by a newer one.
+  Kind: fix.
+  Source: review-contract-2026-09-28 design.md loop 1.
 
 ## 0.9.3 — Window fits smaller screens
 
