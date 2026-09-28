@@ -15,13 +15,10 @@ right.](docs/screenshots/album-builder-curate.png)
 
 ## Status
 
-**v0.8.1 (2026-09-25): the Linux download is back, and song titles and
-small buttons display properly.** It builds on v0.8.0, where many more
-music file types started working properly:
-FLAC, Ogg, Opus, M4A, WMA, WAV and AIFF files now show their song
-details, artwork and volume levelling, not just MP3. AAC, AIFF, `.oga`
-and WMA files are now picked up too. Dragging a track to reorder an
-album is clearer.
+**v0.9.0 (2026-09-28): the app speaks more languages, including Arabic
+and Hebrew, which mirror the window right to left.** The Player tab has
+its own music library. You can choose your music folder from the File
+menu, and bring back an album you deleted.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for what changed in each release.
 

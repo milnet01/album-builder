@@ -8,9 +8,13 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-28
+
+**Theme:** More languages including Arabic and Hebrew, a Player-tab library, and choosing your music folder.
+
 ### Added
 
-- **Choose your music folder from inside the app.** (MUSI-0357)
+- **Choose your music folder from inside the app.** (part of MUSI-0357)
   Use File > Choose Music Folder..., and your library reloads straight
   away. When no music is found, the library shows a friendly message
   with a button to pick the right folder, so a fresh install no longer
@@ -24,14 +28,14 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
   Approval reports come out in the chosen language too. The translations
   are AI drafts, not yet checked by native speakers.
 
-- **The Player tab now has its own music library.** (MUSI-0356)
+- **The Player tab now has its own music library.** (part of MUSI-0356)
   Search and browse your songs right in the Player, without switching
   to the Album Builder tab. Double-click a song, or press Enter, to play
   from there. Right-click for play next, add to queue and playlists.
   Both tabs show the same songs and update together. The song details
   now read Title, Artist, Album, like most music players.
 
-- **You can now bring back an album you deleted.** (MUSI-0357)
+- **You can now bring back an album you deleted.** (part of MUSI-0357)
   Choose File > Restore Deleted Album, pick it from the list, and it
   returns exactly as it was, with its tracks, order and reports.
 
