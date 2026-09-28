@@ -235,6 +235,29 @@ def qt_stylesheet(p: Palette) -> str:
         padding: 5px 12px;
         color: {p.text_primary};
     }}
+    /* Tabs: without these rules Windows draws its native white tabs with
+       pale labels (MUSI-0382). */
+    QTabWidget::pane {{
+        background-color: {p.bg_base};
+        border: 1px solid {p.border};
+    }}
+    QTabBar::tab {{
+        background-color: {p.bg_elevated};
+        color: {p.text_secondary};
+        border: 1px solid {p.border};
+        border-bottom: none;
+        border-top-left-radius: 5px;
+        border-top-right-radius: 5px;
+        padding: 5px 12px;
+        margin-right: 2px;
+    }}
+    QTabBar::tab:selected {{
+        background-color: {p.bg_pane};
+        color: {p.text_primary};
+    }}
+    QTabBar::tab:hover {{
+        color: {p.text_primary};
+    }}
     /* Fixed-width glyph buttons (24-28 px). The 12 px side padding above left
        them no room, so the glyph was clipped to a sliver or vanished
        (MUSI-0366). A button opts in with setProperty("glyphButton", True). */
