@@ -169,6 +169,7 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
   (a) `LyricsPanel` does **not** call `setFixedHeight`; it calls `setMinimumHeight(150)` instead.
   (b) `NowPlayingPane` adds the lyrics panel to its `QVBoxLayout` with non-zero stretch and does **not** add a competing `addStretch()` after it, so the lyrics panel absorbs the leftover vertical space.
   (c) Measurable assertion: with a `qtbot.addWidget(now_playing_pane)` + `now_playing_pane.resize(420, 800)` + `qApp.processEvents()`, `lyrics_panel.height()` is at least `300` (i.e. at least 2x the 150 px minimum — the panel actually grew rather than just being allowed to). On the offscreen pytest-qt platform, geometry is finalised after `resize()` + a processed event-loop tick; no `show()` is required for `height()` to return a non-zero value once the layout has run.
+- **TC-07-17** — A missing WhisperX runtime is a signal, not a sentence: `AlignmentWorker` emits `runtime_missing` before `failed`, `AlignmentService` forwards it as `runtime_missing(path)`, and `MainWindow` shows the install dialog from that signal only, once per session. The `failed` message is translated; no code matches its wording. Test: `tests/ui/test_TC_07_17_whisperx_missing_signal.py`.
 
 (Slow-integration "real alignment" tests stay opt-in / `@pytest.mark.slow` — they're not part of the default test contract.)
 

@@ -10,6 +10,10 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Fixed
 
+- **The "WhisperX not installed" message now appears in your language.** (MUSI-0370)
+  It was the one message still shown in English. The install help
+  still appears once, the first time lyrics syncing needs it.
+
 - **Better wording in every translated language.**
   A second proofread corrected words that read oddly or wrongly: the
   exported song links no longer share a name with keyboard shortcuts,

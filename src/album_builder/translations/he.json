@@ -166,6 +166,7 @@
  "Volume Levelling (ReplayGain)": "איזון עוצמת קול (ReplayGain)",
  "Warnings:\n{warnings}": "אזהרות:\n{warnings}",
  "WhisperX not installed": "‏WhisperX אינו מותקן",
+ "WhisperX not installed. Install via: {command}": "‏WhisperX אינו מותקן. התקינו באמצעות: {command}",
  "composed by {composer}": "הלחין {composer}",
  "composer: {composer}": "מלחין: {composer}",
  "could not write LRC: {error}": "לא ניתן לכתוב את קובץ ה־LRC: {error}",

@@ -33,6 +33,10 @@ class AlignmentWorker(QThread):
     progress = pyqtSignal(int)         # 0..100
     finished_ok = pyqtSignal(object)   # Type: Lyrics
     failed = pyqtSignal(str)
+    # WhisperX is not installed. Emitted before `failed`, so the UI decides
+    # on the install dialog from this state, never from the message text,
+    # which is translated (TC-07-17).
+    runtime_missing = pyqtSignal()
 
     def __init__(
         self,
@@ -65,10 +69,11 @@ class AlignmentWorker(QThread):
             logger.warning(
                 "AlignmentWorker: whisperx not installed for %s", self._track_path,
             )
-            self.failed.emit(
-                f"WhisperX not installed. Install via: "
-                f"{sys.executable} -m pip install whisperx"
-            )
+            self.runtime_missing.emit()
+            self.failed.emit(tr(
+                "WhisperX not installed. Install via: {command}",
+                command=f"{sys.executable} -m pip install whisperx",
+            ))
             return
         except Exception as exc:  # pragma: no cover — covered by integration tier
             logger.exception("AlignmentWorker failed for %s", self._track_path)

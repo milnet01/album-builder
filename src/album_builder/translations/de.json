@@ -166,6 +166,7 @@
  "Volume Levelling (ReplayGain)": "Lautstärkeausgleich (ReplayGain)",
  "Warnings:\n{warnings}": "Warnungen:\n{warnings}",
  "WhisperX not installed": "WhisperX ist nicht installiert",
+ "WhisperX not installed. Install via: {command}": "WhisperX ist nicht installiert. Installieren mit: {command}",
  "composed by {composer}": "komponiert von {composer}",
  "composer: {composer}": "Komponist: {composer}",
  "could not write LRC: {error}": "LRC konnte nicht geschrieben werden: {error}",

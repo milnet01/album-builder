@@ -235,12 +235,18 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: test.
   Source: check-queue-2026-09-28.
 
-- 📋 [MUSI-0370] **The WhisperX-missing toast stays English in every language.**
+- ✅ [MUSI-0370] **The WhisperX-missing toast stays English in every language.**
   alignment_worker emits "WhisperX not installed. Install via: ..."
   and MainWindow._looks_like_whisperx_missing matches its English words
   to decide whether to show the install dialog, so the string was left
   untranslated. Fix: signal the missing runtime as a state, not as text,
   then translate the message.
+  Resolved (2026-09-28): AlignmentWorker emits runtime_missing,
+  AlignmentService forwards it with the path, and MainWindow shows the
+  install dialog from that signal only (_looks_like_whisperx_missing
+  deleted). The failed message is now tr() and added to all seven
+  catalogs. TC-07-17: 3 tests, red before, green after; 3 full gate runs
+  green (937 passed).
   **Layman:** One rare error message still shows in English; fix how it is detected so it can be translated.
   Kind: fix.
   Source: in-session-2026-09-28.

@@ -20,6 +20,7 @@ class FakeWorker(QThread):
     progress = pyqtSignal(int)
     finished_ok = pyqtSignal(object)
     failed = pyqtSignal(str)
+    runtime_missing = pyqtSignal()
 
     def __init__(self, track_path: Path, lyrics_text: str, model_size: str = "medium.en"):
         super().__init__()

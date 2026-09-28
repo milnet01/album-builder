@@ -166,6 +166,7 @@
  "Volume Levelling (ReplayGain)": "Normalização do volume (ReplayGain)",
  "Warnings:\n{warnings}": "Avisos:\n{warnings}",
  "WhisperX not installed": "WhisperX não está instalado",
+ "WhisperX not installed. Install via: {command}": "WhisperX não está instalado. Instale com: {command}",
  "composed by {composer}": "composta por {composer}",
  "composer: {composer}": "compositor: {composer}",
  "could not write LRC: {error}": "não foi possível gravar o LRC: {error}",

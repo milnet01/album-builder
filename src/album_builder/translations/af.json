@@ -166,6 +166,7 @@
  "Volume Levelling (ReplayGain)": "Volumegelykmaking (ReplayGain)",
  "Warnings:\n{warnings}": "Waarskuwings:\n{warnings}",
  "WhisperX not installed": "WhisperX is nie geïnstalleer nie",
+ "WhisperX not installed. Install via: {command}": "WhisperX is nie geïnstalleer nie. Installeer dit met: {command}",
  "composed by {composer}": "gekomponeer deur {composer}",
  "composer: {composer}": "komponis: {composer}",
  "could not write LRC: {error}": "kon nie LRC skryf nie: {error}",

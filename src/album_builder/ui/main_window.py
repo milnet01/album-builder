@@ -202,6 +202,7 @@ class MainWindow(QMainWindow):
         self._alignment.progress.connect(self._on_alignment_progress)
         self._alignment.lyrics_ready.connect(self._on_lyrics_ready)
         self._alignment.error.connect(self._on_alignment_error)
+        self._alignment.runtime_missing.connect(self._on_whisperx_missing)
         # Surface a single helpful dialog the first time WhisperX is
         # missing — same shape as the codec-class dialog for Spec 06.
         self._whisperx_dialog_shown = False
@@ -1182,7 +1183,11 @@ class MainWindow(QMainWindow):
 
     def _on_alignment_error(self, _path: Path, msg: str) -> None:
         self._toast.show_message(tr("Alignment failed: {error}", error=msg))
-        if self._looks_like_whisperx_missing(msg) and not self._whisperx_dialog_shown:
+
+    def _on_whisperx_missing(self, _path: Path) -> None:
+        # Driven by AlignmentService.runtime_missing, never by the (translated)
+        # error text (TC-07-17).
+        if not self._whisperx_dialog_shown:
             # Anchor the install hint at sys.executable so it lands in the
             # app's own venv regardless of dev-tree vs installed location;
             # bare `pip install` would target the system Python and on
@@ -1203,11 +1208,6 @@ class MainWindow(QMainWindow):
                 ),
             )
             self._whisperx_dialog_shown = True
-
-    @staticmethod
-    def _looks_like_whisperx_missing(msg: str) -> bool:
-        m = msg.lower()
-        return "whisperx" in m and ("not installed" in m or "no module" in m)
 
     def _on_player_error(self, msg: str) -> None:
         self._toast.show_message(msg)

@@ -83,6 +83,7 @@ class AlignmentService(QObject):
     progress = pyqtSignal(object, int)           # Type: (Path, percent 0..100)
     lyrics_ready = pyqtSignal(object, object)    # Type: (Path, Lyrics)
     error = pyqtSignal(object, str)              # Type: (Path, message)
+    runtime_missing = pyqtSignal(object)         # Type: Path - WhisperX absent
 
     def __init__(
         self,
@@ -138,6 +139,7 @@ class AlignmentService(QObject):
         worker.progress.connect(lambda p, _path=path: self.progress.emit(_path, p))
         worker.finished_ok.connect(lambda lyrics, _path=path: self._on_finished(_path, lyrics))
         worker.failed.connect(lambda msg, _path=path: self._on_failed(_path, msg))
+        worker.runtime_missing.connect(lambda _path=path: self.runtime_missing.emit(_path))
         # Cleanup hook: drop the worker reference when the thread ends.
         worker.finished.connect(lambda _path=path: self._workers.pop(_path, None))
 

@@ -166,6 +166,7 @@
  "Volume Levelling (ReplayGain)": "موازنة مستوى الصوت (ReplayGain)",
  "Warnings:\n{warnings}": "تحذيرات:\n{warnings}",
  "WhisperX not installed": "‏WhisperX غير مثبّت",
+ "WhisperX not installed. Install via: {command}": "‏WhisperX غير مثبّت. ثبّته بالأمر: {command}",
  "composed by {composer}": "من تلحين {composer}",
  "composer: {composer}": "الملحّن: {composer}",
  "could not write LRC: {error}": "تعذّرت كتابة ملف LRC: {error}",
