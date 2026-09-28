@@ -1,6 +1,6 @@
 # 18 — Player-mode surface (ui)
 
-**Status:** Implemented (Phase E of the music-player epic) · **Last updated:** 2026-07-18 · **Depends on:** 00, 01, 06, 07, 11, 14, 15, 16, 17 (references Spec 10 persistence but does not extend it) · **Blocks:** music-player Phases F-G
+**Status:** Implemented (Phase E of the music-player epic); **amended 2026-09-28 for Phase MP-2 (MUSI-0356), amendment not yet implemented** · **Last updated:** 2026-09-28 · **Depends on:** 00, 01, 06, 07, 11, 14, 15, 16, 17 (references Spec 10 persistence but does not extend it) · **Blocks:** music-player Phases F-G
 
 > **Cold-eyes loop log (2026-07-04):** 5 loops, 3 independent reviewers per loop
 > (services-signals / UI-composition / cross-spec+tests lenses), all briefed cold (no
@@ -38,6 +38,13 @@ signals in `src/album_builder/services/player.py` and
 `src/album_builder/ui/main_window.py`. `NowPlayingPane` (curation) is refactored to
 consume the extracted card but keeps its public surface. Tests in `tests/ui/` and
 `tests/services/`.
+
+**Phase MP-2 amendment (MUSI-0356, 2026-09-28).** The Player tab gains its own
+library view: a second `LibraryPane`, built in a new player mode, over the same
+shared `Library`. It becomes the left-most column of `PlayerPane`. The now-playing
+card's metadata order becomes Title / Artist / Album. Touches
+`src/album_builder/ui/library_pane.py`, `ui/player_pane.py`, `ui/now_playing_card.py`
+and `ui/main_window.py`; clauses are marked *(MP-2)*, with TC-18-25..32 and INV-18-2.
 
 The A-G phase letters used throughout this spec are defined in the
 **Fully-featured music player mode** epic bullet under `ROADMAP.md` heading
@@ -104,15 +111,17 @@ signal its own action emits) with an identical visible result.
 - **`NowPlayingCard`** — the cover-image + title/album/artist/composer/comment block
   (not the pane's "Now playing" section title, which each host pane keeps), extracted
   from `NowPlayingPane` into its own widget so both the curation pane and the Player
-  pane render identical metadata from one implementation. Owns the `set_track` /
+  pane render identical metadata from one implementation. *(MP-2)* Its labels run
+  top to bottom Title, Artist, Album, then composer and comment — the order common
+  players use (Spotify, Apple Music, foobar2000). Owns the `set_track` /
   `_set_cover` logic for the cover + metadata labels (including the cover-decode
   fallbacks) that currently lives inline in `now_playing_pane.py`. It owns **no**
   lyrics panel, so the L7-M5 clear-stale-lyrics-on-None behavior (the
   `# L7-M5` code comment in `now_playing_pane.py`) is **not** part of the card — that
   stays with `NowPlayingPane`, which owns the lyrics panel (see §Public API).
 - **`PlayerPane`** — the Player tab's content widget: a horizontal split with the
-  now-playing card + full transport on the left, and synced lyrics over an
-  Up Next / Playlists tab group on the right. It *composes* existing widgets; it owns
+  Player library on the left *(MP-2)*, the now-playing card + full transport in the
+  middle, and synced lyrics over an Up Next / Playlists tab group on the right. It *composes* existing widgets; it owns
   no playback state and adds no queue/playlist logic.
 - **Broadcast signal (state owner announces its own change)** — the mechanism that
   keeps two transports coherent. The state owner (`Player` for volume/mute,
@@ -126,6 +135,13 @@ signal its own action emits) with an identical visible result.
   `set_repeat` emit **unconditionally** (no guard); they are loop-safe because the
   subscriber updates a checkable button via `setChecked` / `_sync_repeat_glyph`, which
   fire `toggled`, not the wired `clicked`, so the update never re-invokes the setter.
+- **Player library** *(MP-2)* — a second `LibraryPane` instance constructed with
+  `player_mode=True`, owned by `MainWindow` as `player_library_pane` and reparented into
+  `PlayerPane`. It is a *view*, not a copy: both library panes are fed from the one
+  `LibraryWatcher`, so a library rescan refreshes both (INV-18-2). Player mode drops the
+  curation-only columns and turns row activation into "play from here"; everything
+  else — search, sorting, the per-row play button, the context menu — is the curation
+  pane's behaviour unchanged.
 - **Curation preview unchanged** — the curation tab keeps its `NowPlayingPane`
   (cover + lyrics + transport) and every Spec 06 preview behavior (row-body-click
   metadata, per-row play glyph). Phase E adds a *second* surface; it moves nothing off
@@ -256,7 +272,9 @@ surface:
   panel; the lyrics clear stays with whoever owns the panel — see `NowPlayingPane`
   below and the `MainWindow` fan-out). On `None`: clears cover + all metadata labels
   and shows the placeholder. On a track: hides the placeholder, sets cover via
-  `_set_cover`, sets title/album/artist and the composer/comment secondary lines.
+  `_set_cover`, sets title/artist/album and the composer/comment secondary lines.
+  *(MP-2)* Layout order top to bottom: cover, `title_label`, `artist_label`,
+  `album_label`, `composer_label`, `comment_label`, `placeholder_label`.
 - Attributes preserved by name so tests and QSS still resolve: `cover_label`,
   `title_label`, `album_label`, `artist_label`, `composer_label`, `comment_label`,
   `placeholder_label`.
@@ -321,9 +339,10 @@ changing nothing for the acting bar. The volume slider still writes via
 
 ### `ui/player_pane.py` — `PlayerPane` (new)
 
-`PlayerPane(player: Player, controller: PlaybackController, queue_pane: QueuePane, playlists_pane: PlaylistsPane, parent=None)`
-— the Player tab content. `MainWindow` constructs `queue_pane` and `playlists_pane`
-(as today, so all their wiring stays in `MainWindow`) and hands them in; `PlayerPane`
+`PlayerPane(player: Player, controller: PlaybackController, queue_pane: QueuePane, playlists_pane: PlaylistsPane, library_pane: LibraryPane, parent=None)`
+— the Player tab content. `MainWindow` constructs `queue_pane`, `playlists_pane` and
+*(MP-2)* the player-mode `library_pane` (as today, so all their wiring stays in
+`MainWindow`) and hands them in; `PlayerPane`
 reparents them into its layout. It builds its own `NowPlayingCard`, `TransportBar`,
 and `LyricsPanel` (constructed the same way `NowPlayingPane` builds its own — with no
 palette argument). Public surface:
@@ -337,7 +356,10 @@ palette argument). Public surface:
   separate lyrics-clear call — see §Concepts → now-playing surface).
 
 Layout (a `QSplitter(Horizontal)`, `setChildrenCollapsible(False)`):
-- **Left** — a `QFrame` with `objectName="Pane"` (so the `QFrame#Pane` rule paints it
+- **Library** *(MP-2)* — the handed-in player-mode `library_pane`, first (left-most)
+  widget of the splitter. It is already a `QFrame#Pane`, so it needs no wrapper. It
+  sits where the curation tab puts its own library, so the two tabs read alike.
+- **Now playing** (was **Left** before MP-2) — a `QFrame` with `objectName="Pane"` (so the `QFrame#Pane` rule paints it
   `bg_pane`; a plain `QWidget` with `objectName="Pane"` would **not** match the
   `QFrame#Pane` *type* selector and would fall through to `bg_base`, leaving the
   transparent card on the wrong background) and a `QVBoxLayout`: `card` at top, a
@@ -356,6 +378,32 @@ modify the shared widgets (a later polish may suppress the inner title in tab co
 Splitter positions are **not** persisted this phase (YAGNI; the curation splitter's
 persistence in Spec 10 is untouched and not extended).
 
+### `ui/library_pane.py` — player mode *(MP-2)*
+
+`LibraryPane(parent=None, *, player_mode: bool = False)`. The default builds the
+curation pane exactly as today. `player_mode=True` changes three things and nothing
+else:
+
+- **Columns.** The `_toggle` and `_used` columns are hidden
+  (`table.setColumnHidden`). They belong to album curation: a tick adds a track to the
+  current album, and the badge counts approved albums. `COLUMNS` and the model are
+  unchanged, so column indices stay shared between the two modes.
+- **Activation plays.** `table.activated` (double-click, Enter / Return, or a single
+  click where the desktop style asks for single-click activation) on **any** column of
+  row *r* emits `play_tracks_requested(view_order_tracks(), r)` — "play from here" in
+  view order, honouring the search filter and sort. The curation pane keeps its
+  activation rule (only `_play` / `_toggle` react).
+- **No row-body preview.** A single click on a row body only selects the row;
+  `row_body_clicked` is not emitted. The Spec 06 preview-without-play rule exists to
+  let a curator read metadata without committing to playback. In the Player the row
+  is one activation away from playing, and a click that silently swapped the
+  now-playing card would fight the card showing what is playing.
+
+A player-mode pane is never given a `UsageIndex` (`set_usage_index` is not called).
+The model already treats a missing index as a count of zero for every role
+(`TrackTableModel.data`, the `_used` branch), so the hidden column stays safe to
+query and needs no change.
+
 ### `ui/main_window.py` — fan-out to both surfaces
 
 `MainWindow` changes, all additive except the Player-tab content swap:
@@ -367,6 +415,21 @@ persistence in Spec 10 is untouched and not extended).
 - **Player-tab content swap:** the tab previously added a hand-built `QWidget` stacking
   `playlists_pane` over `queue_pane`; it now adds `self._player_pane`:
   `self.tabs.addTab(self._player_pane, "Player")`. Tab 0 stays `"Album Builder"`.
+- *(MP-2)* Before `_player_pane`, construct
+  `self.player_library_pane = LibraryPane(player_mode=True)`, give it
+  `set_library(library_watcher.library())` and `set_playlists(...)`, and pass it to
+  `PlayerPane`. Wiring, each mirroring the curation pane's line for the same signal:
+  `library_watcher.tracks_changed -> set_library`,
+  `_playlist_store.changed -> set_playlists`,
+  `play_tracks_requested -> controller.play_tracks` (via the same handler the curation
+  pane uses), `enqueue_requested -> controller.enqueue`,
+  `play_next_requested -> controller.play_next`,
+  `preview_play_requested -> _on_preview_play`,
+  `add_to_playlist_requested -> _on_add_to_playlist`. Every place that pushes state to
+  `library_pane` for **playback or theme** — `set_active_play_state`,
+  `set_row_body_cursor_for_state`, `set_palette` — pushes it to both panes. The
+  curation-only pushes (`set_current_album`, `set_usage_index`, `selection_toggled`,
+  `row_body_clicked`) stay curation-only.
 - `self._surfaces = (self.now_playing_pane, self._player_pane)` and
   `self._lyrics_panels = tuple(s.lyrics_panel for s in self._surfaces)`.
 - **Fan-out helpers** replace the single-pane calls:
@@ -473,22 +536,23 @@ public surface (`set_track`, `lyrics_panel`, `transport`) are identical.
 ## UI surface
 
 ```
-PLAYER TAB  (horizontal splitter: left = now-playing + transport, right = lyrics over tabs)
-+-----------------------------+---------------------------------+
-|                             |  Synced lyrics (LyricsPanel)    |
-|      [   album art   ]      |  > current line (highlighted)   |
-|                             |    next line ...                |
-|   Title                     |                                 |
-|   Album                     |                                 |
-|   Artist                    +---------------------------------+
-|   composer: ... / comment   |  [ Up Next ] [ Playlists ]      |
-|                             |  1. track ...                   |
-| [sh][<][>||][>][rp] 0:00    |  2. track ...  (QueuePane /      |
-|   ==scrubber== 3:00 [m][vol]|                 PlaylistsPane)   |
-+-----------------------------+---------------------------------+
+PLAYER TAB  (horizontal splitter: library | now-playing + transport | lyrics over tabs)
++-------------------+-----------------------------+----------------------------+
+| Library      (MP-2)|                             |  Synced lyrics             |
+| [search........]  |      [   album art   ]      |  > current line            |
+| > Title  Artist.. |                             |    next line ...           |
+|   song 1 ...      |   Title                     |                            |
+|   song 2 ...      |   Artist                    +----------------------------+
+|   song 3 ...      |   Album                     |  [ Up Next ] [ Playlists ] |
+|   ...             |   composer: ... / comment   |  1. track ...              |
+|                   | [sh][<][>||][>][rp] 0:00    |  2. track ...              |
+|                   |   ==scrubber== 3:00 [m][vol]|                            |
++-------------------+-----------------------------+----------------------------+
 ```
 
-- Left column top-to-bottom: `NowPlayingCard` (cover + metadata), stretch, then the
+- Library column *(MP-2)*: the curation library's search box and table, minus the
+  tick and "Used" columns. Double-click or Enter plays from that song on.
+- Now-playing column top-to-bottom: `NowPlayingCard` (cover + metadata), stretch, then the
   full `TransportBar` row (shuffle, prev, play/pause, next, repeat, time, scrubber,
   duration, mute, volume — exactly the Spec 16 cluster).
 - Right column: `LyricsPanel` above a `QTabWidget` whose tabs are "Up Next"
@@ -499,6 +563,8 @@ PLAYER TAB  (horizontal splitter: left = now-playing + transport, right = lyrics
 - Accessibility: the tab labels "Up Next" / "Playlists" are the `QTabWidget` tab text
   (screen-reader-announced by Qt). All reused widgets keep their Spec 06/07/15/16/17
   accessible names; Phase E adds no new interactive control beyond the tab group.
+  *(MP-2)* The player library table's accessible description drops the toggle-column
+  sentence, since that column is hidden there.
 
 ## Inputs
 
@@ -597,6 +663,12 @@ superseded sites, each to be edited to reference Spec 18 as canonical:
 - Spec 16's own TCs (TC-16-01..13) are unaffected — they assert post-click button
   visuals, which still hold under the new signal path (the returning broadcast produces
   the identical visual); only the mechanism prose above is annotated, not the TCs.
+
+**Spec 15 (`15-library-playback-wiring.md`)** *(MP-2)*: §`ui/library_pane.py`
+additions describes the one curation pane. Add a note that a second, player-mode
+instance exists (Spec 18 §`ui/library_pane.py` — player mode), where activation emits
+`play_tracks_requested` and `row_body_clicked` is never emitted. Spec 06's TC-06-25
+(arrow keys do not preview) holds in both modes and is unchanged.
 
 Spec 00's spec index gains the Spec 18 row. No `domain/` or `persistence/` change.
 
@@ -716,7 +788,42 @@ Two-bar sync tests build two `TransportBar(player, controller)` on one real
   the same `set_muted -> muted_changed -> both bars` mechanism TC-18-06 exercises, and
   `_toggle_mute` simply calls `player.set_muted`, so no dedicated assertion is added.)
 
+- **TC-18-25** *(MP-2)* — `PlayerPane` places the handed-in library pane as the first
+  widget of its horizontal splitter; `MainWindow.player_library_pane` is that pane, is
+  constructed with `player_mode=True`, and is a different object from
+  `MainWindow.library_pane`.
+- **TC-18-26** *(MP-2)* — In a player-mode pane the `_toggle` and `_used` columns are
+  hidden and every other column is shown; in a curation pane no column is hidden.
+- **TC-18-27** *(MP-2, INV-18-2)* — Both library panes list the same tracks at
+  startup, and after `library_watcher.tracks_changed` emits a changed `Library` both
+  list the new set.
+- **TC-18-28** *(MP-2)* — Activating row *r* of a player-mode pane on the title
+  column (and on the duration column) emits `play_tracks_requested` with
+  `(view_order_tracks(), r)`; with a search filter applied the list is the filtered
+  view. `MainWindow` routes it to `controller.play_tracks`. Activating the title
+  column of a curation pane emits nothing (unchanged).
+- **TC-18-29** *(MP-2)* — A single click on a player-mode row body emits no
+  `row_body_clicked` and leaves both now-playing cards unchanged.
+- **TC-18-30** *(MP-2)* — The player library's context-menu actions reach the same
+  controller calls as the curation pane's ("Add to queue" -> `enqueue`), and its
+  "Add to playlist" submenu lists the stored playlists.
+- **TC-18-31** *(MP-2)* — The active-row play glyph and a theme switch reach both
+  library panes: after `set_active_play_state` fans out, both models report the same
+  active path.
+- **TC-18-32** *(MP-2)* — `NowPlayingCard`'s layout holds, top to bottom,
+  `cover_label`, `title_label`, `artist_label`, `album_label`, `composer_label`,
+  `comment_label`, `placeholder_label`.
+- **INV-18-2** *(MP-2)* — Every `Library` either library pane shows came from the one
+  `LibraryWatcher`; neither pane holds a track list another source feeds. *Breaks if:*
+  the player pane is seeded once at construction and never connected to
+  `tracks_changed` — it then shows a stale library after a rescan. *Test:* TC-18-27.
+
 ## Out of scope (later phases)
+
+- *(MP-2)* The "Add music" on-ramp (drag-and-drop or a picker that copies files into
+  the tracks folder). It writes into the user's `Tracks/`, which the project treats as
+  untouchable without explicit confirmation, so it is its own item, not part of MP-2.
+- *(MP-2)* Persisting the Player library's sort, filter or column widths.
 
 - Gapless / crossfade playback and equaliser / ReplayGain (Phase F; the gapless spike
   outcome is recorded in Spec 16 §Gapless investigation).

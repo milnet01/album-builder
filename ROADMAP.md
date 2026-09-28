@@ -2364,6 +2364,12 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   - **Phase MP-6 — Mini / compact player.** A small always-on-top compact window or bar for background listening. (WinAmp mini-mode; Spotify miniplayer.)
   - **Phase MP-7 — Audiophile engine (BIG — blocked on retiring `QMediaPlayer`).** Graphic equalizer + presets, gapless playback, crossfade, ReplayGain pre-amp, and optional visualizer/spectrum. All of these require replacing QtMultimedia's `QMediaPlayer` with a raw `QAudioSink` / GStreamer / miniaudio pipeline (per the 2026-07-18 Phase F audio-effects spike) — its own multi-phase, higher-risk sub-epic. (WinAmp EQ + visualizer; audiophile players' gapless/crossfade.)
   - **Phase MP-8 — Extras (survey; pick as desired).** Sleep timer, playback speed / pitch, A-B repeat, "play next" / queue history, drag-and-drop files or folders to enqueue (distinct from the library-add drop in MP-2), expanded global keyboard shortcuts, context-menu "go to album / artist", and optional Last.fm scrobbling. **Out of scope (carry-forward from the A-G epic):** streaming / Spotify integration, CD ripping, bulk tag editing, Discord presence.
+  Decisions (2026-09-28, with the user): Phase MP-2 (Player tab's
+  own library) moves up and is next, ahead of MP-1, on the user's ask:
+  "The player still doesn't have a library of its own (should replicate
+  the Album Builder tab)." MP-2 also switches the now-playing detail
+  order to Title / Artist / Album, the common order. Languages
+  (MUSI-0368) follow MP-2.
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 
@@ -2481,3 +2487,17 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   Kind: investigate.
   Source: in-session-2026-09-25 pre-push hang.
   Lanes: tests.
+
+- 📋 [MUSI-0368] **Multiple languages, including right-to-left ones.**
+  User request 2026-09-28: "The app also need to be in multiple
+  languages please. Including RTL languages." Touches every UI string,
+  the menus, the reports (Jinja templates), dates and numbers, and the
+  whole layout (RTL mirrors it). Spec-worthy under spec-format §1 (three
+  or more subsystems). Open question for the user: which languages.
+  Decisions (2026-09-28, with the user): first languages are
+  Afrikaans, Arabic, Hebrew, Spanish, French, German and Portuguese,
+  with English kept. Sequenced AFTER the player library (MUSI-0356
+  MP-2) so its new strings are translated once.
+  **Layman:** Let people use the app in their own language, including Arabic and Hebrew, which read right to left.
+  Kind: feature.
+  Source: user-request-2026-09-28.
