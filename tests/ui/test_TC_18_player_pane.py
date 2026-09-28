@@ -13,7 +13,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PyQt6.QtWidgets import QFrame, QTabWidget
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QFrame, QSplitter, QTabWidget
 
 from album_builder.domain.lyrics import LyricLine, Lyrics
 from album_builder.domain.play_queue import RepeatMode
@@ -23,6 +24,7 @@ from album_builder.services.album_store import AlbumStore
 from album_builder.services.library_watcher import LibraryWatcher
 from album_builder.services.playback_controller import PlaybackController
 from album_builder.services.player import Player
+from album_builder.ui.library_pane import LibraryPane
 from album_builder.ui.main_window import MainWindow
 from album_builder.ui.now_playing_card import NowPlayingCard
 from album_builder.ui.now_playing_pane import NowPlayingPane
@@ -222,7 +224,7 @@ def test_player_pane_construction_and_layout(qtbot) -> None:
     c = PlaybackController(p)
     qp = QueuePane()
     pp = PlaylistsPane()
-    pane = PlayerPane(p, c, qp, pp)
+    pane = PlayerPane(p, c, qp, pp, LibraryPane(player_mode=True))
     qtbot.addWidget(pane)
     assert pane.card is not None
     assert pane.transport is not None
@@ -234,14 +236,23 @@ def test_player_pane_construction_and_layout(qtbot) -> None:
     assert tabw.tabText(1) == "Playlists"
     assert pane.isAncestorOf(qp)
     assert pane.isAncestorOf(pp)
-    left_panes = [w for w in pane.findChildren(QFrame) if w.objectName() == "Pane"]
-    assert left_panes, "left column is a QFrame#Pane (guards bg_base regression)"
+    splitter = next(
+        s for s in pane.findChildren(QSplitter)
+        if s.orientation() == Qt.Orientation.Horizontal
+    )
+    now_playing = splitter.widget(1)
+    assert isinstance(now_playing, QFrame) and now_playing.objectName() == "Pane", (
+        "now-playing column is a QFrame#Pane (guards bg_base regression)"
+    )
+    assert now_playing.isAncestorOf(pane.card)
 
 
 # Spec: TC-18-13
 def test_player_pane_set_track(qtbot, tmp_path: Path) -> None:
     p = Player()
-    pane = PlayerPane(p, PlaybackController(p), QueuePane(), PlaylistsPane())
+    pane = PlayerPane(
+        p, PlaybackController(p), QueuePane(), PlaylistsPane(), LibraryPane(player_mode=True),
+    )
     qtbot.addWidget(pane)
     pane.set_track(_make_track(tmp_path))
     assert pane.card.title_label.text() == "Walking The Line"
@@ -255,7 +266,7 @@ def test_player_pane_set_track(qtbot, tmp_path: Path) -> None:
 def test_player_pane_transport_drives_shared_controller(qtbot, monkeypatch) -> None:
     p = Player()
     c = PlaybackController(p)
-    pane = PlayerPane(p, c, QueuePane(), PlaylistsPane())
+    pane = PlayerPane(p, c, QueuePane(), PlaylistsPane(), LibraryPane(player_mode=True))
     qtbot.addWidget(pane)
     assert pane.transport._controller is c
     calls: list = []

@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import QFrame, QSplitter, QTabWidget, QVBoxLayout, QWidget
 from album_builder.domain.track import Track
 from album_builder.services.playback_controller import PlaybackController
 from album_builder.services.player import Player
+from album_builder.ui.library_pane import LibraryPane
 from album_builder.ui.lyrics_panel import LyricsPanel
 from album_builder.ui.now_playing_card import NowPlayingCard
 from album_builder.ui.playlists_pane import PlaylistsPane
@@ -32,6 +33,7 @@ class PlayerPane(QWidget):
         controller: PlaybackController,
         queue_pane: QueuePane,
         playlists_pane: PlaylistsPane,
+        library_pane: LibraryPane,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -65,6 +67,9 @@ class PlayerPane(QWidget):
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
+        # Spec 18 MP-2: the Player tab's own library comes first, where the
+        # curation tab keeps its library.
+        splitter.addWidget(library_pane)
         splitter.addWidget(left)
         splitter.addWidget(right)
 

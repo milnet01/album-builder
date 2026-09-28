@@ -44,13 +44,14 @@ class NowPlayingCard(QFrame):
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.title_label)
 
-        self.album_label = QLabel("", objectName="NowPlayingMeta")
-        self.album_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.album_label)
-
+        # Spec 18 MP-2: Title / Artist / Album, the order common players use.
         self.artist_label = QLabel("", objectName="NowPlayingMeta")
         self.artist_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.artist_label)
+
+        self.album_label = QLabel("", objectName="NowPlayingMeta")
+        self.album_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.album_label)
 
         self.composer_label = QLabel("", objectName="NowPlayingMetaSecondary")
         self.composer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)

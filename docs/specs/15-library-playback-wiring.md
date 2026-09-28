@@ -294,6 +294,12 @@ additions `shuffle_changed` / `repeat_changed`):
 
 ### `ui/library_pane.py` additions
 
+> **Two instances since Spec 18 MP-2 (MUSI-0356).** A second, player-mode
+> `LibraryPane(player_mode=True)` sits on the Player tab (Spec 18 §`ui/library_pane.py`
+> — player mode). There, activation on any column emits `play_tracks_requested`
+> and `row_body_clicked` is never emitted. This section describes the curation pane;
+> the context menu below is identical in both. Spec 06's TC-06-25 holds in both.
+
 `LibraryPane` gains a right-click context menu on a table row with four actions
 and three new signals (the existing `preview_play_requested` /
 `selection_toggled` / `row_body_clicked` are unchanged):

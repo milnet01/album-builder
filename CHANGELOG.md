@@ -10,6 +10,13 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Added
 
+- **The Player tab now has its own music library.** (MUSI-0356)
+  Search and browse your songs right in the Player, without switching
+  to the Album Builder tab. Double-click a song, or press Enter, to play
+  from there. Right-click for play next, add to queue and playlists.
+  Both tabs show the same songs and update together. The song details
+  now read Title, Artist, Album, like most music players.
+
 - **You can now bring back an album you deleted.** (MUSI-0357)
   Choose File > Restore Deleted Album, pick it from the list, and it
   returns exactly as it was, with its tracks, order and reports.

@@ -2370,6 +2370,13 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   the Album Builder tab)." MP-2 also switches the now-playing detail
   order to Title / Artist / Album, the common order. Languages
   (MUSI-0368) follow MP-2.
+  Progress (2026-09-28), Phase MP-2: SHIPPED except the "Add music"
+  on-ramp. Spec 18 amended (review-contract loops 6-7, 8 findings fixed,
+  accepted at the cap) and built: LibraryPane(player_mode=True) is the
+  Player tab's left column over the shared LibraryWatcher; activation
+  plays from here; curation-only columns hidden; card order Title /
+  Artist / Album. TC-18-25..32. The Add-music drop/picker is deferred to
+  its own item: it writes into Tracks/, which needs its own decision.
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 

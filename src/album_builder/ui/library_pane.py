@@ -489,9 +489,12 @@ class LibraryPane(QFrame):
     # (playlist_id | None, list[Track]); None means "a new playlist".
     add_to_playlist_requested = pyqtSignal(object, object)  # Type: (str | None, list[Track])
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, player_mode: bool = False):
         super().__init__(parent)
         self.setObjectName("Pane")
+        # Spec 18 (MP-2): the Player tab's own library. Hides the curation-only
+        # columns, plays from the activated row, and never previews on click.
+        self._player_mode = player_mode
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -567,10 +570,18 @@ class LibraryPane(QFrame):
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._on_context_menu)
         self.table.setAccessibleName("Track library")
-        self.table.setAccessibleDescription(
-            "Searchable list of tracks. First column previews playback; "
-            "last column toggles inclusion in the current album.",
-        )
+        if player_mode:
+            self.table.setColumnHidden(toggle_col, True)
+            self.table.setColumnHidden(used_col, True)
+            self.table.setAccessibleDescription(
+                "Searchable list of tracks. Double-click a track or press Enter "
+                "to play from it. Click the first column to play or pause that track.",
+            )
+        else:
+            self.table.setAccessibleDescription(
+                "Searchable list of tracks. First column previews playback; "
+                "last column toggles inclusion in the current album.",
+            )
         layout.addWidget(self.table)
 
     def set_library(self, library: Library) -> None:
@@ -682,7 +693,9 @@ class LibraryPane(QFrame):
             return
         # Spec 06 TC-06-20/21: row-body click on any other column emits
         # row_body_clicked. MainWindow gates the preview behaviour on
-        # Player.state() == STOPPED.
+        # Player.state() == STOPPED. Player mode has no preview (Spec 18 MP-2).
+        if self._player_mode:
+            return
         track = self._model.track_at(row)
         self.row_body_clicked.emit(track.path)
 
@@ -691,6 +704,10 @@ class LibraryPane(QFrame):
         and _toggle columns; row-body activation is suppressed (Spec 06
         TC-06-25 — preview-without-play is mouse-click-only)."""
         if not view_index.isValid():
+            return
+        if self._player_mode:
+            # Spec 18 MP-2: activation on any column plays from this row.
+            self.play_tracks_requested.emit(self.view_order_tracks(), view_index.row())
             return
         col_attr = COLUMNS[view_index.column()][1]
         if col_attr in ("_play", "_toggle"):

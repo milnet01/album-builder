@@ -244,8 +244,15 @@ class MainWindow(QMainWindow):
         # all their MainWindow wiring below stays valid.
         self.playlists_pane = PlaylistsPane()
         self.queue_pane = QueuePane()
+        # Spec 18 MP-2: the Player tab's own library, a second view over the
+        # same LibraryWatcher (INV-18-2). Signals and playback/theme pushes are
+        # wired for both panes together via _library_panes below.
+        self.player_library_pane = LibraryPane(player_mode=True)
+        self.player_library_pane.set_library(library_watcher.library())
+        self._library_panes = (self.library_pane, self.player_library_pane)
         self._player_pane = PlayerPane(
-            self._player, self._controller, self.queue_pane, self.playlists_pane
+            self._player, self._controller, self.queue_pane, self.playlists_pane,
+            self.player_library_pane,
         )
         self.tabs.addTab(self._player_pane, "Player")
         outer.addWidget(self.tabs, stretch=1)
@@ -286,7 +293,8 @@ class MainWindow(QMainWindow):
         self.top_bar.switcher.new_album_requested.connect(self._on_new_album)
         self.top_bar.switcher.delete_requested.connect(self._on_delete_album)
         self.library_pane.selection_toggled.connect(self._on_selection_toggled)
-        self.library_pane.preview_play_requested.connect(self._on_preview_play)
+        for pane in self._library_panes:
+            pane.preview_play_requested.connect(self._on_preview_play)
         self.album_order_pane.reordered.connect(self._on_reorder_done)
         self.album_order_pane.preview_play_requested.connect(self._on_preview_play)
         # Spec 06 TC-06-20..22: row-body click on either pane previews the
@@ -297,26 +305,29 @@ class MainWindow(QMainWindow):
         # Spec 15: library context-menu actions -> controller commands. The
         # play-all/from-here adapter passes start_index as the controller's
         # keyword-only arg (the signal carries it positionally).
-        self.library_pane.play_tracks_requested.connect(
-            lambda tracks, start: self._controller.play_tracks(tracks, start_index=start)
-        )
-        self.library_pane.enqueue_requested.connect(self._controller.enqueue)
-        self.library_pane.play_next_requested.connect(self._controller.play_next)
+        for pane in self._library_panes:
+            pane.play_tracks_requested.connect(
+                lambda tracks, start: self._controller.play_tracks(tracks, start_index=start)
+            )
+            pane.enqueue_requested.connect(self._controller.enqueue)
+            pane.play_next_requested.connect(self._controller.play_next)
         # Controller -> UI: queue_changed rebuilds the Up Next list (and pulls
         # the highlight); current_changed updates the now-playing pane, re-syncs
         # lyrics, and writes last-played. row_activated jumps to a deck slot.
         self._controller.queue_changed.connect(self._on_queue_changed)
         self._controller.current_changed.connect(self._on_player_current_changed)
         self.queue_pane.row_activated.connect(self._controller.jump_to_position)
-        library_watcher.tracks_changed.connect(self.library_pane.set_library)
+        for pane in self._library_panes:
+            library_watcher.tracks_changed.connect(pane.set_library)
         # Spec 17 (Phase D): saved playlists. The store drives both panes; both
         # are seeded once at construction (and the library once, so tracks
         # render with titles before the first rescan). tracks_changed also
         # re-resolves "(missing)" markers as the library changes.
         self._playlist_store.changed.connect(self.playlists_pane.set_playlists)
-        self._playlist_store.changed.connect(self.library_pane.set_playlists)
         self.playlists_pane.set_playlists(self._playlist_store.playlists())
-        self.library_pane.set_playlists(self._playlist_store.playlists())
+        for pane in self._library_panes:
+            self._playlist_store.changed.connect(pane.set_playlists)
+            pane.set_playlists(self._playlist_store.playlists())
         self.playlists_pane.set_library(library_watcher.library())
         library_watcher.tracks_changed.connect(self.playlists_pane.set_library)
         self.playlists_pane.create_requested.connect(self._on_new_playlist)
@@ -325,7 +336,8 @@ class MainWindow(QMainWindow):
         self.playlists_pane.move_track_requested.connect(self._playlist_store.move_track)
         self.playlists_pane.remove_track_requested.connect(self._playlist_store.remove_track)
         self.playlists_pane.play_requested.connect(self._on_play_playlist)
-        self.library_pane.add_to_playlist_requested.connect(self._on_add_to_playlist)
+        for pane in self._library_panes:
+            pane.add_to_playlist_requested.connect(self._on_add_to_playlist)
         # Lyrics: tracker → each panel (current-line index); each panel → service
         # (Align-now). Spec 18 fans both to every now-playing surface's panel;
         # the align handler acts on the loaded track, not the sending panel.
@@ -466,7 +478,8 @@ class MainWindow(QMainWindow):
         # Spec 18: both now-playing surfaces' lyrics panels, not just curation's.
         for panel in self._lyrics_panels:
             panel.set_palette(palette)
-        self.library_pane.set_palette(palette)
+        for pane in self._library_panes:
+            pane.set_palette(palette)
         self._current_theme = theme_id
         action = self._theme_actions.get(theme_id)
         if action is not None:
@@ -928,7 +941,8 @@ class MainWindow(QMainWindow):
         """
         path = self._player.source()
         playing = state == PlayerState.PLAYING
-        self.library_pane.set_active_play_state(path, playing)
+        for pane in self._library_panes:
+            pane.set_active_play_state(path, playing)
         self.album_order_pane.set_active_play_state(path, playing)
         stopped = state == PlayerState.STOPPED
         self.library_pane.set_row_body_cursor_for_state(stopped=stopped)
