@@ -175,7 +175,42 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   **Layman:** Small improvements: a friendlier first launch, undo for deletions, faster startup, and fixing documents that no longer match the app.
   Kind: implement.
 
-## 0.9.1 — Fixes, sign checks and Add music
+- 📋 [MUSI-0380] **--selftest should also prove a real atomic save works.**
+  Serves S6. The release workflows run --version and --selftest, and
+  neither saves anything, so the Windows save crash shipped unnoticed.
+  Add an atomic_write_text round-trip in a temp dir to _selftest. This
+  amends Spec 23 INV-23-2 and Spec 24's selftest contract, so the spec
+  change owes a review-contract gate first.
+  **Layman:** Make the automatic release check save a file, so a crash like the Windows one is caught before release.
+  Kind: test.
+  Source: windows-check-2026-09-28.
+
+## 0.9.3 — Add music
+
+- 📋 [MUSI-0371] **"Add music" on-ramp: drop or pick files to add to the library.**
+  Deferred out of MUSI-0356 Phase MP-2 (Spec 18 §Out of scope). It
+  writes into the user's Tracks/ folder, which the project treats as
+  untouchable without explicit confirmation, so it needs its own
+  design decision (copy vs link, confirmation, name clashes) and spec.
+  Decided (user, 2026-09-28): drag-and-drop COPIES files into Tracks/.
+  Originals stay untouched; no links, no per-drop prompt.
+  **Layman:** Let people add songs by dragging them onto the app, once we decide how it should treat the music folder.
+  Kind: feature.
+  Source: in-session-2026-09-28.
+
+## 0.9.2 — Windows crash fix
+
+- 📋 [MUSI-0379] **Windows app crashed on its first save (os.O_DIRECTORY missing).**
+  Found running the v0.9.1 Windows zip on the test machine: the post-rename
+  directory fsync in persistence/atomic_io.py used os.O_DIRECTORY, which
+  Windows lacks; the AttributeError escaped a Qt slot and aborted the app
+  (0xC0000409 in Qt6Core.dll) on the first state save. Likely every Windows
+  build since 0.8.0. Serves S6. Fix + TC-24-04 land with this item.
+  **Layman:** The Windows download closed itself right after starting; fixed so it saves normally.
+  Kind: fix.
+  Source: windows-check-2026-09-28.
+
+## ✅ 0.9.1 — Better translations, and a smoother shutdown (2026-09-28)
 
 - ✅ [MUSI-0367] **The test suite hung once in the pre-push gate and did not reproduce.**
   2026-09-25: the pre-push gate's pytest (dbus-run-session, offscreen,\nin a ~/.cache/pre-push/tmp.* worktree) sat 10+ minutes in a futex wait\nat about 1.8% CPU. The stack was lost: the push output was piped to\n`tail -1`. Three reruns of the same command passed in 13-24 s.\nAnother project's pre-push gate was running at the same time. It\nmatches the class of the FFmpeg-backend teardown deadlock noted in\npyproject.toml. An earlier push that day was also rejected once, with\nno visible reason. faulthandler_timeout = 120 is now set in\npyproject.toml. The next hang prints every thread's stack - read that\nbefore guessing.
@@ -206,6 +241,22 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Source: in-session-2026-09-25 pre-push hang.
   Lanes: tests.
 
+- ✅ [MUSI-0370] **The WhisperX-missing toast stays English in every language.**
+  alignment_worker emits "WhisperX not installed. Install via: ..."
+  and MainWindow._looks_like_whisperx_missing matches its English words
+  to decide whether to show the install dialog, so the string was left
+  untranslated. Fix: signal the missing runtime as a state, not as text,
+  then translate the message.
+  Resolved (2026-09-28): AlignmentWorker emits runtime_missing,
+  AlignmentService forwards it with the path, and MainWindow shows the
+  install dialog from that signal only (_looks_like_whisperx_missing
+  deleted). The failed message is now tr() and added to all seven
+  catalogs. TC-07-17: 3 tests, red before, green after; 3 full gate runs
+  green (937 passed).
+  **Layman:** One rare error message still shows in English; fix how it is detected so it can be translated.
+  Kind: fix.
+  Source: in-session-2026-09-28.
+
 - ✅ [MUSI-0373] **S2 check: exported numbering and playlist order match the app's order.**
   Serves S2 (docs/discovery.md). Find the Spec 08 tests that cover
   export order; if any gap remains (numbered symlink names and M3U lines
@@ -234,33 +285,6 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   **Layman:** Proves the app never renames, moves, changes or deletes your songs.
   Kind: test.
   Source: check-queue-2026-09-28.
-
-- ✅ [MUSI-0370] **The WhisperX-missing toast stays English in every language.**
-  alignment_worker emits "WhisperX not installed. Install via: ..."
-  and MainWindow._looks_like_whisperx_missing matches its English words
-  to decide whether to show the install dialog, so the string was left
-  untranslated. Fix: signal the missing runtime as a state, not as text,
-  then translate the message.
-  Resolved (2026-09-28): AlignmentWorker emits runtime_missing,
-  AlignmentService forwards it with the path, and MainWindow shows the
-  install dialog from that signal only (_looks_like_whisperx_missing
-  deleted). The failed message is now tr() and added to all seven
-  catalogs. TC-07-17: 3 tests, red before, green after; 3 full gate runs
-  green (937 passed).
-  **Layman:** One rare error message still shows in English; fix how it is detected so it can be translated.
-  Kind: fix.
-  Source: in-session-2026-09-28.
-
-- 📋 [MUSI-0371] **"Add music" on-ramp: drop or pick files to add to the library.**
-  Deferred out of MUSI-0356 Phase MP-2 (Spec 18 §Out of scope). It
-  writes into the user's Tracks/ folder, which the project treats as
-  untouchable without explicit confirmation, so it needs its own
-  design decision (copy vs link, confirmation, name clashes) and spec.
-  Decided (user, 2026-09-28): drag-and-drop COPIES files into Tracks/.
-  Originals stay untouched; no links, no per-drop prompt.
-  **Layman:** Let people add songs by dragging them onto the app, once we decide how it should treat the music folder.
-  Kind: feature.
-  Source: in-session-2026-09-28.
 
 ## ✅ 0.9.0 — More languages, Player-tab library, music folder (2026-09-28)
 

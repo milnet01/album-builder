@@ -419,6 +419,10 @@ Unit-testable in `tests/` (run in the normal suite, no Windows build needed):
 - **TC-24-03** (same file) - `render_report` with `render_pdf_from_html` returning
   normally (real WeasyPrint on Linux CI) writes both finals and returns `(html, pdf)`
   non-None; the existing Spec 09 render tests pass unmodified. Locks INV-24-7.
+- **TC-24-04** (`tests/persistence/test_TC_24_04_atomic_write_without_o_directory.py`) -
+  with `os.O_DIRECTORY` absent, as on Windows, `atomic_write_text` writes the file and
+  raises nothing; the post-rename directory fsync is skipped. Found 2026-09-28: the
+  v0.9.1 Windows bundle aborted on its first state save.
 
 **Two existing atomic-pair recovery tests are updated (a Step-8 fold-back, not new
 coverage):** `test_TC_10_26_artist_only_on_disk_half_pair_is_repaired` and

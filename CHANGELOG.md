@@ -8,6 +8,13 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Windows download no longer closes itself right after starting.** (MUSI-0379)
+  On Windows the app crashed the first time it saved its settings, so
+  it vanished a moment after opening. It now saves normally. Linux was
+  not affected.
+
 ## [0.9.1] - 2026-09-28
 
 **Theme:** Better translations, and a smoother shutdown.

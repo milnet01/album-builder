@@ -36,7 +36,12 @@ def _fsync_dir(directory: Path) -> None:
     network mounts, certain FUSE backends) reject directory-handle fsync
     with EINVAL or ENOTSUP — those are silent skips. Real failures
     (EIO, EACCES, ENOENT) propagate so callers can distinguish a missed
-    durability barrier from a "platform doesn't support it" no-op."""
+    durability barrier from a "platform doesn't support it" no-op.
+
+    Windows has no `os.O_DIRECTORY` and cannot open a directory for fsync,
+    so there it is a no-op too (TC-24-04)."""
+    if not hasattr(os, "O_DIRECTORY"):
+        return
     try:
         fd = os.open(directory, os.O_DIRECTORY)
     except OSError as exc:
