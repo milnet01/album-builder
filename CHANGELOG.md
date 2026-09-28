@@ -8,6 +8,12 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+### Added
+
+- **You can now bring back an album you deleted.** (MUSI-0357)
+  Choose File > Restore Deleted Album, pick it from the list, and it
+  returns exactly as it was, with its tracks, order and reports.
+
 ## [0.8.1] - 2026-09-25
 
 **Theme:** The Linux download is back, plus display fixes.

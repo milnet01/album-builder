@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 import shutil
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
@@ -32,6 +35,45 @@ from album_builder.services.report import render_report
 
 logger = logging.getLogger(__name__)
 TRASH_DIRNAME = ".trash"
+# delete() names a trash entry "<slug>-YYYYMMDD-HHMMSS-ffffff" (older builds
+# omitted the microseconds).
+_TRASH_STAMP = re.compile(r"-(\d{8}-\d{6})(?:-(\d{6}))?$")
+
+
+@dataclass(frozen=True)
+class TrashedAlbum:
+    """One deleted album waiting in `.trash/` (Spec 02 §restore)."""
+
+    path: Path
+    name: str
+    deleted_at: datetime | None
+
+
+def _read_trash_entry(entry: Path) -> tuple[str, str] | None:
+    """Return (id, name) from a trash entry's album.json, or None if unreadable.
+
+    Reads the JSON directly rather than via `load_album`: the trash folder's
+    stamped name would trip load_album's slug-vs-name self-heal (TC-02-21) and
+    rewrite the album's name.
+    """
+    try:
+        data = json.loads((entry / "album.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    album_id, name = data.get("id"), data.get("name")
+    if not isinstance(album_id, str) or not isinstance(name, str):
+        return None
+    return album_id, name
+
+
+def _trash_stamp(entry: Path) -> datetime | None:
+    m = _TRASH_STAMP.search(entry.name)
+    if m is None:
+        return None
+    stamp = m.group(1) + "-" + (m.group(2) or "000000")
+    return datetime.strptime(stamp, "%Y%m%d-%H%M%S-%f").replace(tzinfo=UTC)
 
 
 def _symlink_count_matches(album: Album, folder: Path) -> bool:
@@ -354,6 +396,48 @@ class AlbumStore(QObject):
         self.album_removed.emit(album_id)
         if was_current:
             self.current_album_changed.emit(self._current_id)
+
+    def trashed(self) -> list[TrashedAlbum]:
+        """Deleted albums in `.trash/`, newest first; unreadable entries skipped."""
+        trash = self._albums_dir / TRASH_DIRNAME
+        try:
+            entries = [e for e in trash.iterdir() if e.is_dir()] if trash.exists() else []
+        except OSError as exc:
+            logger.warning("trashed: cannot list %s (%s)", trash, exc)
+            return []
+        found: list[TrashedAlbum] = []
+        for entry in entries:
+            info = _read_trash_entry(entry)
+            if info is not None:
+                found.append(TrashedAlbum(entry, info[1], _trash_stamp(entry)))
+        oldest = datetime.min.replace(tzinfo=UTC)
+        return sorted(found, key=lambda t: t.deleted_at or oldest, reverse=True)
+
+    def restore(self, trash_path: Path) -> Album:
+        """Move a `.trash/` entry back into Albums/ and reload it (Spec 02 §restore).
+
+        The folder returns under the slug of its album name (collisions get the
+        usual " (N)" suffix). Raises ValueError if the entry is unreadable or
+        its album is already loaded; the entry is then left where it was.
+        """
+        info = _read_trash_entry(trash_path)
+        if info is None:
+            raise ValueError(f"not a restorable album: {trash_path}")
+        album_id, name = info
+        if any(str(a) == album_id for a in self._albums):
+            raise ValueError(f"'{name}' is already in the album list")
+        folder = self._albums_dir / unique_slug(self._albums_dir, slugify(name))
+        shutil.move(str(trash_path), str(folder))
+        try:
+            album = load_album(folder)
+        except Exception:
+            # Put it back so the backup is not stranded under a live slug.
+            shutil.move(str(folder), str(trash_path))
+            raise
+        self._albums[album.id] = album
+        self._folders[album.id] = folder
+        self.album_added.emit(album)
+        return album
 
     @property
     def current_album_id(self) -> UUID | None:

@@ -2391,6 +2391,10 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   about 0.25 s (1.7 s cold\nwas disk wake-up). It is worth it only for
   libraries of thousands.\nfrom_path opens ID3 twice per file, a cheap
   trim for later.
+  Progress (2026-09-28), undo for deleted albums: SHIPPED. File >
+  Restore Deleted Album lists Albums/.trash newest first and moves the
+  pick back (AlbumStore.trashed/restore; Spec 02 §restore,
+  TC-02-22..26). Undo for removing a track is not built. Next sub-item: first-run onboarding.
   **Layman:** Small improvements: a friendlier first launch, undo for deletions, faster startup, and fixing documents that no longer match the app.
   Kind: implement.
 

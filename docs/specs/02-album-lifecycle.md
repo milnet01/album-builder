@@ -92,11 +92,21 @@ The order matters: deleting `reports/` first means a crash between steps 2.i and
 
 Trigger: user picks "Delete album" from the album switcher's context menu.
 Behavior:
-1. Confirm dialog: "Delete album '<name>'? This cannot be undone via the UI." (We do keep a `.trash/` backup — see below.)
-2. On confirm: the entire `Albums/<slug>/` folder is moved to `Albums/.trash/<slug>-YYYYMMDD-HHMMSS/`. We do not `rm -rf` — recovery is possible by hand.
+1. Confirm dialog: "Delete '<name>'? You can bring it back later with File > Restore Deleted Album."
+2. On confirm: the entire `Albums/<slug>/` folder is moved to `Albums/.trash/<slug>-YYYYMMDD-HHMMSS-ffffff/`. We do not `rm -rf` — see §restore.
 3. If the deleted album was current, switch to the alphabetically-first remaining album, or to "no album selected" if none remain.
 
 `.trash/` is not rotated by the app (manual cleanup if disk pressure becomes an issue). It is gitignored by default.
+
+### restore
+
+Trigger: File > Restore Deleted Album... (MUSI-0357).
+Behavior:
+1. `AlbumStore.trashed()` lists each `.trash/` entry whose `album.json` has a string `id` and `name`, newest first by the folder's timestamp suffix. Unreadable entries are skipped. It reads the JSON directly, not via `load_album`, because the stamped folder name would trip the TC-02-21 slug-vs-name self-heal.
+2. No entries: a toast says there is nothing to restore. Otherwise a pick-list shows each album's name and deletion time.
+3. `AlbumStore.restore(path)` moves the entry back to `Albums/<slug>/`, where slug is `slugify(name)` with the usual ` (N)` collision suffix, then loads it, adds it to the store and emits `album_added`. The name is unchanged.
+4. It raises `ValueError` and leaves the entry in place if the entry is unreadable or its album id is already loaded. If loading fails after the move, the folder is moved back to `.trash/`.
+5. The restored album becomes the current album.
 
 ## Inputs
 
@@ -184,6 +194,11 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-02-19** — `AlbumStore.approve()` is idempotent across the three named crash points in Spec 09 §canonical approve sequence: (a) crash after `step:export-commit` — re-approve regenerates report from scratch, no stale `.tmp` files remain; (b) crash after `step:render-rename-pdf` (both reports renamed, marker not yet written, status still draft per Spec 02 self-heal) — re-approve overwrites the reports + writes marker + flips status; (c) crash after `step:write-marker` (marker present, status still draft) — Spec 10 self-heal flips status on next load; subsequent re-approve is a no-op. No duplicates / leftover `.tmp` files survive any path.
 - **TC-02-20** — `album.json` schema has `schema_version == 1` and the field set listed in §Persistence; round-trip (load → save → load) preserves every field byte-for-byte except `updated_at`.
 - **TC-02-21** — Self-heal on load (crash mid-rename, see §Errors): when the on-disk folder slug and `album.json.name` disagree, the folder slug wins — `load_album` reverse-derives `name` from the slug (hyphens → spaces, title-case) and writes back. The unique-slug ` (N)` collision suffix is stripped before both the slug↔name comparison and the reverse-derivation, so a legitimately-suffixed folder (`live (2)` for a second album named "Live") neither false-heals nor loops on repeated loads.
+- **TC-02-22** — `AlbumStore.trashed()` returns the readable `.trash/` entries (path, name, deletion time) newest first; an entry without a readable `album.json` is skipped; no `.trash/` gives `[]`.
+- **TC-02-23** — `AlbumStore.restore(path)` moves the entry back to `Albums/<slugify(name)>/`, the album returns with the same id, name and folder contents, and `album_added` fires with it.
+- **TC-02-24** — Restoring when a live folder already has that slug uses the ` (N)` suffix; the album's name is unchanged.
+- **TC-02-25** — Restoring an album whose id is already loaded raises `ValueError` and leaves the trash entry in place.
+- **TC-02-26** — File > Restore Deleted Album: with nothing deleted it shows a toast and no dialog; picking an entry restores it as the current album; cancelling changes nothing.
 
 ## Out of scope (v1)
 

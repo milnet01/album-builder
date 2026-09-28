@@ -412,6 +412,9 @@ class MainWindow(QMainWindow):
         # second, ambiguous binding for the same key. Late-bound lambdas so the
         # handler is looked up on self at trigger time (overridable, testable).
         file_menu.addAction("New Album", lambda: self._on_new_album())
+        file_menu.addAction(
+            "Restore Deleted Album...", lambda: self._on_restore_album(),
+        )
         file_menu.addSeparator()
         file_menu.addAction("Quit", lambda: self.close())
 
@@ -710,11 +713,35 @@ class MainWindow(QMainWindow):
             return
         if QMessageBox.question(
             self, "Delete album",
-            f"Delete '{album.name}'? A backup is kept in Albums/.trash/.",
+            f"Delete '{album.name}'? You can bring it back later with "
+            "File > Restore Deleted Album.",
         ) != QMessageBox.StandardButton.Yes:
             return
         self._store.delete(album_id)
         self.top_bar.switcher.set_current(self._store.current_album_id)
+
+    def _on_restore_album(self) -> None:
+        trashed = self._store.trashed()
+        if not trashed:
+            self._show_toast("No deleted albums to restore.")
+            return
+        labels = [
+            f"{t.name} (deleted {t.deleted_at.astimezone():%Y-%m-%d %H:%M})"
+            if t.deleted_at else t.name
+            for t in trashed
+        ]
+        choice, ok = QInputDialog.getItem(
+            self, "Restore deleted album", "Album to restore:", labels, 0, False,
+        )
+        if not ok or choice not in labels:
+            return
+        try:
+            album = self._store.restore(trashed[labels.index(choice)].path)
+        except (ValueError, OSError) as exc:
+            QMessageBox.warning(self, "Cannot restore album", str(exc))
+            return
+        self.top_bar.switcher.set_current(album.id)
+        self._show_toast(f"Restored '{album.name}'.")
 
     # --- Saved playlists (Spec 17, Phase D) --------------------------------
 
