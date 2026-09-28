@@ -11,6 +11,378 @@ Working roadmap for the Album Builder app. Tracks completed phases, in-flight fi
 
 ---
 
+## Later — after 1.0
+
+Ideas and larger work that no version below needs. Each moves into a named version block when it is scheduled.
+
+Ideas not yet filed as items (carried from the old Future / deferred list):
+- Group-by-artist tabs (Spec 00 roadmap)
+- Tap-along LRC editor for manual alignment correction
+- Multi-project (multiple Tracks/ folders open at once)
+- Album cover compositing
+- Bulk pre-alignment scheduler
+- Recursive subfolder scanning under Tracks/
+- WCAG 2.2 §4.1.3 live screen-reader announcement when a Spec 13 usage count changes (see Spec 13 § Out of scope (v1); check the current PyQt6 QAccessible binding first).
+- Improve lyric alignment quality: instrumental intros/outros, repeated choruses, non-English lyrics, drifting word timings. Measure against a hand-aligned reference set; enhance AlignmentService, do not rewrite it.
+- SQLite-backed library and analytics, once history outgrows per-album JSON (hundreds of approved albums, cross-album queries). Needs a Spec 10 amendment or a new spec.
+
+- 📋 [MUSI-0356] **Music player — standalone experience & popular-app feature parity (v2 epic; sequenced AFTER Distribution).**
+  (User request 2026-07-25: "copy as many features as you can from Spotify / WinAmp / any popular music player.") Continues the shipped "Fully-featured music player mode" epic (Phases A-G) toward a player that stands on its own. **Locked direction (2026-07-25, refined):** stay **one program** (not two executables), but treat the **two tabs as separate "apps"** — each a self-sufficient surface with **its own library browser**. The song library stays a **single shared source of truth** (the existing `Library` + `LibraryWatcher`): songs added from either tab update that shared library and **both tabs' library views refresh live**. So each tab shows "its own" library, but over one dataset. The Player tab thus browses and starts songs in place, never needing the curation tab. **Reuse-before-rewrite** on `Player` / `PlaybackController` / `PlayQueue` / `PlaylistStore` / `Library` / `UsageIndex`; every phase is spec-first + `/cold-eyes`. *Already shipped, not re-listed here:* play queue, shuffle/repeat, saved playlists, MPRIS media-key + lock-screen integration, tray, synced lyrics, ReplayGain volume levelling, cover art, full transport, cross-album usage indicator. **Planned phases (rough value-first order):**
+  - **Phase MP-1 — Session continuity & resume.** Persist + restore the last active tab, the last-played track (extend the existing paused-at-zero restore), and **playback position** (the `last_position_seconds` v2 item already earmarked in Spec 06 / the overview) so playback resumes exactly where it stopped; also last volume, shuffle/repeat state, and window size/position. (Spotify and WinAmp both resume on launch.)
+  - **Phase MP-2 — Player-tab as its own app (own library view over shared data).** Give the Player tab **its own `LibraryPane`** bound to the **same** `Library` + `LibraryWatcher` the curation tab uses — so both tabs show "their own" library over one shared dataset, and songs added from either side update the shared library and refresh **both** views live. Add an **"Add music" on-ramp** (drag-and-drop files/folders onto either tab, or a folder/file picker) that writes into the shared library. From the Player's own library: double-click / Enter to play, "play from here", and enqueue — listening never requires the curation tab. Delivers the locked "two apps, shared library" direction and removes the "where's my library?" confusion. (Folds in the drag-and-drop "Add music" suggestion, 2026-07-25.)
+  - **Phase MP-3 — Library browsing power.** Incremental search/filter box (with a `/` or Ctrl+L keyboard-focus shortcut — folds in the instant-search suggestion, 2026-07-25), multi-column sort (title / artist / album / duration / date-added / play-count), jump-to-letter, and optional group-by-artist/album (folds in the deferred "Group-by-artist tabs" bullet). (Spotify search; WinAmp / foobar2000 media library.)
+  - **Phase MP-4 — Personalization & history.** Favourites / star ratings, recently-played list, play counts, most-played, last-played timestamps — building on `UsageIndex`. Feeds smart playlists later. (Spotify "Liked Songs"; WinAmp ratings.)
+  - **Phase MP-5 — Smart / auto playlists (optional).** Rules-based playlists ("top rated", "recently added", "never played") on top of the Phase D playlists + Phase MP-4 metadata. (foobar2000 / MusicBee autoplaylists.)
+  - **Phase MP-6 — Mini / compact player.** A small always-on-top compact window or bar for background listening. (WinAmp mini-mode; Spotify miniplayer.)
+  - **Phase MP-7 — Audiophile engine (BIG — blocked on retiring `QMediaPlayer`).** Graphic equalizer + presets, gapless playback, crossfade, ReplayGain pre-amp, and optional visualizer/spectrum. All of these require replacing QtMultimedia's `QMediaPlayer` with a raw `QAudioSink` / GStreamer / miniaudio pipeline (per the 2026-07-18 Phase F audio-effects spike) — its own multi-phase, higher-risk sub-epic. (WinAmp EQ + visualizer; audiophile players' gapless/crossfade.)
+  - **Phase MP-8 — Extras (survey; pick as desired).** Sleep timer, playback speed / pitch, A-B repeat, "play next" / queue history, drag-and-drop files or folders to enqueue (distinct from the library-add drop in MP-2), expanded global keyboard shortcuts, context-menu "go to album / artist", and optional Last.fm scrobbling. **Out of scope (carry-forward from the A-G epic):** streaming / Spotify integration, CD ripping, bulk tag editing, Discord presence.
+  Decisions (2026-09-28, with the user): Phase MP-2 (Player tab's
+  own library) moves up and is next, ahead of MP-1, on the user's ask:
+  "The player still doesn't have a library of its own (should replicate
+  the Album Builder tab)." MP-2 also switches the now-playing detail
+  order to Title / Artist / Album, the common order. Languages
+  (MUSI-0368) follow MP-2.
+  Progress (2026-09-28), Phase MP-2: SHIPPED except the "Add music"
+  on-ramp. Spec 18 amended (review-contract loops 6-7, 8 findings fixed,
+  accepted at the cap) and built: LibraryPane(player_mode=True) is the
+  Player tab's left column over the shared LibraryWatcher; activation
+  plays from here; curation-only columns hidden; card order Title /
+  Artist / Album. TC-18-25..32. The Add-music drop/picker is deferred to
+  its own item: it writes into Tracks/, which needs its own decision.
+  Follow-up owed (2026-09-28): promised the Hub website session
+  (ants-projects-hub-website) new Player-tab screenshots once MP-2 ships
+  in a release. After the next release: shoot with the demo library
+  (~/.cache/album-builder-demo), put PNGs in
+  /mnt/Emulators/aph-handoff/album-builder/ with a one-line description
+  each, and message that session. It already has the page corrections.
+  Follow-up done (2026-09-28): v0.9.0 released; Player-tab screenshots
+  (English + Arabic, demo library) put in
+  /mnt/Emulators/aph-handoff/album-builder/ and the Hub website session
+  messaged (mailbox id 145).
+  **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
+  Kind: implement.
+
+- 📋 [MUSI-0369] **Native-speaker check of the seven translation catalogs.**
+  The af/ar/he/es/fr/de/pt catalogs in src/album_builder/translations/
+  were machine-drafted (Spec 25 §Out of scope; README says so). A
+  native speaker per language should read them in the running app.
+  TC-25-03/04 keep the files complete; they cannot judge wording.
+  Progress (2026-09-28): second AI proofread by two other sessions
+  (es/fr/de/pt; ar/he/af). 36 of 39 suggestions applied after checking
+  each against its call site; 3 rejected (New, System default, Track).
+  Commit 8a90021. Native-speaker review still owed.
+  **Layman:** Have a fluent speaker of each language check the app's wording.
+  Kind: doc.
+  Source: in-session-2026-09-28.
+
+## 1.0.0 — Every sign of success proven
+
+1.0 ships when S1-S7 in docs/discovery.md each have a passing check
+(docs/standards/versioning-overrides.md).
+
+- 📋 [MUSI-0372] **S1 check: time opening and searching a 1,000-song library.**
+  Serves S1 (docs/discovery.md). Generate a 1,000-song demo library
+  (extend ~/.cache/album-builder-demo/make_demo.sh), then measure time to
+  a loaded library and search response while typing. Record the numbers
+  here; turn them into a regression test if cheap.
+  **Layman:** Proves the app stays quick with a big music folder.
+  Kind: test.
+  Source: check-queue-2026-09-28.
+
+- 📋 [MUSI-0374] **S3 check: measure lyric timing against the half-second bar.**
+  Serves S3 (docs/discovery.md). On a few aligned songs, compare each
+  LRC line time against a hand-marked start time; report how many lines
+  fall within 0.5 s. Needs WhisperX installed.
+  **Layman:** Checks that lyrics light up within half a second of being sung.
+  Kind: test.
+  Source: check-queue-2026-09-28.
+
+- 📋 [MUSI-0375] **S4 check: approved playlist plays in order in VLC and the default player.**
+  Serves S4 (docs/discovery.md). Approve a demo album, open its .m3u in
+  VLC and in the desktop's default player, confirm every track plays in
+  the set order. Manual check; note the players and versions used.
+  **Layman:** Checks the finished playlist really plays, in order, in common players.
+  Kind: test.
+  Source: check-queue-2026-09-28.
+
+- 📋 [MUSI-0376] **S5 check: approval report prints on A4 in every language.**
+  Serves S5 (docs/discovery.md). Approve a demo album in each of the
+  eight languages; print or print-preview the PDF on A4 and confirm
+  nothing is cut off, with right-to-left layout for Arabic and Hebrew.
+  **Layman:** Checks the printed report looks right in every language, Arabic and Hebrew included.
+  Kind: test.
+  Source: check-queue-2026-09-28.
+
+- 📋 [MUSI-0378] **S6 check: a fresh machine runs the download and builds an album.**
+  Serves S6 (docs/discovery.md). On a clean Linux machine (glibc 2.35+)
+  and a clean 64-bit Windows 10+ machine, run the release download, make
+  an album from a few songs, approve it. CI already proves --version and
+  --selftest; this proves the whole job. Needed for 1.0
+  (docs/standards/versioning-overrides.md).
+  **Layman:** Proves the Linux and Windows downloads work on a clean computer with nothing else installed.
+  Kind: test.
+  Source: review-contract-2026-09-28 versioning-overrides loop 1.
+
+- 🚧 [MUSI-0355] **Distribution & cross-platform packaging (downloadable, runnable builds).**
+  (User request 2026-07-25.) Turn Album Builder from a source-only, Linux-only checkout into downloadable "one file, install and run" builds on Linux and Windows, plus store/repo presence. **Supersedes the "Windows port (cross-platform packaging)" bullet above** (folded in). Spec-first (Spec 22 implemented 2026-07-28 - Phase Dist-1 shipped) + `/cold-eyes` like every phase. Locked decisions (2026-07-25, resequenced 2026-07-28): sequence **Groundwork -> AppImage -> Windows -> Flatpak/Flathub -> OBS**; the heavy WhisperX/torch dependency stays an optional `pip` extra and is kept **out** of the bundles (keeps downloads to a few hundred MB, not GB). Phases:
+  - ✅ **Phase Dist-1 — Portability groundwork (code). SHIPPED 2026-07-28.** Windows-safe export per Spec 22: made the numbered-symlink step in `services/export.py` conditional on filesystem support (`_supports_symlinks` probe) and, where symlinks are unavailable, emit **`playlist.m3u8` only** (WinAmp-style remembered paths - no hardlink/copy/consent-dialog, superseding Spec 08's deferred copy fallback); drift checks (`is_export_fresh`, `album_store._symlink_count_matches`) expect zero symlinks there; resolved the config dir via **`platformdirs`** (keeps `settings.py` Qt-free; preserves the relative-`XDG_CONFIG_HOME` guard); swapped the `xdg-open` folder-open for `QDesktopServices.openUrl`. Zero behavior change on Linux. Tests TC-22-01..07 (`tests/services/test_TC_22_distribution.py`, +13); Spec 08 + settings suites pass unmodified. Commits `4c20c44` (code) + `961ee4d` / `0981b84` (cross-spec doc amendments + cold-eyes gate). Prerequisite for AppImage, Windows, and Flatpak - now unblocked.
+  - ✅ **Phase Dist-2 — AppImage (Linux single-file). SHIPPED 2026-07-28 - the project's first downloadable, runnable file.** [`AlbumBuilder-0.6.1-x86_64.AppImage`](https://github.com/milnet01/album-builder/releases/tag/v0.6.1) (~121 MB) is attached to the v0.6.1 GitHub Release, built by `appimage.yml` on the tag (build + extracted-bundle checks + a clean-`ubuntu:22.04` run of `--version`/`--selftest` + appimagelint, all green) and verified to launch + render on a clean system. Delivered: `packaging/build-appimage.sh` (containerised build, shellcheck-clean), `.github/workflows/appimage.yml` (tag + dispatch triggers, uploads to the Release), `app.py` `--version`/`--selftest` flags, `tests/test_TC_23_appimage.py` (TC-23-01/02/03), README Download section. Commits `d5fe75e` (code) + `5ce8fa8` (spec reconcile) + `702f885` (doc sync). Pinned build tooling (`ubuntu:22.04@sha256:` [deliberate glibc-floor hold-back, documented], `python-appimage` `python3.13.14` [== CI's tested interpreter], `appimagetool` `1.9.1` [latest stable]) - all pins corrected against live releases and **validated by a green manual dry-run (run `30361141983`, 2026-07-28): build + extracted-bundle checks + a clean-`ubuntu:22.04`-container run of `--version`/`--selftest` + appimagelint all pass** (upload skipped - no tag). The downloadable file is produced by cutting a `v*` tag. **Follow-up:** bump CI + the AppImage bundle to Python 3.14 (latest stable) once the suite is re-run on 3.14 - a dependency-currency sweep item. A self-contained `AlbumBuilder-<version>-x86_64.AppImage` that runs on most distros with no install. **Spec 23 refines the original approach** (cold-eyes-converged, loops 1-5): bundles the Python runtime + PyQt6 (Qt libs + platform + **FFmpeg** multimedia backend - the 6.11 wheel ships FFmpeg, *not* GStreamer, so no GStreamer plugins are bundled) + WeasyPrint's native stack (Pango / PangoFT2 / HarfBuzz / HarfBuzz-subset / fontconfig / gobject - WeasyPrint 69 drops **Cairo / GDK-PixBuf**); built via **`python-appimage`** (the `linuxdeploy`-or-python-appimage fork resolved to python-appimage; `linuxdeploy-plugin-python` is unmaintained) **inside a digest-pinned `ubuntu:22.04` container** (so a local build == the CI release; sets the glibc floor for broad reach). WhisperX/torch stays an optional `pip` extra, out of the bundle. One local script (`packaging/build-appimage.sh`) is the single source of truth; `appimage.yml` runs it on a `v*` tag + manual dispatch and attaches to the GitHub Release. The **simplest** "one downloadable Linux file" — no store account or review gate — so it ships first.
+  - 🚧 **Phase Dist-3 — Windows bundle.** PyInstaller `.exe` bundling WeasyPrint's native libraries; audio uses the built-in Windows backend (no GStreamer); attached to GitHub Releases. **Spec 24 accepted + implemented 2026-07-28** (cold-eyes converged loops 1-4 + an implementation fold-back). Refinements over the original bullet: **one-folder zip, not one-file** (reliability for the fragile native stack); WeasyPrint's GTK/Pango DLLs **sourced from MSYS2 on a `windows-latest` runner** - PyInstaller can't cross-compile, so there is **no local reproducibility** (unlike the AppImage container), and CI `--version`/`--selftest` + a **manual Windows run** verify it; a **point-of-use HTML-only fallback** in `render_report` if the PDF engine can't load or a report won't render (Spec 24 §4.3b), with `scan_reports_dir` keeping a lone `.html` as a complete single-file report. Landed: `render_report`/`scan_reports_dir` code + `tests/services/test_TC_24_windows_bundle.py` (TC-24-01/02/03, full suite green) + `packaging/build-windows.ps1` + `packaging/album-builder.spec` + runtime hook + `.github/workflows/windows.yml`. The downloadable zip is produced by cutting a `v*` tag. Note: unsigned builds trip Windows SmartScreen until code-signing is arranged (deferred).
+  - **Phase Dist-4 — Flatpak + Flathub.** Flatpak manifest bundling PyQt6 + WeasyPrint's Pango/Cairo/GDK-PixBuf runtime + GStreamer; an **AppStream metainfo** file (`packaging/` ships only a `.desktop` template today) + screenshots for the store; a single-file `.flatpak` bundle attached to GitHub Releases; and the Flathub submission PR. The **app-store** route for Linux (sandboxed, auto-updating via Flathub) — complements the AppImage single file with a discoverable, managed store listing.
+  - **Phase Dist-5 — openSUSE Build Service (OBS).** Native RPM + DEB packages across distros via OBS for package-manager installs (zypper / apt) — distinct from the single-file AppImage/Flatpak. Integrate with the OBS project a companion session ("finbreak") already set up for the user rather than starting from scratch.
+  Serves S6 (docs/discovery.md): the downloads run and build an album on
+  a fresh machine with nothing else installed. Tagged 2026-09-28.
+  **Layman:** Make the app a simple download you install and run on Linux or Windows, with app-store listings.
+  Kind: implement.
+
+- 📋 [MUSI-0357] **Polish & hardening (usability / performance / security).**
+  (Suggestion sweep 2026-07-25; sequenced flexibly - small, high-value items surfaced while reviewing the app.)
+  - **Usability - first-run onboarding.** A clear "point me at your music folder" welcome on first launch instead of an empty window.
+  - **Usability - undo for destructive actions.** Undo (or confirm-with-restore) for deleting an album or removing tracks (verify the current safety net first).
+  - **Performance - library-scan tag cache.** Cache parsed ID3 tags keyed by path + modified-time so restarts don't re-read every file's tags; a big win for large `Tracks/` libraries (verify current startup-scan behavior first).
+  - **Performance - cover-art thumbnail cache.** Cache decoded/resized cover images instead of re-decoding them per use.
+  - **Security - HTML report output escaping.** ✅ **Verified clean (2026-07-25):** `services/report.py:221` sets `autoescape=select_autoescape(["html", "xml"])` and no `| safe` / `Markup(` bypass exists, so track metadata + lyrics render inert in the shared report. No hardening needed. (Kept here as the audit-trail entry.)
+  - **Docs - spec-vs-source drift sweep.** The 2026-07-25 `/audit` `contract_doc_drift` rule flagged 103 spec identifiers absent from source. Most are false positives (external-lib internals like `HUGGINGFACE_HUB_CACHE`/`torch.hub...`, forward/v2 refs like `last_position_seconds`, illustrative examples, hyphen-vs-underscore theme tokens, and citation-format misses such as `album_store.py:approve` which *does* exist). A small genuine subset is real drift worth fixing in a targeted sweep - confirmed examples: `Album.set_track_paths` (Spec 08; no such method exists) and the known Spec 06 `QSettings` -> `settings.json` wording. Filter the FPs, fix the real ones. (Best done via `/cold-eyes`, which verifies doc-vs-code.)
+  Progress (2026-09-25), docs drift sweep: doc_symbols over
+  docs/specs\nleft 115 names unresolved. All but a handful are Qt,
+  Python,\nmutagen or tag-frame names this project does not define.
+  Real\ndrift fixed: Spec 06's `QSettings` (it is
+  settings.json\naudio.volume), and Spec 08's `Album.set_track_paths`,
+  which does not\nexist - a hand-edited duplicate path loads unchanged,
+  and the spec\nnow says so. The ambiguous and not_checked rows were not
+  reviewed.\nThe other sub-items of this bullet stay open.
+  Decisions (2026-09-25, with the user): work order is undo for
+  deleted\nalbums first, then first-run onboarding. Undo: deleting
+  already moves\nthe album to Albums/.trash (services/album_store.py
+  TRASH_DIRNAME), and\nno UI restores it - that button is the gap.
+  Library-scan tag cache:\nSKIPPED for now. A warm scan of 36 MP3s took
+  about 0.25 s (1.7 s cold\nwas disk wake-up). It is worth it only for
+  libraries of thousands.\nfrom_path opens ID3 twice per file, a cheap
+  trim for later.
+  Progress (2026-09-28), undo for deleted albums: SHIPPED. File >
+  Restore Deleted Album lists Albums/.trash newest first and moves the
+  pick back (AlbumStore.trashed/restore; Spec 02 §restore,
+  TC-02-22..26). Undo for removing a track is not built. Next sub-item: first-run onboarding.
+  Progress (2026-09-28), first-run onboarding: SHIPPED. There was no
+  in-app way to set the music folder at all (settings.json by hand).
+  Added File > Choose Music Folder... (saves tracks_folder, rescans live
+  via LibraryWatcher.set_folder) and an empty-library welcome with a
+  button, in both library panes. Spec 01 section Choosing the music
+  folder, TC-01-21..23. Still open in this bullet: library-scan tag cache
+  (skipped by decision), cover-art thumbnail cache.
+  Serves S1 (docs/discovery.md): a 1,000-song library opens within a few
+  seconds and search keeps up. Tagged 2026-09-28.
+  **Layman:** Small improvements: a friendlier first launch, undo for deletions, faster startup, and fixing documents that no longer match the app.
+  Kind: implement.
+
+## 0.9.1 — Fixes, sign checks and Add music
+
+- ✅ [MUSI-0367] **The test suite hung once in the pre-push gate and did not reproduce.**
+  2026-09-25: the pre-push gate's pytest (dbus-run-session, offscreen,\nin a ~/.cache/pre-push/tmp.* worktree) sat 10+ minutes in a futex wait\nat about 1.8% CPU. The stack was lost: the push output was piped to\n`tail -1`. Three reruns of the same command passed in 13-24 s.\nAnother project's pre-push gate was running at the same time. It\nmatches the class of the FFmpeg-backend teardown deadlock noted in\npyproject.toml. An earlier push that day was also rejected once, with\nno visible reason. faulthandler_timeout = 120 is now set in\npyproject.toml. The next hang prints every thread's stack - read that\nbefore guessing.
+  Reproduced (2026-09-28 15:31, pre-push gate for 42e4dbc, machine load
+  average ~19): the 120 s stack dump fired at ~84% of the suite. The
+  main thread was blocked in MprisService._send (mpris.py,
+  self._bus.send(msg)) <- _emit_properties_changed <- _on_state_changed
+  <- Player._on_playback_state <- Player.stop <- MainWindow.closeEvent
+  <- pytest-qt _close_widgets, during a test's teardown. The other
+  thread had no Python frame (likely Qt's D-Bus thread). So
+  QDBusConnection.send on the private dbus-run-session bus blocked for
+  10+ minutes. Oddity: the dumped pytestqt frames came from
+  /mnt/Games/Scripts/Linux/Music_Production/.venv, not this venv;
+  unexplained so far. Full log:
+  ~/.cache/album-builder-ci/hang-2026-09-28.log. Leads: skip MPRIS emits
+  once closeEvent starts (unregister before player.stop), or give the
+  test session no MPRIS bus unless AB_INTEGRATION_DBUS is set.
+  Resolved (2026-09-28): closeEvent now unregisters MPRIS before
+  Player.stop(), so the STOPPED announcement hits the available=False
+  guard and shutdown never waits on a bus send. New TC-20-17
+  (tests/ui/test_TC_20_17_close_sends_nothing.py) was red before the fix
+  (1 message sent) and green after; 4 full gate runs green. The hang
+  could not be reproduced on demand, so the fix rests on the captured
+  stack. Reopen if a hang recurs anywhere else. The Music_Production
+  pytestqt path in the dump is still unexplained.
+  **Layman:** Once, the automatic checks that run before each upload froze instead of finishing; we added a watchdog so the next freeze explains itself.
+  Kind: investigate.
+  Source: in-session-2026-09-25 pre-push hang.
+  Lanes: tests.
+
+- ✅ [MUSI-0373] **S2 check: exported numbering and playlist order match the app's order.**
+  Serves S2 (docs/discovery.md). Find the Spec 08 tests that cover
+  export order; if any gap remains (numbered symlink names and M3U lines
+  both equal the album order after a reorder), add a test.
+  Resolved (2026-09-28): TC_08_13 checked link names only. New test
+  test_TC_08_13_reorder_links_and_playlist_follow_album_order proves
+  each numbered link resolves to the album's Nth track and the playlist
+  lists tracks in album order (identical titles, so names cannot hide a
+  wrong order). Proven red with a planted reversed-playlist bug.
+  **Layman:** Proves the approved album comes out in exactly the order you set.
+  Kind: test.
+  Source: check-queue-2026-09-28.
+
+- ✅ [MUSI-0377] **S7 check: nothing ever writes to the music folder.**
+  Serves S7 (docs/discovery.md). Confirm tests prove that approve,
+  reopen, delete, restore and alignment leave the Tracks folder
+  byte-identical (e.g. snapshot hashes before and after). Add one where a
+  path is uncovered. MUSI-0371 will add a deliberate copy-in path; its
+  test belongs there.
+  Resolved (2026-09-28): new TC-01-24 (Spec 01),
+  tests/services/test_TC_01_24_source_files_untouched.py. Approve,
+  unapprove, re-export, rename, delete, restore and lyrics alignment
+  leave song files byte-identical with the same mtime; only
+  .lrc/.lrc.bak sidecars are added (Spec 00 Data integrity). Owner chose
+  songs-only scope; S7 reworded. Proven red with a planted mtime touch.
+  **Layman:** Proves the app never renames, moves, changes or deletes your songs.
+  Kind: test.
+  Source: check-queue-2026-09-28.
+
+- 📋 [MUSI-0370] **The WhisperX-missing toast stays English in every language.**
+  alignment_worker emits "WhisperX not installed. Install via: ..."
+  and MainWindow._looks_like_whisperx_missing matches its English words
+  to decide whether to show the install dialog, so the string was left
+  untranslated. Fix: signal the missing runtime as a state, not as text,
+  then translate the message.
+  **Layman:** One rare error message still shows in English; fix how it is detected so it can be translated.
+  Kind: fix.
+  Source: in-session-2026-09-28.
+
+- 📋 [MUSI-0371] **"Add music" on-ramp: drop or pick files to add to the library.**
+  Deferred out of MUSI-0356 Phase MP-2 (Spec 18 §Out of scope). It
+  writes into the user's Tracks/ folder, which the project treats as
+  untouchable without explicit confirmation, so it needs its own
+  design decision (copy vs link, confirmation, name clashes) and spec.
+  Decided (user, 2026-09-28): drag-and-drop COPIES files into Tracks/.
+  Originals stay untouched; no links, no per-drop prompt.
+  **Layman:** Let people add songs by dragging them onto the app, once we decide how it should treat the music folder.
+  Kind: feature.
+  Source: in-session-2026-09-28.
+
+## ✅ 0.9.0 — More languages, Player-tab library, music folder (2026-09-28)
+
+- ✅ [MUSI-0368] **Multiple languages, including right-to-left ones.**
+  User request 2026-09-28: "The app also need to be in multiple
+  languages please. Including RTL languages." Touches every UI string,
+  the menus, the reports (Jinja templates), dates and numbers, and the
+  whole layout (RTL mirrors it). Spec-worthy under spec-format §1 (three
+  or more subsystems). Open question for the user: which languages.
+  Decisions (2026-09-28, with the user): first languages are
+  Afrikaans, Arabic, Hebrew, Spanish, French, German and Portuguese,
+  with English kept. Sequenced AFTER the player library (MUSI-0356
+  MP-2) so its new strings are translated once.
+  Resolved (2026-09-28): Spec 25 written, gated (review-contract, 2
+  loops, 12 findings fixed, accepted at the cap) and implemented.
+  i18n.py + translations/<code>.json for af, ar, he, es, fr, de, pt;
+  View > Language (restart to apply); RTL mirroring with the transport
+  pinned LTR; report translated with lang/dir and a localised date.
+  TC-25-01..12. Checked by eye: Arabic Player tab and a Hebrew report
+  PDF render correctly. Catalogs are machine-drafted (README says so).
+  **Layman:** Let people use the app in their own language, including Arabic and Hebrew, which read right to left.
+  Kind: feature.
+  Source: user-request-2026-09-28.
+
+- ✅ [MUSI-0354] **Fully-featured music player mode (library-wide playback engine).**
+  (User request 2026-06-17; started 2026-06-17.) Expand Album Builder beyond curation into a general-purpose player: play the whole library (not just an album preview), with a persistent play queue, shuffle/repeat, gapless playback, saved playlists, and a full transport. **Reuse-before-rewrite:** build on the existing `Player` (QMediaPlayer wrapper), `LyricsTracker`, `TransportBar`, and `Library` services rather than a parallel pipeline. Large multi-phase epic; each phase is spec-first (author the spec + run `/cold-eyes` to clean before implementation, per spec discipline).
+
+  **Locked decisions (2026-06-17):**
+  - **Player surface = a separate tab in `MainWindow`** (user choice 2026-06-17), not a detachable window or a mode toggle. Curation view becomes tab 1; player becomes tab 2. Resolves the Phase E "tab vs detachable window" open question.
+  - **Shuffle = "shuffled deck"** (user choice 2026-06-17): one random permutation walked by next/prev; every track plays once before any repeat; previous() reliably returns the prior track. Not "always random".
+  - **RNG is injectable** into the queue domain object for deterministic tests (mirrors the `_now()` monkeypatch convention).
+
+  **Research-driven feature set (2026-06-17 web survey of foobar2000 / MusicBee / Lollypop / DeaDBeeF / AIMP + Qt6 Multimedia docs; sources logged in the Phase A plan).** Tiered for this PyQt6 Linux-first app:
+  - *Core playback:* play queue, shuffle (deck), repeat off/one/all, next/prev, play/pause/stop, seek/scrubber, volume+mute, auto-advance on track-end.
+  - *Library/navigation:* library-wide playback ("play all" / "play from here" / enqueue), browse + search (Library already has sort/search/find).
+  - *Playlists:* saved, named, reorderable; M3U import/export (export already exists, Spec 08).
+  - *Now-playing surface:* cover art, title/artist/album, seek bar, transport, shuffle/repeat, volume, synced lyrics (reuse `LyricsPanel`), upcoming-queue view.
+  - *Linux desktop integration (the "fully-featured" differentiators on KDE Plasma):* **MPRIS2 D-Bus** (media controls in the Plasma tray / lock screen, and hardware media-key support comes for free via MPRIS2), system-tray icon with controls. New phase — see Phase G below.
+  - *Audio enhancement (hard / deferred):* ReplayGain / volume normalization, equalizer, crossfade — Phase F. **Qt6 note:** `QMediaGaplessPlaybackControl` was Qt5-only and is **gone in Qt6**; gapless requires a dual-`QMediaPlayer` pre-roll workaround, and there is no native EQ in QtMultimedia. Both confirmed against Qt 6.11 docs.
+  - *Out of scope (now):* visualizer/FFT spectrum, Discord presence, Spotify/streaming, CD ripping, bulk tag editing.
+
+  Phases:
+  - ✅ **Phase A — Playback queue (domain).** An ordered, mutable queue decoupled from `Album`; shuffle (shuffled-deck) + repeat-off/one/all modes; next/prev semantics. Pure-Python domain object (frozen track refs in a mutable index-based deck), no Qt. **Done 2026-06-17:** Spec 14 authored + cold-eyes clean (5 loops, 2 reviewers/loop, self-signed-off) and added to the Spec 00 index; implemented in `domain/play_queue.py` with all 33 TC contracts (`tests/domain/test_play_queue.py`). Full suite 631 passed / 0 failed, ruff clean, no teardown hang. Cold-eyes fixed: repeat-ONE/manual table contradiction, remove play-order-vs-natural-index ambiguity, reshuffle swap-slot pin, deck-representation invariant, plus full edge-case->TC parity.
+  - ✅ **Phase B — Library-wide playback wiring (services + ui).** Play/enqueue any track from `LibraryPane` ("play all", "play from here"); queue survives track changes. Extend `Player` to advance through the queue on track-end (it currently plays one preview source). **Done 2026-06-30:** Spec 15 authored + 5-loop cold-eyes (2 CRITICAL -> 0, accepted at the loop cap) + added to the Spec 00 index. The full Spec 15 contract now lands: the Phase A domain amendment (`current_play_order_index` / `jump_to_play_order_index` on `PlayQueue`, TC-15-02a/b), the `PlaybackController` service (TC-15-01..19/31/33/34, driven by a faithful FakePlayer double - no audio backend / teardown hang), and the UI layer - `LibraryPane` right-click context menu + view-order-aware payloads (TC-15-20..23), the `QueuePane` Up Next widget with pulled highlight + plain-text rows (TC-15-25/26/32), and the `MainWindow` two-tab restructure (Album Builder | Player) routing preview + library actions + Up Next double-click through the single controller, with now-playing / lyrics / last-played riding `current_changed` and the play-glyph still on `Player.state_changed` (TC-15-24/27..30). Full suite 674 passed / 12 skipped, ruff clean, no teardown hang. **Next: Phase C** (transport enrichment - shuffle/repeat/next/prev/scrubber surfaced in `TransportBar`, gapless spike).
+  - ✅ **Phase C — Transport enrichment (ui).** Shuffle, repeat, next/prev surfaced in `TransportBar` (the seek/scrubber already shipped in Phase 3A / Spec 06, so Phase C does not re-add it); gapless transition needed a spike — QtMultimedia/QMediaPlayer gapless is historically limited. **Done 2026-07-01:** Spec 16 authored + 5-loop cold-eyes (2 reviewers/loop, cold each pass; 0 CRITICAL throughout; accepted at the loop cap) + added to the Spec 00 index. Implementation is UI-only (the Phase A/B controller already exposed every command): 5 new `theme.Glyphs` (`SKIP_PREV/NEXT`, `SHUFFLE`, `REPEAT_ALL/ONE`) + a `:checked` QSS rule; `TransportBar` gains a `PlaybackController` ref and four buttons — prev/next (`controller.previous`/`next`), a checkable shuffle toggle (`set_shuffle`), and a 3-state repeat cycle OFF->ALL->ONE via an explicit map (`set_repeat`), all seeded from controller state at construction; `NowPlayingPane`/`MainWindow` thread the controller through. Player-level controls (play/pause/mute/volume/seek) stay on `Player` unchanged. TC-16-01..13 in `tests/ui/test_transport_bar.py`; a doc-vs-code precision fix folded back into Spec 15 (empty-queue `next()` issues a benign `Player.stop()`, not "player untouched"). **Gapless: investigated, deferred** — Qt6 removed `QMediaGaplessPlaybackControl`; a dual-`QMediaPlayer` pre-roll would fight the Spec 15 single-playback-path invariant, so the build is deferred to a dedicated spec sequenced with Phase F (audio effects). Full suite 687 passed / 12 skipped, ruff clean, no teardown hang. **Next: Phase D** (saved playlists - persistence). ✅ done 2026-07-03 (see Phase D below).
+  - ✅ **Phase D — Saved playlists (persistence + ui).** Named, reorderable playlists persisted through the atomic-write layer, plus playlist CRUD UI. **Done 2026-07-03:** Spec 17 authored + 7-loop cold-eyes (accepted at the loop cap) + added to the Spec 00 index. Landed in two commits: (1) the domain `Playlist` + persistence `playlist_io` (atomic save + raise-not-reset load with an own `isinstance` guard + relative->absolute heal; TC-17-01..10, commit `98f122c`); (2) this pass — the `PlaylistStore` service (CRUD + `changed` + `DebouncedWriter` keyed `"playlists"` + startup-degradation `load_failed`/`.corrupt.bak`; TC-17-11..16/26), the `PlaylistsPane` (playlists + tracks lists, inline rename, keyboard Up/Down reorder with selection-follows-track, missing-track "(missing)" markers, button gating; TC-17-17/18/27/28/30), the `LibraryPane` "Add to playlist" submenu (TC-17-19), and the `MainWindow` wiring — Player tab now stacks `PlaylistsPane` above the live `QueuePane`; New/Rename/Delete/Play/Add-from-library handlers; play resolves via `Library.find` and no-ops (toast) on an empty/all-missing playlist; queue/playlist independence (TC-17-20..25/29). Full suite 721 passed / 12 skipped, ruff clean, no teardown hang. A pending-debounce-timer leak in the new main-window tests (fired against a torn-down writer in a later test) was fixed with a teardown flush. **Next: Phase E** (dedicated player-mode surface).
+  - ✅ **Phase E — Dedicated player-mode surface (ui).** A **separate tab** in `MainWindow` (locked decision above) hosting the now-playing surface: transport + scrubber + synced lyrics + upcoming-queue view. Reuse `NowPlayingPane` / `LyricsPanel`. Folds in the deferred "Player mode (listening UI)" bullet above. **Done 2026-07-18:** Spec 18 (authored + 5-loop cold-eyes clean 2026-07-04) implemented in full. Landed: the four broadcast signals (`Player.volume_changed`/`muted_changed` with the INV-18-1 apply-before-emit guard; `PlaybackController.shuffle_changed`/`repeat_changed`); `TransportBar`'s four reactive subscriptions (imperative mute/repeat self-patches removed); the extracted `NowPlayingCard` (transparent id-scoped frame) with `NowPlayingPane` refactored onto it; the new `PlayerPane` (card + transport left, lyrics over an Up Next/Playlists `QTabWidget` right); and the `MainWindow` two-surface fan-out (`_set_track_all` / `_set_lyrics_all` / `_set_lyrics_status_all`, both lyrics panels themed on live switch). Cross-spec amendments folded into Specs 15/16/00; TC-15-33 test renamed/annotated as superseded by TC-18-04. New tests TC-18-01..24 (`tests/services/test_player.py`, `test_playback_controller.py`, `tests/ui/test_TC_18_player_pane.py`). Full suite **781 passed / 12 skipped**, ruff clean, local-CI green; verified end-to-end (headless launch: Player tab = PlayerPane, two coherent surfaces, live theme switch fans to both). **Next: Phase F (research) or Phase G (MPRIS2).**
+  - **Phase F (research) — Equalizer / audio effects + ReplayGain.** QtMultimedia has no native EQ and Qt6 dropped gapless control; would need an audio-filter graph or a different audio backend. Spike + gauge demand before committing. **Spike done 2026-07-18** (`docs/research/2026-07-18-phase-f-audio-effects-spike.md`, sources verified against Qt 6.11 docs): (1) **EQ** stays deferred - QtMultimedia provides no audio DSP ("external dependencies are needed"), so an EQ means retiring `QMediaPlayer` for a raw-sample `QAudioSink` pipeline or a GStreamer/miniaudio backend; disproportionate for a curation-first app. (2) **Gapless/crossfade** stays deferred - `QMediaGaplessPlaybackControl` is Qt5-only; the dual-`QMediaPlayer` pre-roll fights the Spec 15 single-path invariant (own spec needed). (3) **ReplayGain volume-normalization is the one feasible/cheap piece** - it is tag-driven output scaling, not DSP: `domain/track.py` already reads ID3 via mutagen, so reading `REPLAYGAIN_*` / `R128_*` tags is free, and applying a `10**(dB/20)` factor to `QAudioOutput.setVolume` needs no new dependency and no pipeline change (tag *writing*/scanning stays out of scope - that's `rsgain`'s job). Recommendation: promote ReplayGain to its own small spec-first feature **iff there is user demand for loudness leveling**; EQ + gapless remain parked with the memo as rationale. **ReplayGain done 2026-07-18** (user requested it as a toggleable setting): Spec 21 authored + cold-eyes clean (3 loops - caught the restored-track-never-levelled gap, the qFatal-on-toggle risk, and a false "no change to Spec 18" before any code) + implemented in full. Landed: a `replaygain` settings block (`enabled`/`mode`), two read-only `Track` gain fields parsed from ID3 `TXXX` at scan time, a `Player` composite-volume refactor (user volume decoupled from the output level; an internal ReplayGain factor scales `QAudioOutput`, clamped, emitting no `volume_changed`), a pure `gain_factor` + `ReplayGainService` (caches the current track so the controller-bypassing restored last-played track is levelled too), and a **Playback -> Volume Levelling** menu (checkable toggle + Album/Track reference, guarded persistence mirroring `_apply_theme`). TC-21-01..09; EQ + gapless remain parked.
+  - ✅ **Phase G — MPRIS2 / desktop integration (Linux).** D-Bus MPRIS2 interface so the player appears in the KDE Plasma media controller (tray + lock screen) and responds to hardware media keys; system-tray icon. New phase surfaced by the 2026-06-17 research; spec-first like the rest. **Spec 20 authored + cold-eyes clean (7 loops, 2026-07-18).** Design: zero new dependencies (PyQt6 ships `QtDBus` + `QSystemTrayIcon`); two `QDBusAbstractAdaptor`s (root + Player) on one host object driven by the existing `Player`/`PlaybackController`, with full transport + Seek/Volume/Position + bidirectional Shuffle/LoopStatus (reusing the Spec 18 broadcast signals), temp-file `mpris:artUrl` cover art, and a control-surface tray (close still quits). The cold-eyes loop caught a **fatal PyQt6 gotcha before any code**: returning a `QDBusArgument` from a `pyqtProperty('QVariantMap')` getter SIGABRTs on client read (confirmed against a live session bus) — the spec now mandates a plain dict with per-value typed carriers (int64 length, `as` artist, object-path trackid), verified conformant via `dbus-send`. Locked decisions (2026-07-18): full MPRIS2 scope; tray = control surface only; cover art via temp-file artUrl. **Done 2026-07-18:** implemented in full — `services/mpris.py` (two adaptors + `MprisService` + pure mapping helpers), `ui/tray.py`, `ui/window_util.py` (shared `bring_to_front`), one additive `Player.seeked` signal, wired into `MainWindow` with `closeEvent` teardown; TC-20-01..16 + an opt-in `AB_INTEGRATION_DBUS` live-bus wire-signature test (re-verified over a real session bus that the Metadata read is non-crashing and `x`/`o`/`as`-conformant); full suite green (804 passed).
+  Sequencing: A->B->C deliver a usable player; D/E/F/G are follow-on. Each phase gets its own spec + TC contracts before any code lands.
+  Closed (2026-09-25, user decision): Phases A-E and G shipped,
+  and\nPhase F's ReplayGain half shipped as Spec 21. The equalizer,
+  gapless\nand crossfade half moved to MUSI-0356 Phase MP-7, where it is
+  tracked.
+  **Layman:** Turn the app into a full music player that can play your whole library, not just preview an album.
+  Kind: implement.
+
+## ✅ 0.8.1 — Linux download back, display fixes (2026-09-25)
+
+- ✅ [MUSI-0364] **Library Title column collapses to zero width at normal window sizes.**
+  `ui/library_pane.py` sets Title to `QHeaderView.ResizeMode.Stretch` and
+  the other columns to fixed Interactive widths that add up to about
+  610 px. Below that table width the stretch section gets no space.
+  Seen in a 1280x800 demoreel shot: header shows only the sort
+  indicator where Title should be. Present before 2026-09-25 (same
+  image from commit 9d32630).
+  Resolved (2026-09-25): Title has a 220 px default width and Composer
+  is the stretch column. Pinned by TC-01-20; checked in a 1280x800 shot.
+  **Layman:** In the song list, the Title column disappears unless the window is very wide, so you can't see song names.
+  Kind: fix.
+  Source: in-session-2026-09-25 demo screenshot.
+  Lanes: ui.
+
+- ✅ [MUSI-0365] **Album-order rows draw their text twice, under and beside the row widget.**
+  Each QListWidgetItem carries the full row text (kept for tests and
+  screen readers) and the default delegate paints it. The
+  `_OrderRowWidget` on top has a transparent background and is offset
+  by the play button, so both texts show. Likely fix: a delegate that
+  paints selection but no text, keeping `item.text()` for
+  accessibility. Present before 2026-09-25.
+  Resolved (2026-09-25): the order list's delegate paints selection but
+  no text; item.text() is kept. Pinned by TC-05-16.
+  **Layman:** Each track in the album-order list shows its number and name twice, overlapping.
+  Kind: fix.
+  Source: in-session-2026-09-25 demo screenshot.
+  Lanes: ui.
+
+- ✅ [MUSI-0366] **Album-order preview-play button shows no glyph.**
+  `QPushButton#RowPlay` is fixed at 24x24, but the base `QPushButton`
+  rule in `ui/theme.py` gives 12 px padding each side, which leaves no
+  room for the glyph. Likely fix: `padding: 0` on `#RowPlay`.
+  Present before 2026-09-25.
+  Resolved (2026-09-25): a `glyphButton` property gives padding 0 to
+  the row play, track-count -/+ and toast close buttons. The toast
+  close also needed padding 0 in its own ID rule (measured). Pinned by
+  TC-06-27, which fails for all four without the theme change.
+  **Layman:** The small play button next to each track in the album-order list is blank.
+  Kind: fix.
+  Source: in-session-2026-09-25 demo screenshot.
+  Lanes: ui.
+
+## ✅ 0.8.0 — More music file types
+
+- ✅ [MUSI-0361] **Drag visual feedback in the album-order pane was specified but never built.**
+  Spec 05 described this under a Status: Implemented heading and the
+  gate found no implementation: no opacity handling, no drop-indicator
+  styling, no stylesheet rule in `ui/album_order_pane.py` or
+  `ui/theme.py`. The pane relies on Qt's unstyled `InternalMove`
+  rendering.
+
+  The spec now states the gap rather than asserting the feature, and
+  TC-05-07 covers the functional half only - a clause asserting the
+  visuals would be unfalsifiable while nothing renders them.
+
+  The target, if built: grabbed row at 50% opacity, a 2 px
+  `accent-primary-1` line at the drop position, other rows shifting to
+  make room. Deciding whether it is wanted is the open question; the
+  values are already pinned so there is no contract left to invent.
+  Resolved (2026-09-25, user chose to build it): the grabbed row dims
+  to\n50% for the drag, and a 2 px line in the theme accent marks the
+  drop\npoint. Pinned by TC-05-14 and TC-05-15. The line position
+  matched\nQt's own drop decision at every one of 355 positions. Rows
+  shifting\nto make room was not built; Spec 05 records that.
+  **Layman:** Dragging a track to reorder it uses Qt's plain default look - the spec described a nicer effect (the row you grab going half-transparent, a coloured line showing where it will land) that was never actually built.
+  Kind: ux.
+  Source: review-contract-2026-09-21 spec-05 gate L-20260921-05.
+  Lanes: ui.
+
 ## ✅ Themes — five built-in themes + live switcher (Spec 19, 2026-07-04)
 
 User request 2026-07-04 ("add additional themes"). The app was dark-only
@@ -2295,372 +2667,3 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
 - ✅ [MUSI-0353] **INFO — `track_at()` only used by tests.**
   Closed in v0.3.0: `LibraryPane._on_table_clicked` and `_on_double_click` consume `track_at()` for preview-play row → Track resolution.
   Kind: implement.
-
-## 🔭 Future / deferred
-
-- Group-by-artist tabs (Spec 00 roadmap)
-- Tap-along LRC editor for manual alignment correction
-- Multi-project (multiple Tracks/ folders open at once)
-- Album cover compositing
-- Bulk pre-alignment scheduler
-- Light-theme support / themable palette
-- Recursive subfolder scanning under Tracks/
-- **WCAG 2.2 §4.1.3 status-message announcement on Spec 13 count change (a11y enhancement).** The track-usage-indicator badge (Spec 13) covers static `AccessibleTextRole` for point-in-time inspection but doesn't emit a live screen-reader announcement when a count changes (e.g. user approves an album, badges appear on tracks newly on it). Implementation target: `QAccessibleEvent` / `QAccessible.updateAccessibility` per affected cell on `UsageIndex.changed` — but that PyQt6 binding has historically been incomplete (v0.4.0 Tier 2 L7-H2 documented the `QAccessible` binding gap, see `src/album_builder/ui/toast.py:43-47`; Toast worked around via `setAccessibleName` / `setAccessibleDescription` to fire a `DescriptionChange` event). Pick the right PyQt6 idiom when this lands; verify against current PyQt6 version. Cross-reference `Spec 13 §Out of scope (v1)` for the deferral context.
-- **Player mode (dedicated listening UI, WinAmp / classic-player style).** Today the app is a curation tool — playback exists in service of picking and ordering tracks (preview + synchronised lyrics). A "player mode" would add a focused now-playing surface for just *listening* to an approved album end to end: compact/detachable window, a queue of the album's ordered tracks, transport + scrubber, the synced lyrics, optionally a classic skinned aesthetic or visualiser. Brainstorm-first (Spec needed): is it a top-level mode toggle on `MainWindow`, or a detachable `NowPlayingPane`? Must reuse the existing `Player` + `LyricsTracker` services rather than stand up a parallel playback pipeline (reuse-before-rewrite). Deferred until the core curation loop is feature-complete. **(Now folded in as Phase E of the "Fully-featured music player mode" epic below.)**
-- **Windows port (cross-platform packaging).** The app is Linux-first and several pieces are POSIX-specific: symlink-based export (`os.symlink`), `XDG_CONFIG_HOME` settings paths, a bash `install.sh`, and WeasyPrint's GTK/Pango native runtime. A Windows build needs, at minimum: a Windows-safe export strategy (symlinks require admin / Developer Mode — junctions, hardlinks, or a copy fallback), a `platformdirs`-style config-path resolver replacing the XDG env var, verification that WeasyPrint's GTK runtime ships on Windows (the historical pain point), confirmation of WhisperX/torch wheels, and a PyInstaller/briefcase bundle replacing the shell installer. Audit every `os.symlink`, hardcoded `/`-path, and the `sys.executable` install hint first. Separate phase; pick the packaging tool brainstorm-first. **(Superseded 2026-07-25 — folded into the "Distribution & cross-platform packaging" epic below, which carries this forward with locked decisions.)**
-- **Improve lyric matching / alignment quality.** WhisperX forced-alignment (Spec 07 / `AlignmentService` + `AlignmentWorker`) is the current engine. Quality gaps worth targeting: instrumental intros/outros, repeated choruses, non-English lyrics, and low-confidence word timings drifting. Options to brainstorm: surface per-line/word confidence (cross-ref the deferred "Tap-along LRC editor" so the user can nudge weak lines), a manual global offset control, pre-cleaning lyrics (strip `[Chorus]` / section markers before alignment), or a newer whisper/alignment backend. Establish a hand-aligned reference set and measure before/after rather than eyeballing. Enhancement to the existing `AlignmentService`, not a rewrite.
-- **SQLite-backed library + analytics substrate (long-horizon).** Replace the per-album JSON + in-memory derived structures with a SQLite catalogue once the dataset outgrows the current "single-user picks ~10 tracks per album" regime. Triggers worth waiting for: hundreds of approved albums in the user's history, demand for cross-cutting queries (release-year filters, genre/mood metadata, listening history, smart-playlist rules, full-text search at scale), or analytics dashboards. Brought up during the v0.6.0 popularity-indicator brainstorm (2026-05-01) and explicitly parked: the popularity index for v0.6.0 is in-memory derived because the data model is "count items in a list" and current scale is ~5 approved × ~10 tracks. A SQLite migration would require a Spec 10 amendment (or new Spec 14 for db layer), atomic-write strategy redesign, JSON→SQLite migration helper, test-fixture rewrite across `tests/persistence/`, and a corruption-recovery story — separate phase, not bundled into a feature.
-
-- ✅ [MUSI-0354] **Fully-featured music player mode (library-wide playback engine).**
-  (User request 2026-06-17; started 2026-06-17.) Expand Album Builder beyond curation into a general-purpose player: play the whole library (not just an album preview), with a persistent play queue, shuffle/repeat, gapless playback, saved playlists, and a full transport. **Reuse-before-rewrite:** build on the existing `Player` (QMediaPlayer wrapper), `LyricsTracker`, `TransportBar`, and `Library` services rather than a parallel pipeline. Large multi-phase epic; each phase is spec-first (author the spec + run `/cold-eyes` to clean before implementation, per spec discipline).
-
-  **Locked decisions (2026-06-17):**
-  - **Player surface = a separate tab in `MainWindow`** (user choice 2026-06-17), not a detachable window or a mode toggle. Curation view becomes tab 1; player becomes tab 2. Resolves the Phase E "tab vs detachable window" open question.
-  - **Shuffle = "shuffled deck"** (user choice 2026-06-17): one random permutation walked by next/prev; every track plays once before any repeat; previous() reliably returns the prior track. Not "always random".
-  - **RNG is injectable** into the queue domain object for deterministic tests (mirrors the `_now()` monkeypatch convention).
-
-  **Research-driven feature set (2026-06-17 web survey of foobar2000 / MusicBee / Lollypop / DeaDBeeF / AIMP + Qt6 Multimedia docs; sources logged in the Phase A plan).** Tiered for this PyQt6 Linux-first app:
-  - *Core playback:* play queue, shuffle (deck), repeat off/one/all, next/prev, play/pause/stop, seek/scrubber, volume+mute, auto-advance on track-end.
-  - *Library/navigation:* library-wide playback ("play all" / "play from here" / enqueue), browse + search (Library already has sort/search/find).
-  - *Playlists:* saved, named, reorderable; M3U import/export (export already exists, Spec 08).
-  - *Now-playing surface:* cover art, title/artist/album, seek bar, transport, shuffle/repeat, volume, synced lyrics (reuse `LyricsPanel`), upcoming-queue view.
-  - *Linux desktop integration (the "fully-featured" differentiators on KDE Plasma):* **MPRIS2 D-Bus** (media controls in the Plasma tray / lock screen, and hardware media-key support comes for free via MPRIS2), system-tray icon with controls. New phase — see Phase G below.
-  - *Audio enhancement (hard / deferred):* ReplayGain / volume normalization, equalizer, crossfade — Phase F. **Qt6 note:** `QMediaGaplessPlaybackControl` was Qt5-only and is **gone in Qt6**; gapless requires a dual-`QMediaPlayer` pre-roll workaround, and there is no native EQ in QtMultimedia. Both confirmed against Qt 6.11 docs.
-  - *Out of scope (now):* visualizer/FFT spectrum, Discord presence, Spotify/streaming, CD ripping, bulk tag editing.
-
-  Phases:
-  - ✅ **Phase A — Playback queue (domain).** An ordered, mutable queue decoupled from `Album`; shuffle (shuffled-deck) + repeat-off/one/all modes; next/prev semantics. Pure-Python domain object (frozen track refs in a mutable index-based deck), no Qt. **Done 2026-06-17:** Spec 14 authored + cold-eyes clean (5 loops, 2 reviewers/loop, self-signed-off) and added to the Spec 00 index; implemented in `domain/play_queue.py` with all 33 TC contracts (`tests/domain/test_play_queue.py`). Full suite 631 passed / 0 failed, ruff clean, no teardown hang. Cold-eyes fixed: repeat-ONE/manual table contradiction, remove play-order-vs-natural-index ambiguity, reshuffle swap-slot pin, deck-representation invariant, plus full edge-case->TC parity.
-  - ✅ **Phase B — Library-wide playback wiring (services + ui).** Play/enqueue any track from `LibraryPane` ("play all", "play from here"); queue survives track changes. Extend `Player` to advance through the queue on track-end (it currently plays one preview source). **Done 2026-06-30:** Spec 15 authored + 5-loop cold-eyes (2 CRITICAL -> 0, accepted at the loop cap) + added to the Spec 00 index. The full Spec 15 contract now lands: the Phase A domain amendment (`current_play_order_index` / `jump_to_play_order_index` on `PlayQueue`, TC-15-02a/b), the `PlaybackController` service (TC-15-01..19/31/33/34, driven by a faithful FakePlayer double - no audio backend / teardown hang), and the UI layer - `LibraryPane` right-click context menu + view-order-aware payloads (TC-15-20..23), the `QueuePane` Up Next widget with pulled highlight + plain-text rows (TC-15-25/26/32), and the `MainWindow` two-tab restructure (Album Builder | Player) routing preview + library actions + Up Next double-click through the single controller, with now-playing / lyrics / last-played riding `current_changed` and the play-glyph still on `Player.state_changed` (TC-15-24/27..30). Full suite 674 passed / 12 skipped, ruff clean, no teardown hang. **Next: Phase C** (transport enrichment - shuffle/repeat/next/prev/scrubber surfaced in `TransportBar`, gapless spike).
-  - ✅ **Phase C — Transport enrichment (ui).** Shuffle, repeat, next/prev surfaced in `TransportBar` (the seek/scrubber already shipped in Phase 3A / Spec 06, so Phase C does not re-add it); gapless transition needed a spike — QtMultimedia/QMediaPlayer gapless is historically limited. **Done 2026-07-01:** Spec 16 authored + 5-loop cold-eyes (2 reviewers/loop, cold each pass; 0 CRITICAL throughout; accepted at the loop cap) + added to the Spec 00 index. Implementation is UI-only (the Phase A/B controller already exposed every command): 5 new `theme.Glyphs` (`SKIP_PREV/NEXT`, `SHUFFLE`, `REPEAT_ALL/ONE`) + a `:checked` QSS rule; `TransportBar` gains a `PlaybackController` ref and four buttons — prev/next (`controller.previous`/`next`), a checkable shuffle toggle (`set_shuffle`), and a 3-state repeat cycle OFF->ALL->ONE via an explicit map (`set_repeat`), all seeded from controller state at construction; `NowPlayingPane`/`MainWindow` thread the controller through. Player-level controls (play/pause/mute/volume/seek) stay on `Player` unchanged. TC-16-01..13 in `tests/ui/test_transport_bar.py`; a doc-vs-code precision fix folded back into Spec 15 (empty-queue `next()` issues a benign `Player.stop()`, not "player untouched"). **Gapless: investigated, deferred** — Qt6 removed `QMediaGaplessPlaybackControl`; a dual-`QMediaPlayer` pre-roll would fight the Spec 15 single-playback-path invariant, so the build is deferred to a dedicated spec sequenced with Phase F (audio effects). Full suite 687 passed / 12 skipped, ruff clean, no teardown hang. **Next: Phase D** (saved playlists - persistence). ✅ done 2026-07-03 (see Phase D below).
-  - ✅ **Phase D — Saved playlists (persistence + ui).** Named, reorderable playlists persisted through the atomic-write layer, plus playlist CRUD UI. **Done 2026-07-03:** Spec 17 authored + 7-loop cold-eyes (accepted at the loop cap) + added to the Spec 00 index. Landed in two commits: (1) the domain `Playlist` + persistence `playlist_io` (atomic save + raise-not-reset load with an own `isinstance` guard + relative->absolute heal; TC-17-01..10, commit `98f122c`); (2) this pass — the `PlaylistStore` service (CRUD + `changed` + `DebouncedWriter` keyed `"playlists"` + startup-degradation `load_failed`/`.corrupt.bak`; TC-17-11..16/26), the `PlaylistsPane` (playlists + tracks lists, inline rename, keyboard Up/Down reorder with selection-follows-track, missing-track "(missing)" markers, button gating; TC-17-17/18/27/28/30), the `LibraryPane` "Add to playlist" submenu (TC-17-19), and the `MainWindow` wiring — Player tab now stacks `PlaylistsPane` above the live `QueuePane`; New/Rename/Delete/Play/Add-from-library handlers; play resolves via `Library.find` and no-ops (toast) on an empty/all-missing playlist; queue/playlist independence (TC-17-20..25/29). Full suite 721 passed / 12 skipped, ruff clean, no teardown hang. A pending-debounce-timer leak in the new main-window tests (fired against a torn-down writer in a later test) was fixed with a teardown flush. **Next: Phase E** (dedicated player-mode surface).
-  - ✅ **Phase E — Dedicated player-mode surface (ui).** A **separate tab** in `MainWindow` (locked decision above) hosting the now-playing surface: transport + scrubber + synced lyrics + upcoming-queue view. Reuse `NowPlayingPane` / `LyricsPanel`. Folds in the deferred "Player mode (listening UI)" bullet above. **Done 2026-07-18:** Spec 18 (authored + 5-loop cold-eyes clean 2026-07-04) implemented in full. Landed: the four broadcast signals (`Player.volume_changed`/`muted_changed` with the INV-18-1 apply-before-emit guard; `PlaybackController.shuffle_changed`/`repeat_changed`); `TransportBar`'s four reactive subscriptions (imperative mute/repeat self-patches removed); the extracted `NowPlayingCard` (transparent id-scoped frame) with `NowPlayingPane` refactored onto it; the new `PlayerPane` (card + transport left, lyrics over an Up Next/Playlists `QTabWidget` right); and the `MainWindow` two-surface fan-out (`_set_track_all` / `_set_lyrics_all` / `_set_lyrics_status_all`, both lyrics panels themed on live switch). Cross-spec amendments folded into Specs 15/16/00; TC-15-33 test renamed/annotated as superseded by TC-18-04. New tests TC-18-01..24 (`tests/services/test_player.py`, `test_playback_controller.py`, `tests/ui/test_TC_18_player_pane.py`). Full suite **781 passed / 12 skipped**, ruff clean, local-CI green; verified end-to-end (headless launch: Player tab = PlayerPane, two coherent surfaces, live theme switch fans to both). **Next: Phase F (research) or Phase G (MPRIS2).**
-  - **Phase F (research) — Equalizer / audio effects + ReplayGain.** QtMultimedia has no native EQ and Qt6 dropped gapless control; would need an audio-filter graph or a different audio backend. Spike + gauge demand before committing. **Spike done 2026-07-18** (`docs/research/2026-07-18-phase-f-audio-effects-spike.md`, sources verified against Qt 6.11 docs): (1) **EQ** stays deferred - QtMultimedia provides no audio DSP ("external dependencies are needed"), so an EQ means retiring `QMediaPlayer` for a raw-sample `QAudioSink` pipeline or a GStreamer/miniaudio backend; disproportionate for a curation-first app. (2) **Gapless/crossfade** stays deferred - `QMediaGaplessPlaybackControl` is Qt5-only; the dual-`QMediaPlayer` pre-roll fights the Spec 15 single-path invariant (own spec needed). (3) **ReplayGain volume-normalization is the one feasible/cheap piece** - it is tag-driven output scaling, not DSP: `domain/track.py` already reads ID3 via mutagen, so reading `REPLAYGAIN_*` / `R128_*` tags is free, and applying a `10**(dB/20)` factor to `QAudioOutput.setVolume` needs no new dependency and no pipeline change (tag *writing*/scanning stays out of scope - that's `rsgain`'s job). Recommendation: promote ReplayGain to its own small spec-first feature **iff there is user demand for loudness leveling**; EQ + gapless remain parked with the memo as rationale. **ReplayGain done 2026-07-18** (user requested it as a toggleable setting): Spec 21 authored + cold-eyes clean (3 loops - caught the restored-track-never-levelled gap, the qFatal-on-toggle risk, and a false "no change to Spec 18" before any code) + implemented in full. Landed: a `replaygain` settings block (`enabled`/`mode`), two read-only `Track` gain fields parsed from ID3 `TXXX` at scan time, a `Player` composite-volume refactor (user volume decoupled from the output level; an internal ReplayGain factor scales `QAudioOutput`, clamped, emitting no `volume_changed`), a pure `gain_factor` + `ReplayGainService` (caches the current track so the controller-bypassing restored last-played track is levelled too), and a **Playback -> Volume Levelling** menu (checkable toggle + Album/Track reference, guarded persistence mirroring `_apply_theme`). TC-21-01..09; EQ + gapless remain parked.
-  - ✅ **Phase G — MPRIS2 / desktop integration (Linux).** D-Bus MPRIS2 interface so the player appears in the KDE Plasma media controller (tray + lock screen) and responds to hardware media keys; system-tray icon. New phase surfaced by the 2026-06-17 research; spec-first like the rest. **Spec 20 authored + cold-eyes clean (7 loops, 2026-07-18).** Design: zero new dependencies (PyQt6 ships `QtDBus` + `QSystemTrayIcon`); two `QDBusAbstractAdaptor`s (root + Player) on one host object driven by the existing `Player`/`PlaybackController`, with full transport + Seek/Volume/Position + bidirectional Shuffle/LoopStatus (reusing the Spec 18 broadcast signals), temp-file `mpris:artUrl` cover art, and a control-surface tray (close still quits). The cold-eyes loop caught a **fatal PyQt6 gotcha before any code**: returning a `QDBusArgument` from a `pyqtProperty('QVariantMap')` getter SIGABRTs on client read (confirmed against a live session bus) — the spec now mandates a plain dict with per-value typed carriers (int64 length, `as` artist, object-path trackid), verified conformant via `dbus-send`. Locked decisions (2026-07-18): full MPRIS2 scope; tray = control surface only; cover art via temp-file artUrl. **Done 2026-07-18:** implemented in full — `services/mpris.py` (two adaptors + `MprisService` + pure mapping helpers), `ui/tray.py`, `ui/window_util.py` (shared `bring_to_front`), one additive `Player.seeked` signal, wired into `MainWindow` with `closeEvent` teardown; TC-20-01..16 + an opt-in `AB_INTEGRATION_DBUS` live-bus wire-signature test (re-verified over a real session bus that the Metadata read is non-crashing and `x`/`o`/`as`-conformant); full suite green (804 passed).
-  Sequencing: A->B->C deliver a usable player; D/E/F/G are follow-on. Each phase gets its own spec + TC contracts before any code lands.
-  Closed (2026-09-25, user decision): Phases A-E and G shipped,
-  and\nPhase F's ReplayGain half shipped as Spec 21. The equalizer,
-  gapless\nand crossfade half moved to MUSI-0356 Phase MP-7, where it is
-  tracked.
-  **Layman:** Turn the app into a full music player that can play your whole library, not just preview an album.
-  Kind: implement.
-
-- 🚧 [MUSI-0355] **Distribution & cross-platform packaging (downloadable, runnable builds).**
-  (User request 2026-07-25.) Turn Album Builder from a source-only, Linux-only checkout into downloadable "one file, install and run" builds on Linux and Windows, plus store/repo presence. **Supersedes the "Windows port (cross-platform packaging)" bullet above** (folded in). Spec-first (Spec 22 implemented 2026-07-28 - Phase Dist-1 shipped) + `/cold-eyes` like every phase. Locked decisions (2026-07-25, resequenced 2026-07-28): sequence **Groundwork -> AppImage -> Windows -> Flatpak/Flathub -> OBS**; the heavy WhisperX/torch dependency stays an optional `pip` extra and is kept **out** of the bundles (keeps downloads to a few hundred MB, not GB). Phases:
-  - ✅ **Phase Dist-1 — Portability groundwork (code). SHIPPED 2026-07-28.** Windows-safe export per Spec 22: made the numbered-symlink step in `services/export.py` conditional on filesystem support (`_supports_symlinks` probe) and, where symlinks are unavailable, emit **`playlist.m3u8` only** (WinAmp-style remembered paths - no hardlink/copy/consent-dialog, superseding Spec 08's deferred copy fallback); drift checks (`is_export_fresh`, `album_store._symlink_count_matches`) expect zero symlinks there; resolved the config dir via **`platformdirs`** (keeps `settings.py` Qt-free; preserves the relative-`XDG_CONFIG_HOME` guard); swapped the `xdg-open` folder-open for `QDesktopServices.openUrl`. Zero behavior change on Linux. Tests TC-22-01..07 (`tests/services/test_TC_22_distribution.py`, +13); Spec 08 + settings suites pass unmodified. Commits `4c20c44` (code) + `961ee4d` / `0981b84` (cross-spec doc amendments + cold-eyes gate). Prerequisite for AppImage, Windows, and Flatpak - now unblocked.
-  - ✅ **Phase Dist-2 — AppImage (Linux single-file). SHIPPED 2026-07-28 - the project's first downloadable, runnable file.** [`AlbumBuilder-0.6.1-x86_64.AppImage`](https://github.com/milnet01/album-builder/releases/tag/v0.6.1) (~121 MB) is attached to the v0.6.1 GitHub Release, built by `appimage.yml` on the tag (build + extracted-bundle checks + a clean-`ubuntu:22.04` run of `--version`/`--selftest` + appimagelint, all green) and verified to launch + render on a clean system. Delivered: `packaging/build-appimage.sh` (containerised build, shellcheck-clean), `.github/workflows/appimage.yml` (tag + dispatch triggers, uploads to the Release), `app.py` `--version`/`--selftest` flags, `tests/test_TC_23_appimage.py` (TC-23-01/02/03), README Download section. Commits `d5fe75e` (code) + `5ce8fa8` (spec reconcile) + `702f885` (doc sync). Pinned build tooling (`ubuntu:22.04@sha256:` [deliberate glibc-floor hold-back, documented], `python-appimage` `python3.13.14` [== CI's tested interpreter], `appimagetool` `1.9.1` [latest stable]) - all pins corrected against live releases and **validated by a green manual dry-run (run `30361141983`, 2026-07-28): build + extracted-bundle checks + a clean-`ubuntu:22.04`-container run of `--version`/`--selftest` + appimagelint all pass** (upload skipped - no tag). The downloadable file is produced by cutting a `v*` tag. **Follow-up:** bump CI + the AppImage bundle to Python 3.14 (latest stable) once the suite is re-run on 3.14 - a dependency-currency sweep item. A self-contained `AlbumBuilder-<version>-x86_64.AppImage` that runs on most distros with no install. **Spec 23 refines the original approach** (cold-eyes-converged, loops 1-5): bundles the Python runtime + PyQt6 (Qt libs + platform + **FFmpeg** multimedia backend - the 6.11 wheel ships FFmpeg, *not* GStreamer, so no GStreamer plugins are bundled) + WeasyPrint's native stack (Pango / PangoFT2 / HarfBuzz / HarfBuzz-subset / fontconfig / gobject - WeasyPrint 69 drops **Cairo / GDK-PixBuf**); built via **`python-appimage`** (the `linuxdeploy`-or-python-appimage fork resolved to python-appimage; `linuxdeploy-plugin-python` is unmaintained) **inside a digest-pinned `ubuntu:22.04` container** (so a local build == the CI release; sets the glibc floor for broad reach). WhisperX/torch stays an optional `pip` extra, out of the bundle. One local script (`packaging/build-appimage.sh`) is the single source of truth; `appimage.yml` runs it on a `v*` tag + manual dispatch and attaches to the GitHub Release. The **simplest** "one downloadable Linux file" — no store account or review gate — so it ships first.
-  - 🚧 **Phase Dist-3 — Windows bundle.** PyInstaller `.exe` bundling WeasyPrint's native libraries; audio uses the built-in Windows backend (no GStreamer); attached to GitHub Releases. **Spec 24 accepted + implemented 2026-07-28** (cold-eyes converged loops 1-4 + an implementation fold-back). Refinements over the original bullet: **one-folder zip, not one-file** (reliability for the fragile native stack); WeasyPrint's GTK/Pango DLLs **sourced from MSYS2 on a `windows-latest` runner** - PyInstaller can't cross-compile, so there is **no local reproducibility** (unlike the AppImage container), and CI `--version`/`--selftest` + a **manual Windows run** verify it; a **point-of-use HTML-only fallback** in `render_report` if the PDF engine can't load or a report won't render (Spec 24 §4.3b), with `scan_reports_dir` keeping a lone `.html` as a complete single-file report. Landed: `render_report`/`scan_reports_dir` code + `tests/services/test_TC_24_windows_bundle.py` (TC-24-01/02/03, full suite green) + `packaging/build-windows.ps1` + `packaging/album-builder.spec` + runtime hook + `.github/workflows/windows.yml`. The downloadable zip is produced by cutting a `v*` tag. Note: unsigned builds trip Windows SmartScreen until code-signing is arranged (deferred).
-  - **Phase Dist-4 — Flatpak + Flathub.** Flatpak manifest bundling PyQt6 + WeasyPrint's Pango/Cairo/GDK-PixBuf runtime + GStreamer; an **AppStream metainfo** file (`packaging/` ships only a `.desktop` template today) + screenshots for the store; a single-file `.flatpak` bundle attached to GitHub Releases; and the Flathub submission PR. The **app-store** route for Linux (sandboxed, auto-updating via Flathub) — complements the AppImage single file with a discoverable, managed store listing.
-  - **Phase Dist-5 — openSUSE Build Service (OBS).** Native RPM + DEB packages across distros via OBS for package-manager installs (zypper / apt) — distinct from the single-file AppImage/Flatpak. Integrate with the OBS project a companion session ("finbreak") already set up for the user rather than starting from scratch.
-  Serves S6 (docs/discovery.md): the downloads run and build an album on
-  a fresh machine with nothing else installed. Tagged 2026-09-28.
-  **Layman:** Make the app a simple download you install and run on Linux or Windows, with app-store listings.
-  Kind: implement.
-
-- 📋 [MUSI-0356] **Music player — standalone experience & popular-app feature parity (v2 epic; sequenced AFTER Distribution).**
-  (User request 2026-07-25: "copy as many features as you can from Spotify / WinAmp / any popular music player.") Continues the shipped "Fully-featured music player mode" epic (Phases A-G) toward a player that stands on its own. **Locked direction (2026-07-25, refined):** stay **one program** (not two executables), but treat the **two tabs as separate "apps"** — each a self-sufficient surface with **its own library browser**. The song library stays a **single shared source of truth** (the existing `Library` + `LibraryWatcher`): songs added from either tab update that shared library and **both tabs' library views refresh live**. So each tab shows "its own" library, but over one dataset. The Player tab thus browses and starts songs in place, never needing the curation tab. **Reuse-before-rewrite** on `Player` / `PlaybackController` / `PlayQueue` / `PlaylistStore` / `Library` / `UsageIndex`; every phase is spec-first + `/cold-eyes`. *Already shipped, not re-listed here:* play queue, shuffle/repeat, saved playlists, MPRIS media-key + lock-screen integration, tray, synced lyrics, ReplayGain volume levelling, cover art, full transport, cross-album usage indicator. **Planned phases (rough value-first order):**
-  - **Phase MP-1 — Session continuity & resume.** Persist + restore the last active tab, the last-played track (extend the existing paused-at-zero restore), and **playback position** (the `last_position_seconds` v2 item already earmarked in Spec 06 / the overview) so playback resumes exactly where it stopped; also last volume, shuffle/repeat state, and window size/position. (Spotify and WinAmp both resume on launch.)
-  - **Phase MP-2 — Player-tab as its own app (own library view over shared data).** Give the Player tab **its own `LibraryPane`** bound to the **same** `Library` + `LibraryWatcher` the curation tab uses — so both tabs show "their own" library over one shared dataset, and songs added from either side update the shared library and refresh **both** views live. Add an **"Add music" on-ramp** (drag-and-drop files/folders onto either tab, or a folder/file picker) that writes into the shared library. From the Player's own library: double-click / Enter to play, "play from here", and enqueue — listening never requires the curation tab. Delivers the locked "two apps, shared library" direction and removes the "where's my library?" confusion. (Folds in the drag-and-drop "Add music" suggestion, 2026-07-25.)
-  - **Phase MP-3 — Library browsing power.** Incremental search/filter box (with a `/` or Ctrl+L keyboard-focus shortcut — folds in the instant-search suggestion, 2026-07-25), multi-column sort (title / artist / album / duration / date-added / play-count), jump-to-letter, and optional group-by-artist/album (folds in the deferred "Group-by-artist tabs" bullet). (Spotify search; WinAmp / foobar2000 media library.)
-  - **Phase MP-4 — Personalization & history.** Favourites / star ratings, recently-played list, play counts, most-played, last-played timestamps — building on `UsageIndex`. Feeds smart playlists later. (Spotify "Liked Songs"; WinAmp ratings.)
-  - **Phase MP-5 — Smart / auto playlists (optional).** Rules-based playlists ("top rated", "recently added", "never played") on top of the Phase D playlists + Phase MP-4 metadata. (foobar2000 / MusicBee autoplaylists.)
-  - **Phase MP-6 — Mini / compact player.** A small always-on-top compact window or bar for background listening. (WinAmp mini-mode; Spotify miniplayer.)
-  - **Phase MP-7 — Audiophile engine (BIG — blocked on retiring `QMediaPlayer`).** Graphic equalizer + presets, gapless playback, crossfade, ReplayGain pre-amp, and optional visualizer/spectrum. All of these require replacing QtMultimedia's `QMediaPlayer` with a raw `QAudioSink` / GStreamer / miniaudio pipeline (per the 2026-07-18 Phase F audio-effects spike) — its own multi-phase, higher-risk sub-epic. (WinAmp EQ + visualizer; audiophile players' gapless/crossfade.)
-  - **Phase MP-8 — Extras (survey; pick as desired).** Sleep timer, playback speed / pitch, A-B repeat, "play next" / queue history, drag-and-drop files or folders to enqueue (distinct from the library-add drop in MP-2), expanded global keyboard shortcuts, context-menu "go to album / artist", and optional Last.fm scrobbling. **Out of scope (carry-forward from the A-G epic):** streaming / Spotify integration, CD ripping, bulk tag editing, Discord presence.
-  Decisions (2026-09-28, with the user): Phase MP-2 (Player tab's
-  own library) moves up and is next, ahead of MP-1, on the user's ask:
-  "The player still doesn't have a library of its own (should replicate
-  the Album Builder tab)." MP-2 also switches the now-playing detail
-  order to Title / Artist / Album, the common order. Languages
-  (MUSI-0368) follow MP-2.
-  Progress (2026-09-28), Phase MP-2: SHIPPED except the "Add music"
-  on-ramp. Spec 18 amended (review-contract loops 6-7, 8 findings fixed,
-  accepted at the cap) and built: LibraryPane(player_mode=True) is the
-  Player tab's left column over the shared LibraryWatcher; activation
-  plays from here; curation-only columns hidden; card order Title /
-  Artist / Album. TC-18-25..32. The Add-music drop/picker is deferred to
-  its own item: it writes into Tracks/, which needs its own decision.
-  Follow-up owed (2026-09-28): promised the Hub website session
-  (ants-projects-hub-website) new Player-tab screenshots once MP-2 ships
-  in a release. After the next release: shoot with the demo library
-  (~/.cache/album-builder-demo), put PNGs in
-  /mnt/Emulators/aph-handoff/album-builder/ with a one-line description
-  each, and message that session. It already has the page corrections.
-  Follow-up done (2026-09-28): v0.9.0 released; Player-tab screenshots
-  (English + Arabic, demo library) put in
-  /mnt/Emulators/aph-handoff/album-builder/ and the Hub website session
-  messaged (mailbox id 145).
-  **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
-  Kind: implement.
-
-- 📋 [MUSI-0357] **Polish & hardening (usability / performance / security).**
-  (Suggestion sweep 2026-07-25; sequenced flexibly - small, high-value items surfaced while reviewing the app.)
-  - **Usability - first-run onboarding.** A clear "point me at your music folder" welcome on first launch instead of an empty window.
-  - **Usability - undo for destructive actions.** Undo (or confirm-with-restore) for deleting an album or removing tracks (verify the current safety net first).
-  - **Performance - library-scan tag cache.** Cache parsed ID3 tags keyed by path + modified-time so restarts don't re-read every file's tags; a big win for large `Tracks/` libraries (verify current startup-scan behavior first).
-  - **Performance - cover-art thumbnail cache.** Cache decoded/resized cover images instead of re-decoding them per use.
-  - **Security - HTML report output escaping.** ✅ **Verified clean (2026-07-25):** `services/report.py:221` sets `autoescape=select_autoescape(["html", "xml"])` and no `| safe` / `Markup(` bypass exists, so track metadata + lyrics render inert in the shared report. No hardening needed. (Kept here as the audit-trail entry.)
-  - **Docs - spec-vs-source drift sweep.** The 2026-07-25 `/audit` `contract_doc_drift` rule flagged 103 spec identifiers absent from source. Most are false positives (external-lib internals like `HUGGINGFACE_HUB_CACHE`/`torch.hub...`, forward/v2 refs like `last_position_seconds`, illustrative examples, hyphen-vs-underscore theme tokens, and citation-format misses such as `album_store.py:approve` which *does* exist). A small genuine subset is real drift worth fixing in a targeted sweep - confirmed examples: `Album.set_track_paths` (Spec 08; no such method exists) and the known Spec 06 `QSettings` -> `settings.json` wording. Filter the FPs, fix the real ones. (Best done via `/cold-eyes`, which verifies doc-vs-code.)
-  Progress (2026-09-25), docs drift sweep: doc_symbols over
-  docs/specs\nleft 115 names unresolved. All but a handful are Qt,
-  Python,\nmutagen or tag-frame names this project does not define.
-  Real\ndrift fixed: Spec 06's `QSettings` (it is
-  settings.json\naudio.volume), and Spec 08's `Album.set_track_paths`,
-  which does not\nexist - a hand-edited duplicate path loads unchanged,
-  and the spec\nnow says so. The ambiguous and not_checked rows were not
-  reviewed.\nThe other sub-items of this bullet stay open.
-  Decisions (2026-09-25, with the user): work order is undo for
-  deleted\nalbums first, then first-run onboarding. Undo: deleting
-  already moves\nthe album to Albums/.trash (services/album_store.py
-  TRASH_DIRNAME), and\nno UI restores it - that button is the gap.
-  Library-scan tag cache:\nSKIPPED for now. A warm scan of 36 MP3s took
-  about 0.25 s (1.7 s cold\nwas disk wake-up). It is worth it only for
-  libraries of thousands.\nfrom_path opens ID3 twice per file, a cheap
-  trim for later.
-  Progress (2026-09-28), undo for deleted albums: SHIPPED. File >
-  Restore Deleted Album lists Albums/.trash newest first and moves the
-  pick back (AlbumStore.trashed/restore; Spec 02 §restore,
-  TC-02-22..26). Undo for removing a track is not built. Next sub-item: first-run onboarding.
-  Progress (2026-09-28), first-run onboarding: SHIPPED. There was no
-  in-app way to set the music folder at all (settings.json by hand).
-  Added File > Choose Music Folder... (saves tracks_folder, rescans live
-  via LibraryWatcher.set_folder) and an empty-library welcome with a
-  button, in both library panes. Spec 01 section Choosing the music
-  folder, TC-01-21..23. Still open in this bullet: library-scan tag cache
-  (skipped by decision), cover-art thumbnail cache.
-  Serves S1 (docs/discovery.md): a 1,000-song library opens within a few
-  seconds and search keeps up. Tagged 2026-09-28.
-  **Layman:** Small improvements: a friendlier first launch, undo for deletions, faster startup, and fixing documents that no longer match the app.
-  Kind: implement.
-
----
-
-*Last reviewed: 2026-05-18 — v0.6.1 (WhisperX UX + artist-view report + post-feature debt sweep) shipped. Seven feature/fix commits since v0.6.0 + a /debt-sweep follow-up amending Specs 07/09/10 and closing a real correctness bug in `atomic_pair.py` (artist-variant half-pair was invisible to the load-time scan). 562 passing tests (+13 from the sweep); ruff clean. ROADMAP fully `✅`-flipped — only `🔭 Future / deferred` features remain.*
-
-*Previously: 2026-05-01 — v0.5.3 (deferred-items sweep) shipped: closed L3-M4 (DebouncedWriter timer GC) and L7-M1 (stale-segment TOCTOU v1-acceptance doc). 502 passing tests; ruff clean.*
-
-*Previously: 2026-04-30 — v0.5.0 (Phase 4: Export & Approval) shipped. 4-round pre-implementation spec sweep (39 → 17 → 3 → 0 findings) + implementation + 3-round post-implementation `/audit` + `/indie-review` (40 → 3 → 0 findings) + full-codebase audit (ruff/bandit/semgrep/gitleaks all clean). 467 passing tests (+52 since v0.4.2). Specs 02 / 08 / 09 / 10 / 11 grew from 996 → ~1,140 lines with 16 new TC contracts. Phases 1–4 are feature-complete and hardened.*
-
-*Round-1 spec sweep landed 2026-04-28 (32 issues across all 13 specs: schema-ownership canonicalised to Spec 10, approve-with-missing contradiction resolved, Specs 06–12 received TC-NN-MM IDs at speccing time, global keyboard-shortcuts table added to Spec 00, canonical approve sequence pinned in Spec 09, Spec 11 §Glyphs added to single-source `⋮⋮ ▲▼ ●○ 🔒 ✓ ▶ ⏸` etc.). Round-2 sweep landed 2026-04-28 (28 follow-ups: timestamp-encoding precision pin, atomic-write-tmp-strategy alignment, plan timestamp helper, approve/unapprove side-effect ordering, plan TC crosswalk extended to TC-10/TC-11/TC-01-P2). Round-3 sweep landed 2026-04-28 (15 follow-ups: state-diagram terminology, splitter ratios on save, glyph literals in widgets, approved-album badge, rename self-collision, UTC normalisation, TC-10-09 + TC-10-20 strengthened, delete emit order). Round-4 confirmation pass 2026-04-28 verified all fixes landed cleanly with 0 surviving HIGH issues and 0 new contradictions. **Documentation set is implementation-ready for Phase 2.**
-
-- ✅ [MUSI-0361] **Drag visual feedback in the album-order pane was specified but never built.**
-  Spec 05 described this under a Status: Implemented heading and the
-  gate found no implementation: no opacity handling, no drop-indicator
-  styling, no stylesheet rule in `ui/album_order_pane.py` or
-  `ui/theme.py`. The pane relies on Qt's unstyled `InternalMove`
-  rendering.
-
-  The spec now states the gap rather than asserting the feature, and
-  TC-05-07 covers the functional half only - a clause asserting the
-  visuals would be unfalsifiable while nothing renders them.
-
-  The target, if built: grabbed row at 50% opacity, a 2 px
-  `accent-primary-1` line at the drop position, other rows shifting to
-  make room. Deciding whether it is wanted is the open question; the
-  values are already pinned so there is no contract left to invent.
-  Resolved (2026-09-25, user chose to build it): the grabbed row dims
-  to\n50% for the drag, and a 2 px line in the theme accent marks the
-  drop\npoint. Pinned by TC-05-14 and TC-05-15. The line position
-  matched\nQt's own drop decision at every one of 355 positions. Rows
-  shifting\nto make room was not built; Spec 05 records that.
-  **Layman:** Dragging a track to reorder it uses Qt's plain default look - the spec described a nicer effect (the row you grab going half-transparent, a coloured line showing where it will land) that was never actually built.
-  Kind: ux.
-  Source: review-contract-2026-09-21 spec-05 gate L-20260921-05.
-  Lanes: ui.
-
-- ✅ [MUSI-0364] **Library Title column collapses to zero width at normal window sizes.**
-  `ui/library_pane.py` sets Title to `QHeaderView.ResizeMode.Stretch` and
-  the other columns to fixed Interactive widths that add up to about
-  610 px. Below that table width the stretch section gets no space.
-  Seen in a 1280x800 demoreel shot: header shows only the sort
-  indicator where Title should be. Present before 2026-09-25 (same
-  image from commit 9d32630).
-  Resolved (2026-09-25): Title has a 220 px default width and Composer
-  is the stretch column. Pinned by TC-01-20; checked in a 1280x800 shot.
-  **Layman:** In the song list, the Title column disappears unless the window is very wide, so you can't see song names.
-  Kind: fix.
-  Source: in-session-2026-09-25 demo screenshot.
-  Lanes: ui.
-
-- ✅ [MUSI-0365] **Album-order rows draw their text twice, under and beside the row widget.**
-  Each QListWidgetItem carries the full row text (kept for tests and
-  screen readers) and the default delegate paints it. The
-  `_OrderRowWidget` on top has a transparent background and is offset
-  by the play button, so both texts show. Likely fix: a delegate that
-  paints selection but no text, keeping `item.text()` for
-  accessibility. Present before 2026-09-25.
-  Resolved (2026-09-25): the order list's delegate paints selection but
-  no text; item.text() is kept. Pinned by TC-05-16.
-  **Layman:** Each track in the album-order list shows its number and name twice, overlapping.
-  Kind: fix.
-  Source: in-session-2026-09-25 demo screenshot.
-  Lanes: ui.
-
-- ✅ [MUSI-0366] **Album-order preview-play button shows no glyph.**
-  `QPushButton#RowPlay` is fixed at 24x24, but the base `QPushButton`
-  rule in `ui/theme.py` gives 12 px padding each side, which leaves no
-  room for the glyph. Likely fix: `padding: 0` on `#RowPlay`.
-  Present before 2026-09-25.
-  Resolved (2026-09-25): a `glyphButton` property gives padding 0 to
-  the row play, track-count -/+ and toast close buttons. The toast
-  close also needed padding 0 in its own ID rule (measured). Pinned by
-  TC-06-27, which fails for all four without the theme change.
-  **Layman:** The small play button next to each track in the album-order list is blank.
-  Kind: fix.
-  Source: in-session-2026-09-25 demo screenshot.
-  Lanes: ui.
-
-- ✅ [MUSI-0367] **The test suite hung once in the pre-push gate and did not reproduce.**
-  2026-09-25: the pre-push gate's pytest (dbus-run-session, offscreen,\nin a ~/.cache/pre-push/tmp.* worktree) sat 10+ minutes in a futex wait\nat about 1.8% CPU. The stack was lost: the push output was piped to\n`tail -1`. Three reruns of the same command passed in 13-24 s.\nAnother project's pre-push gate was running at the same time. It\nmatches the class of the FFmpeg-backend teardown deadlock noted in\npyproject.toml. An earlier push that day was also rejected once, with\nno visible reason. faulthandler_timeout = 120 is now set in\npyproject.toml. The next hang prints every thread's stack - read that\nbefore guessing.
-  Reproduced (2026-09-28 15:31, pre-push gate for 42e4dbc, machine load
-  average ~19): the 120 s stack dump fired at ~84% of the suite. The
-  main thread was blocked in MprisService._send (mpris.py,
-  self._bus.send(msg)) <- _emit_properties_changed <- _on_state_changed
-  <- Player._on_playback_state <- Player.stop <- MainWindow.closeEvent
-  <- pytest-qt _close_widgets, during a test's teardown. The other
-  thread had no Python frame (likely Qt's D-Bus thread). So
-  QDBusConnection.send on the private dbus-run-session bus blocked for
-  10+ minutes. Oddity: the dumped pytestqt frames came from
-  /mnt/Games/Scripts/Linux/Music_Production/.venv, not this venv;
-  unexplained so far. Full log:
-  ~/.cache/album-builder-ci/hang-2026-09-28.log. Leads: skip MPRIS emits
-  once closeEvent starts (unregister before player.stop), or give the
-  test session no MPRIS bus unless AB_INTEGRATION_DBUS is set.
-  Resolved (2026-09-28): closeEvent now unregisters MPRIS before
-  Player.stop(), so the STOPPED announcement hits the available=False
-  guard and shutdown never waits on a bus send. New TC-20-17
-  (tests/ui/test_TC_20_17_close_sends_nothing.py) was red before the fix
-  (1 message sent) and green after; 4 full gate runs green. The hang
-  could not be reproduced on demand, so the fix rests on the captured
-  stack. Reopen if a hang recurs anywhere else. The Music_Production
-  pytestqt path in the dump is still unexplained.
-  **Layman:** Once, the automatic checks that run before each upload froze instead of finishing; we added a watchdog so the next freeze explains itself.
-  Kind: investigate.
-  Source: in-session-2026-09-25 pre-push hang.
-  Lanes: tests.
-
-- ✅ [MUSI-0368] **Multiple languages, including right-to-left ones.**
-  User request 2026-09-28: "The app also need to be in multiple
-  languages please. Including RTL languages." Touches every UI string,
-  the menus, the reports (Jinja templates), dates and numbers, and the
-  whole layout (RTL mirrors it). Spec-worthy under spec-format §1 (three
-  or more subsystems). Open question for the user: which languages.
-  Decisions (2026-09-28, with the user): first languages are
-  Afrikaans, Arabic, Hebrew, Spanish, French, German and Portuguese,
-  with English kept. Sequenced AFTER the player library (MUSI-0356
-  MP-2) so its new strings are translated once.
-  Resolved (2026-09-28): Spec 25 written, gated (review-contract, 2
-  loops, 12 findings fixed, accepted at the cap) and implemented.
-  i18n.py + translations/<code>.json for af, ar, he, es, fr, de, pt;
-  View > Language (restart to apply); RTL mirroring with the transport
-  pinned LTR; report translated with lang/dir and a localised date.
-  TC-25-01..12. Checked by eye: Arabic Player tab and a Hebrew report
-  PDF render correctly. Catalogs are machine-drafted (README says so).
-  **Layman:** Let people use the app in their own language, including Arabic and Hebrew, which read right to left.
-  Kind: feature.
-  Source: user-request-2026-09-28.
-
-- 📋 [MUSI-0369] **Native-speaker check of the seven translation catalogs.**
-  The af/ar/he/es/fr/de/pt catalogs in src/album_builder/translations/
-  were machine-drafted (Spec 25 §Out of scope; README says so). A
-  native speaker per language should read them in the running app.
-  TC-25-03/04 keep the files complete; they cannot judge wording.
-  Progress (2026-09-28): second AI proofread by two other sessions
-  (es/fr/de/pt; ar/he/af). 36 of 39 suggestions applied after checking
-  each against its call site; 3 rejected (New, System default, Track).
-  Commit 8a90021. Native-speaker review still owed.
-  **Layman:** Have a fluent speaker of each language check the app's wording.
-  Kind: doc.
-  Source: in-session-2026-09-28.
-
-- 📋 [MUSI-0370] **The WhisperX-missing toast stays English in every language.**
-  alignment_worker emits "WhisperX not installed. Install via: ..."
-  and MainWindow._looks_like_whisperx_missing matches its English words
-  to decide whether to show the install dialog, so the string was left
-  untranslated. Fix: signal the missing runtime as a state, not as text,
-  then translate the message.
-  **Layman:** One rare error message still shows in English; fix how it is detected so it can be translated.
-  Kind: fix.
-  Source: in-session-2026-09-28.
-
-- 📋 [MUSI-0371] **"Add music" on-ramp: drop or pick files to add to the library.**
-  Deferred out of MUSI-0356 Phase MP-2 (Spec 18 §Out of scope). It
-  writes into the user's Tracks/ folder, which the project treats as
-  untouchable without explicit confirmation, so it needs its own
-  design decision (copy vs link, confirmation, name clashes) and spec.
-  Decided (user, 2026-09-28): drag-and-drop COPIES files into Tracks/.
-  Originals stay untouched; no links, no per-drop prompt.
-  **Layman:** Let people add songs by dragging them onto the app, once we decide how it should treat the music folder.
-  Kind: feature.
-  Source: in-session-2026-09-28.
-
-- 📋 [MUSI-0372] **S1 check: time opening and searching a 1,000-song library.**
-  Serves S1 (docs/discovery.md). Generate a 1,000-song demo library
-  (extend ~/.cache/album-builder-demo/make_demo.sh), then measure time to
-  a loaded library and search response while typing. Record the numbers
-  here; turn them into a regression test if cheap.
-  **Layman:** Proves the app stays quick with a big music folder.
-  Kind: test.
-  Source: check-queue-2026-09-28.
-
-- ✅ [MUSI-0373] **S2 check: exported numbering and playlist order match the app's order.**
-  Serves S2 (docs/discovery.md). Find the Spec 08 tests that cover
-  export order; if any gap remains (numbered symlink names and M3U lines
-  both equal the album order after a reorder), add a test.
-  Resolved (2026-09-28): TC_08_13 checked link names only. New test
-  test_TC_08_13_reorder_links_and_playlist_follow_album_order proves
-  each numbered link resolves to the album's Nth track and the playlist
-  lists tracks in album order (identical titles, so names cannot hide a
-  wrong order). Proven red with a planted reversed-playlist bug.
-  **Layman:** Proves the approved album comes out in exactly the order you set.
-  Kind: test.
-  Source: check-queue-2026-09-28.
-
-- 📋 [MUSI-0374] **S3 check: measure lyric timing against the half-second bar.**
-  Serves S3 (docs/discovery.md). On a few aligned songs, compare each
-  LRC line time against a hand-marked start time; report how many lines
-  fall within 0.5 s. Needs WhisperX installed.
-  **Layman:** Checks that lyrics light up within half a second of being sung.
-  Kind: test.
-  Source: check-queue-2026-09-28.
-
-- 📋 [MUSI-0375] **S4 check: approved playlist plays in order in VLC and the default player.**
-  Serves S4 (docs/discovery.md). Approve a demo album, open its .m3u in
-  VLC and in the desktop's default player, confirm every track plays in
-  the set order. Manual check; note the players and versions used.
-  **Layman:** Checks the finished playlist really plays, in order, in common players.
-  Kind: test.
-  Source: check-queue-2026-09-28.
-
-- 📋 [MUSI-0376] **S5 check: approval report prints on A4 in every language.**
-  Serves S5 (docs/discovery.md). Approve a demo album in each of the
-  eight languages; print or print-preview the PDF on A4 and confirm
-  nothing is cut off, with right-to-left layout for Arabic and Hebrew.
-  **Layman:** Checks the printed report looks right in every language, Arabic and Hebrew included.
-  Kind: test.
-  Source: check-queue-2026-09-28.
-
-- ✅ [MUSI-0377] **S7 check: nothing ever writes to the music folder.**
-  Serves S7 (docs/discovery.md). Confirm tests prove that approve,
-  reopen, delete, restore and alignment leave the Tracks folder
-  byte-identical (e.g. snapshot hashes before and after). Add one where a
-  path is uncovered. MUSI-0371 will add a deliberate copy-in path; its
-  test belongs there.
-  Resolved (2026-09-28): new TC-01-24 (Spec 01),
-  tests/services/test_TC_01_24_source_files_untouched.py. Approve,
-  unapprove, re-export, rename, delete, restore and lyrics alignment
-  leave song files byte-identical with the same mtime; only
-  .lrc/.lrc.bak sidecars are added (Spec 00 Data integrity). Owner chose
-  songs-only scope; S7 reworded. Proven red with a planted mtime touch.
-  **Layman:** Proves the app never renames, moves, changes or deletes your songs.
-  Kind: test.
-  Source: check-queue-2026-09-28.
-
-- 📋 [MUSI-0378] **S6 check: a fresh machine runs the download and builds an album.**
-  Serves S6 (docs/discovery.md). On a clean Linux machine (glibc 2.35+)
-  and a clean 64-bit Windows 10+ machine, run the release download, make
-  an album from a few songs, approve it. CI already proves --version and
-  --selftest; this proves the whole job. Needed for 1.0
-  (docs/standards/versioning-overrides.md).
-  **Layman:** Proves the Linux and Windows downloads work on a clean computer with nothing else installed.
-  Kind: test.
-  Source: review-contract-2026-09-28 versioning-overrides loop 1.
