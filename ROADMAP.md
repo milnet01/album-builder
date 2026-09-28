@@ -2580,10 +2580,15 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   Kind: test.
   Source: check-queue-2026-09-28.
 
-- 📋 [MUSI-0373] **S2 check: exported numbering and playlist order match the app's order.**
+- ✅ [MUSI-0373] **S2 check: exported numbering and playlist order match the app's order.**
   Serves S2 (docs/discovery.md). Find the Spec 08 tests that cover
   export order; if any gap remains (numbered symlink names and M3U lines
   both equal the album order after a reorder), add a test.
+  Resolved (2026-09-28): TC_08_13 checked link names only. New test
+  test_TC_08_13_reorder_links_and_playlist_follow_album_order proves
+  each numbered link resolves to the album's Nth track and the playlist
+  lists tracks in album order (identical titles, so names cannot hide a
+  wrong order). Proven red with a planted reversed-playlist bug.
   **Layman:** Proves the approved album comes out in exactly the order you set.
   Kind: test.
   Source: check-queue-2026-09-28.
@@ -2612,12 +2617,18 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   Kind: test.
   Source: check-queue-2026-09-28.
 
-- 📋 [MUSI-0377] **S7 check: nothing ever writes to the music folder.**
+- ✅ [MUSI-0377] **S7 check: nothing ever writes to the music folder.**
   Serves S7 (docs/discovery.md). Confirm tests prove that approve,
   reopen, delete, restore and alignment leave the Tracks folder
   byte-identical (e.g. snapshot hashes before and after). Add one where a
   path is uncovered. MUSI-0371 will add a deliberate copy-in path; its
   test belongs there.
+  Resolved (2026-09-28): new TC-01-24 (Spec 01),
+  tests/services/test_TC_01_24_source_files_untouched.py. Approve,
+  unapprove, re-export, rename, delete, restore and lyrics alignment
+  leave song files byte-identical with the same mtime; only
+  .lrc/.lrc.bak sidecars are added (Spec 00 Data integrity). Owner chose
+  songs-only scope; S7 reworded. Proven red with a planted mtime touch.
   **Layman:** Proves the app never renames, moves, changes or deletes your songs.
   Kind: test.
   Source: check-queue-2026-09-28.

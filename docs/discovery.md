@@ -38,7 +38,8 @@ ties the choice, the order, the lyrics and the finished album together.
 - **S6** — A fresh Linux or Windows machine that meets the stated system
   requirements runs the download and builds an album with nothing else
   installed. Lyrics alignment is the one optional extra.
-- **S7** — Your music files are never renamed, moved, changed or deleted.
+- **S7** — Your song files are never renamed, moved, changed or deleted.
+  The one thing the app adds beside a song is its lyrics file (`.lrc`).
 
 ## What it deliberately does not do
 

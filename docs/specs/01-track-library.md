@@ -200,6 +200,7 @@ The watcher mechanism (TC-01-P2-01, TC-01-P2-02) ships in Phase 2 via the `Libra
 - **TC-01-21** — `settings.write_tracks_folder(path)` round-trips through `read_tracks_folder()`; `LibraryWatcher.set_folder(path)` rescans `path` and emits `tracks_changed` with the new library.
 - **TC-01-22** — `LibraryPane.set_library` with an empty library shows the empty state (message naming the folder, a button emitting `choose_folder_requested`) and hides the table; a non-empty library shows the table again.
 - **TC-01-23** — File > Choose Music Folder...: a picked folder is saved and both library panes show its contents; a cancelled picker saves nothing and leaves the panes as they were.
+- **TC-01-24** — Approve, unapprove, re-export, rename, delete, restore and lyrics alignment leave every song file in the music folder byte-identical, same name and modification time. The only files added beside a song are its lyrics sidecars (`<stem>.lrc`, `<stem>.lrc.bak`) — Spec 00 § Data integrity. Test: `tests/services/test_TC_01_24_source_files_untouched.py`.
 - **TC-01-P2-04** — `Library.search()` excludes `is_missing` tracks by default; opt-in via `include_missing=True`. *(deferred — requires search-filter parameter; tracked for a later phase)*
 
 ### Coverage map (Phase 1)

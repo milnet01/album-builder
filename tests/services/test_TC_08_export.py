@@ -352,6 +352,30 @@ def test_TC_08_13_reorder_renumbers(tmp_path):
     assert names == ["01 - t2.mp3", "02 - t1.mp3", "03 - t0.mp3"]
 
 
+def test_TC_08_13_reorder_links_and_playlist_follow_album_order(tmp_path):
+    # Spec: TC-08-13 — after a reorder, link N resolves to the album's Nth
+    # track and the playlist lists the tracks in album order
+    # (docs/discovery.md S2).
+    paths = _seed_real_files(tmp_path, 4)
+    folder = tmp_path / "album"
+    folder.mkdir()
+    # Identical titles, so the link name alone cannot reveal the order.
+    library = _FakeLibrary({p: _make_track(p, title="same") for p in paths})
+    album = _make_album(paths)
+    regenerate_album_exports(album, library, folder)
+    order = [paths[2], paths[0], paths[3], paths[1]]
+    album.track_paths = [str(p) for p in order]
+    regenerate_album_exports(album, library, folder)
+
+    links = sorted((p for p in folder.iterdir() if p.is_symlink()), key=lambda p: p.name)
+    assert [p.name[:2] for p in links] == ["01", "02", "03", "04"]
+    assert [p.resolve() for p in links] == [p.resolve() for p in order]
+
+    lines = (folder / PLAYLIST_FILENAME).read_text(encoding="utf-8").splitlines()
+    listed = [line for line in lines if line and not line.startswith("#")]
+    assert [Path(line).resolve() for line in listed] == [p.resolve() for p in order]
+
+
 # --- TC-08-14 library.refresh() once per pass ---
 
 
