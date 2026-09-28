@@ -28,6 +28,16 @@
 > parse-fail fallthrough, `auto_align_on_play`) needed spelling out. Loop 5 returned
 > zero CRITICAL/HIGH; its residual MEDIUM/LOW were doc-precision (amendment completeness,
 > not design) and are fixed above. Accepted at the loop-5 cap with loop-5 fixes applied.
+>
+> **Loop 6 (2026-09-28, review-contract, MP-2 amendment / MUSI-0356):** 2 `review-lane`
+> lanes, each holding every question. Q1 0 · Q2 5 · Q3 0 · Q4 2 — verified 7 / fixed 7 /
+> dismissed 0. Both lanes found the same six; lane B alone found the accessible
+> description missing from the "changes N things" list. Fixed: `PlayerPane`'s
+> five-argument call in §main_window and TC-18-12; TC-18-12's frame guard retargeted to
+> the now-playing column; single-click activation stated (Qt decides; `_play` excluded
+> from player-mode activation, measured: a double-click also fires `clicked`);
+> `set_row_body_cursor_for_state` made curation-only; accessible description made a
+> listed player-mode difference; TC-18-31 asserts the theme half.
 
 To be implemented across a new `src/album_builder/ui/player_pane.py` (the Player-tab
 listening surface), a new `src/album_builder/ui/now_playing_card.py` (the cover +
@@ -259,7 +269,7 @@ doubled border on the curation tab and break the "visible result identical" cont
 generic `QMainWindow, QWidget { background-color: bg_base }` rule and would paint the
 card area on the darker `bg_base` inside the pane's `bg_pane`, also a visible regression.
 Transparent, the card inherits the host container's background: `bg_pane` inside the
-curation `NowPlayingPane`, and inside `PlayerPane` the left column is a `QFrame#Pane` so
+curation `NowPlayingPane`, and inside `PlayerPane` the now-playing column is a `QFrame#Pane` so
 the card sits on `bg_pane` there too. The metadata labels keep their own objectNames —
 `NowPlayingCover` / `NowPlayingTitle` / `NowPlayingMeta` / `NowPlayingMetaSecondary` —
 so they style correctly regardless of the card frame. The card also keeps the cover
@@ -381,23 +391,32 @@ persistence in Spec 10 is untouched and not extended).
 ### `ui/library_pane.py` — player mode *(MP-2)*
 
 `LibraryPane(parent=None, *, player_mode: bool = False)`. The default builds the
-curation pane exactly as today. `player_mode=True` changes three things and nothing
+curation pane exactly as today. `player_mode=True` changes four things and nothing
 else:
 
 - **Columns.** The `_toggle` and `_used` columns are hidden
   (`table.setColumnHidden`). They belong to album curation: a tick adds a track to the
   current album, and the badge counts approved albums. `COLUMNS` and the model are
   unchanged, so column indices stay shared between the two modes.
-- **Activation plays.** `table.activated` (double-click, Enter / Return, or a single
-  click where the desktop style asks for single-click activation) on **any** column of
-  row *r* emits `play_tracks_requested(view_order_tracks(), r)` — "play from here" in
-  view order, honouring the search filter and sort. The curation pane keeps its
+- **Activation plays.** `table.activated` on any column of row *r* **except `_play`**
+  emits `play_tracks_requested(view_order_tracks(), r)` — "play from here" in view
+  order, honouring the search filter and sort. Qt decides what activates: double-click
+  and Enter / Return, and a single click where the desktop style sets
+  `SH_ItemView_ActivateItemOnSingleClick` — so on such a desktop a single click plays,
+  as it opens a file in that desktop's file manager. Activation on `_play` does
+  nothing in player mode: that column's click already routes to
+  `preview_play_requested`, and a double-click there also fires `clicked`, so letting
+  it activate too would request two different playbacks. The curation pane keeps its
   activation rule (only `_play` / `_toggle` react).
-- **No row-body preview.** A single click on a row body only selects the row;
-  `row_body_clicked` is not emitted. The Spec 06 preview-without-play rule exists to
+- **No row-body preview.** A click on a row body never emits `row_body_clicked`.
+  Where the style does not activate on single click, the click only selects the row. The Spec 06 preview-without-play rule exists to
   let a curator read metadata without committing to playback. In the Player the row
   is one activation away from playing, and a click that silently swapped the
   now-playing card would fight the card showing what is playing.
+- **Accessible description.** The table's accessible description reads
+  "Searchable list of tracks. Double-click a track or press Enter to play from it.
+  The first column plays or pauses that track." — the curation text describes the
+  selection column, which is hidden here.
 
 A player-mode pane is never given a `UsageIndex` (`set_usage_index` is not called).
 The model already treats a missing index as a count of zero for every role
@@ -411,7 +430,8 @@ query and needs no change.
 - Construct `self.now_playing_pane = NowPlayingPane(self._player, self._controller)`
   as today (curation tab, in the splitter) and, after `queue_pane` / `playlists_pane`
   are built, `self._player_pane = PlayerPane(self._player, self._controller,
-  self.queue_pane, self.playlists_pane)`.
+  self.queue_pane, self.playlists_pane, self.player_library_pane)` (the last argument
+  *(MP-2)*).
 - **Player-tab content swap:** the tab previously added a hand-built `QWidget` stacking
   `playlists_pane` over `queue_pane`; it now adds `self._player_pane`:
   `self.tabs.addTab(self._player_pane, "Player")`. Tab 0 stays `"Album Builder"`.
@@ -421,15 +441,18 @@ query and needs no change.
   `PlayerPane`. Wiring, each mirroring the curation pane's line for the same signal:
   `library_watcher.tracks_changed -> set_library`,
   `_playlist_store.changed -> set_playlists`,
-  `play_tracks_requested -> controller.play_tracks` (via the same handler the curation
-  pane uses), `enqueue_requested -> controller.enqueue`,
+  `play_tracks_requested -> controller.play_tracks(tracks, start_index=start)` (the
+  same adapter lambda the curation pane's connection uses),
+  `enqueue_requested -> controller.enqueue`,
   `play_next_requested -> controller.play_next`,
   `preview_play_requested -> _on_preview_play`,
   `add_to_playlist_requested -> _on_add_to_playlist`. Every place that pushes state to
-  `library_pane` for **playback or theme** — `set_active_play_state`,
-  `set_row_body_cursor_for_state`, `set_palette` — pushes it to both panes. The
-  curation-only pushes (`set_current_album`, `set_usage_index`, `selection_toggled`,
-  `row_body_clicked`) stay curation-only.
+  `library_pane` for **playback or theme** — `set_active_play_state` and
+  `set_palette` — pushes it to both panes. The curation-only pushes
+  (`set_current_album`, `set_usage_index`, `set_row_body_cursor_for_state`,
+  `selection_toggled`, `row_body_clicked`) stay curation-only;
+  `set_row_body_cursor_for_state` advertises the preview-without-play click, which
+  player mode does not have.
 - `self._surfaces = (self.now_playing_pane, self._player_pane)` and
   `self._lyrics_panels = tuple(s.lyrics_panel for s in self._surfaces)`.
 - **Fan-out helpers** replace the single-pane calls:
@@ -563,8 +586,8 @@ PLAYER TAB  (horizontal splitter: library | now-playing + transport | lyrics ove
 - Accessibility: the tab labels "Up Next" / "Playlists" are the `QTabWidget` tab text
   (screen-reader-announced by Qt). All reused widgets keep their Spec 06/07/15/16/17
   accessible names; Phase E adds no new interactive control beyond the tab group.
-  *(MP-2)* The player library table's accessible description drops the toggle-column
-  sentence, since that column is hidden there.
+  *(MP-2)* The player library table's accessible description is its own
+  (§`ui/library_pane.py` — player mode).
 
 ## Inputs
 
@@ -732,11 +755,12 @@ Two-bar sync tests build two `TransportBar(player, controller)` on one real
   `lyrics_panel`, and `transport`; `set_track(track)` renders via `pane.card`
   (`pane.card.title_label` reflects the track) and `set_track(None)` also clears
   `pane.lyrics_panel` (the L7-M5 clear preserved on this pane).
-- **TC-18-12** — `PlayerPane(player, controller, queue_pane, playlists_pane)`
-  constructs, exposes `.card` / `.transport` / `.lyrics_panel`, reparents
+- **TC-18-12** — `PlayerPane(player, controller, queue_pane, playlists_pane,
+  library_pane)` constructs, exposes `.card` / `.transport` / `.lyrics_panel`, reparents
   `queue_pane` under an "Up Next" tab and `playlists_pane` under a "Playlists" tab
-  (assert the nested `QTabWidget` tab count == 2 and tab texts). Its left-column
-  container is a `QFrame` with `objectName() == "Pane"` (so `QFrame#Pane` styles it —
+  (assert the nested `QTabWidget` tab count == 2 and tab texts). Its now-playing
+  column (horizontal-splitter widget 1 since MP-2) is a `QFrame` with
+  `objectName() == "Pane"` (so `QFrame#Pane` styles it —
   guards the frame-less-card-on-`bg_base` regression).
 - **TC-18-13** — `PlayerPane.set_track(track)` delegates to `self.card.set_track`
   (`pane.card.title_label` reflects the track); `set_track(None)` blanks the card
@@ -803,13 +827,16 @@ Two-bar sync tests build two `TransportBar(player, controller)` on one real
   view. `MainWindow` routes it to `controller.play_tracks`. Activating the title
   column of a curation pane emits nothing (unchanged).
 - **TC-18-29** *(MP-2)* — A single click on a player-mode row body emits no
-  `row_body_clicked` and leaves both now-playing cards unchanged.
+  `row_body_clicked`; under a style without single-click activation (the offscreen
+  test style) it also leaves both now-playing cards unchanged. Activating the `_play`
+  column of a player-mode pane emits no `play_tracks_requested`.
 - **TC-18-30** *(MP-2)* — The player library's context-menu actions reach the same
   controller calls as the curation pane's ("Add to queue" -> `enqueue`), and its
   "Add to playlist" submenu lists the stored playlists.
 - **TC-18-31** *(MP-2)* — The active-row play glyph and a theme switch reach both
   library panes: after `set_active_play_state` fans out, both models report the same
-  active path.
+  active path; after a theme switch, both panes' usage delegates hold the new
+  palette.
 - **TC-18-32** *(MP-2)* — `NowPlayingCard`'s layout holds, top to bottom,
   `cover_label`, `title_label`, `artist_label`, `album_label`, `composer_label`,
   `comment_label`, `placeholder_label`.
