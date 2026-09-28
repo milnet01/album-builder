@@ -2553,6 +2553,8 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   writes into the user's Tracks/ folder, which the project treats as
   untouchable without explicit confirmation, so it needs its own
   design decision (copy vs link, confirmation, name clashes) and spec.
+  Decided (user, 2026-09-28): drag-and-drop COPIES files into Tracks/.
+  Originals stay untouched; no links, no per-drop prompt.
   **Layman:** Let people add songs by dragging them onto the app, once we decide how it should treat the music folder.
   Kind: feature.
   Source: in-session-2026-09-28.
