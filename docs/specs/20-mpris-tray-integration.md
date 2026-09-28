@@ -630,6 +630,10 @@ gate warns and the test skips. The audio and lyrics tiers in `test_player.py` an
 - **TC-20-16** — `OpenUri("file:///x.mp3")` is a no-op: it does not raise and does not
   call any `player`/`controller` load command (spy `play_tracks` / `preview` on a fake
   and assert zero calls) — locking the declared-but-inert contract.
+- **TC-20-17** — Closing the main window while playing sends nothing on the bus:
+  `closeEvent` unregisters MPRIS before `Player.stop()`, so the STOPPED announcement
+  hits the `available=False` guard. The send spy records zero messages, and the player
+  still ends STOPPED. Guards the MUSI-0367 shutdown hang.
 
 ## Out of scope
 

@@ -2509,7 +2509,7 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   Source: in-session-2026-09-25 demo screenshot.
   Lanes: ui.
 
-- 📋 [MUSI-0367] **The test suite hung once in the pre-push gate and did not reproduce.**
+- ✅ [MUSI-0367] **The test suite hung once in the pre-push gate and did not reproduce.**
   2026-09-25: the pre-push gate's pytest (dbus-run-session, offscreen,\nin a ~/.cache/pre-push/tmp.* worktree) sat 10+ minutes in a futex wait\nat about 1.8% CPU. The stack was lost: the push output was piped to\n`tail -1`. Three reruns of the same command passed in 13-24 s.\nAnother project's pre-push gate was running at the same time. It\nmatches the class of the FFmpeg-backend teardown deadlock noted in\npyproject.toml. An earlier push that day was also rejected once, with\nno visible reason. faulthandler_timeout = 120 is now set in\npyproject.toml. The next hang prints every thread's stack - read that\nbefore guessing.
   Reproduced (2026-09-28 15:31, pre-push gate for 42e4dbc, machine load
   average ~19): the 120 s stack dump fired at ~84% of the suite. The
@@ -2525,6 +2525,14 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   ~/.cache/album-builder-ci/hang-2026-09-28.log. Leads: skip MPRIS emits
   once closeEvent starts (unregister before player.stop), or give the
   test session no MPRIS bus unless AB_INTEGRATION_DBUS is set.
+  Resolved (2026-09-28): closeEvent now unregisters MPRIS before
+  Player.stop(), so the STOPPED announcement hits the available=False
+  guard and shutdown never waits on a bus send. New TC-20-17
+  (tests/ui/test_TC_20_17_close_sends_nothing.py) was red before the fix
+  (1 message sent) and green after; 4 full gate runs green. The hang
+  could not be reproduced on demand, so the fix rests on the captured
+  stack. Reopen if a hang recurs anywhere else. The Music_Production
+  pytestqt path in the dump is still unexplained.
   **Layman:** Once, the automatic checks that run before each upload froze instead of finishing; we added a watchdog so the next freeze explains itself.
   Kind: investigate.
   Source: in-session-2026-09-25 pre-push hang.

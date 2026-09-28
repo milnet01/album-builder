@@ -1265,6 +1265,18 @@ class MainWindow(QMainWindow):
         # to act on rather than a silent stack trace in the log.
         failures: list[str] = []
         try:
+            # Spec 20: drop the bus name (clean relaunch) + remove the cover-art
+            # temp file, and hide the tray icon. Self-guarded on the no-op path.
+            # Before player.stop(): once unregistered, the STOPPED announcement
+            # sends nothing, so shutdown never blocks on a bus send (TC-20-17,
+            # MUSI-0367).
+            self._mpris.unregister()
+            if self._tray.available:
+                self._tray.hide()
+        except Exception as exc:
+            logger.exception("MPRIS/tray teardown failed during closeEvent")
+            failures.append(f"mpris teardown: {_redact_home(exc)}")
+        try:
             self._player.stop()
         except Exception as exc:
             logger.exception("Player.stop() failed during closeEvent")
@@ -1276,15 +1288,6 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             logger.exception("write_audio() failed during closeEvent")
             failures.append(f"write_audio: {_redact_home(exc)}")
-        try:
-            # Spec 20: drop the bus name (clean relaunch) + remove the cover-art
-            # temp file, and hide the tray icon. Self-guarded on the no-op path.
-            self._mpris.unregister()
-            if self._tray.available:
-                self._tray.hide()
-        except Exception as exc:
-            logger.exception("MPRIS/tray teardown failed during closeEvent")
-            failures.append(f"mpris teardown: {_redact_home(exc)}")
         try:
             self._store.flush()
         except Exception as exc:
