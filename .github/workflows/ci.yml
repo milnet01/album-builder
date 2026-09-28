@@ -18,9 +18,12 @@ on:
 permissions:
   contents: read
 
+# Group by workflow, event and ref so a push and a pull request never cancel
+# each other. Cancel superseded runs only off main: on main a cancelled run
+# hides which commit broke the build (local-gate.md 9).
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   ci:

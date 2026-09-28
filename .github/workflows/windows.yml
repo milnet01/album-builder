@@ -16,7 +16,7 @@ permissions:
 
 concurrency:
   group: windows-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false   # a release build is never cancelled half-way
 
 jobs:
   windows:
