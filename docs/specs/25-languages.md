@@ -1,6 +1,6 @@
 # 25 — Languages, including right-to-left (i18n)
 
-**Status:** accepted (2026-09-28), not yet implemented · **Last updated:** 2026-09-28 · **Roadmap:** MUSI-0368 · **Depends on:** 00, 09, 10, 11, 16, 19 · **Amends:** 09, 10, 16, 23, 24
+**Status:** implemented (2026-09-28) · **Last updated:** 2026-09-28 · **Roadmap:** MUSI-0368 · **Depends on:** 00, 09, 10, 11, 16, 19 · **Amends:** 09, 10, 16, 23, 24
 
 > **Cold-eyes loop log:**
 > **Loop 1 (2026-09-28, review-contract):** 2 `review-lane` lanes, each holding every

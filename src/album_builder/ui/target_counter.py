@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIntValidator
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton
 
+from album_builder.i18n import tr
 from album_builder.ui.theme import Glyphs
 
 MIN_TARGET = 1
@@ -26,7 +27,7 @@ class TargetCounter(QFrame):
         layout.setContentsMargins(8, 0, 8, 0)
         layout.setSpacing(4)
 
-        layout.addWidget(QLabel("Tracks"))
+        layout.addWidget(QLabel(tr("Tracks")))
         self.btn_down = QPushButton(Glyphs.DOWN)
         self.btn_down.setFixedWidth(28)
         self.btn_down.setProperty("glyphButton", True)
@@ -46,7 +47,7 @@ class TargetCounter(QFrame):
         self.btn_up.clicked.connect(self._increment)
         layout.addWidget(self.btn_up)
 
-        self.readout = QLabel("Selected: 0 / 1")
+        self.readout = QLabel(tr("Selected: {selected} / {target}", selected=0, target=1))
         self.readout.setObjectName("CounterReadout")
         layout.addWidget(self.readout)
 
@@ -67,11 +68,15 @@ class TargetCounter(QFrame):
 
     def _refresh_readout(self) -> None:
         if self._target > 0 and self._selected == self._target:
-            self.readout.setText(
-                f"Selected: {self._selected} / {self._target} {Glyphs.CHECK}"
-            )
+            self.readout.setText(tr(
+                "Selected: {selected} / {target} {icon}",
+                selected=self._selected, target=self._target, icon=Glyphs.CHECK,
+            ))
         else:
-            self.readout.setText(f"Selected: {self._selected} / {self._target}")
+            self.readout.setText(tr(
+                "Selected: {selected} / {target}",
+                selected=self._selected, target=self._target,
+            ))
 
     def _emit(self, n: int) -> None:
         clamped = max(MIN_TARGET, min(MAX_TARGET, n))

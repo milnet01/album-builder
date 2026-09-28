@@ -555,6 +555,8 @@ only this catcher.
 
 ## 12. Cross-doc impact
 
+> **Spec 25 (languages):** `src/album_builder/translations/` ships with the package tree the AppImage copies, and the bundled `DejaVuSans.ttf` must cover every catalog's characters (TC-25-12).
+
 - **`ROADMAP.md`** - flip Phase Dist-2 to shipped when implemented; annotate the
   epic's Dist-2 bullet where §3/§4 supersede it: the "GStreamer / Cairo /
   GDK-PixBuf" wording (FFmpeg backend, no Cairo/GDK-PixBuf), the "`linuxdeploy` ...

@@ -2495,7 +2495,7 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   Source: in-session-2026-09-25 pre-push hang.
   Lanes: tests.
 
-- 📋 [MUSI-0368] **Multiple languages, including right-to-left ones.**
+- ✅ [MUSI-0368] **Multiple languages, including right-to-left ones.**
   User request 2026-09-28: "The app also need to be in multiple
   languages please. Including RTL languages." Touches every UI string,
   the menus, the reports (Jinja templates), dates and numbers, and the
@@ -2505,6 +2505,41 @@ Themed PyQt6 window scans `Tracks/`, displays the library list with full metadat
   Afrikaans, Arabic, Hebrew, Spanish, French, German and Portuguese,
   with English kept. Sequenced AFTER the player library (MUSI-0356
   MP-2) so its new strings are translated once.
+  Resolved (2026-09-28): Spec 25 written, gated (review-contract, 2
+  loops, 12 findings fixed, accepted at the cap) and implemented.
+  i18n.py + translations/<code>.json for af, ar, he, es, fr, de, pt;
+  View > Language (restart to apply); RTL mirroring with the transport
+  pinned LTR; report translated with lang/dir and a localised date.
+  TC-25-01..12. Checked by eye: Arabic Player tab and a Hebrew report
+  PDF render correctly. Catalogs are machine-drafted (README says so).
   **Layman:** Let people use the app in their own language, including Arabic and Hebrew, which read right to left.
   Kind: feature.
   Source: user-request-2026-09-28.
+
+- 📋 [MUSI-0369] **Native-speaker check of the seven translation catalogs.**
+  The af/ar/he/es/fr/de/pt catalogs in src/album_builder/translations/
+  were machine-drafted (Spec 25 §Out of scope; README says so). A
+  native speaker per language should read them in the running app.
+  TC-25-03/04 keep the files complete; they cannot judge wording.
+  **Layman:** Have a fluent speaker of each language check the app's wording.
+  Kind: doc.
+  Source: in-session-2026-09-28.
+
+- 📋 [MUSI-0370] **The WhisperX-missing toast stays English in every language.**
+  alignment_worker emits "WhisperX not installed. Install via: ..."
+  and MainWindow._looks_like_whisperx_missing matches its English words
+  to decide whether to show the install dialog, so the string was left
+  untranslated. Fix: signal the missing runtime as a state, not as text,
+  then translate the message.
+  **Layman:** One rare error message still shows in English; fix how it is detected so it can be translated.
+  Kind: fix.
+  Source: in-session-2026-09-28.
+
+- 📋 [MUSI-0371] **"Add music" on-ramp: drop or pick files to add to the library.**
+  Deferred out of MUSI-0356 Phase MP-2 (Spec 18 §Out of scope). It
+  writes into the user's Tracks/ folder, which the project treats as
+  untouchable without explicit confirmation, so it needs its own
+  design decision (copy vs link, confirmation, name clashes) and spec.
+  **Layman:** Let people add songs by dragging them onto the app, once we decide how it should treat the music folder.
+  Kind: feature.
+  Source: in-session-2026-09-28.

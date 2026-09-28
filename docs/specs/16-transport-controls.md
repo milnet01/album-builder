@@ -252,6 +252,8 @@ the assignment order is the contract.)
 
 ## Behavior rules
 
+> **Spec 25 (languages):** under a right-to-left language the `TransportBar` pins itself left to right, so its buttons and scrubber are not mirrored.
+
 ### Previous / next
 
 - `btn_prev.clicked -> controller.previous()`. On a non-empty queue the controller

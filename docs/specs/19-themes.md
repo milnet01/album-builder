@@ -215,6 +215,8 @@ path already covers a non-default startup theme — no palette constructor arg i
 
 ## UI surface
 
+> **Spec 25 (languages):** the *View* menu gains *Language* after *Theme*. Theme display names are marked with `N_` and translated where the menu shows them.
+
 ```
 +-----------------------------------------------------------+
 | File            View            Help                      |   <- new QMenuBar

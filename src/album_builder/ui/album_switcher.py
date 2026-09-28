@@ -8,6 +8,7 @@ from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QMenu, QPushButton
 
 from album_builder.domain.album import Album, AlbumStatus
+from album_builder.i18n import tr
 from album_builder.services.album_store import AlbumStore
 from album_builder.ui.theme import Glyphs
 
@@ -53,9 +54,9 @@ class AlbumSwitcher(QFrame):
         # raw button text speaks "black down-pointing small triangle My
         # Album." Override with a clean Name + Description; the pill's
         # current album name is folded into the name on each refresh.
-        self.pill.setAccessibleName("Album switcher")
+        self.pill.setAccessibleName(tr("Album switcher"))
         self.pill.setAccessibleDescription(
-            "Click to switch albums or create a new one."
+            tr("Click to switch albums or create a new one.")
         )
         self.pill.clicked.connect(self._show_menu)
         layout.addWidget(self.pill)
@@ -108,15 +109,17 @@ class AlbumSwitcher(QFrame):
         if not albums:
             # Spec 03 §user-visible behaviour line 21: middle dot (U+00B7) as
             # the visual separator between "No albums" and the inline action.
-            self.pill.setText(f"{Glyphs.CARET} No albums · + New album")
+            self.pill.setText(tr("{icon} No albums \u00b7 + New album", icon=Glyphs.CARET))
             self.pill.setAccessibleName(
-                "Album switcher (no albums; click to create one)"
+                tr("Album switcher (no albums; click to create one)")
             )
             return
         current = self._store.get(self._current_id) if self._current_id else None
         name = current.name if current else albums[0].name
         self.pill.setText(f"{Glyphs.CARET} {name}")
-        self.pill.setAccessibleName(f"Album switcher: current album {name}")
+        self.pill.setAccessibleName(
+            tr("Album switcher: current album {name}", name=name)
+        )
 
     def _show_menu(self) -> None:
         if not self._store.list():
@@ -127,11 +130,11 @@ class AlbumSwitcher(QFrame):
             act = menu.addAction(label)
             act.triggered.connect(lambda _checked=False, aid=album_id: self.set_current(aid))
         menu.addSeparator()
-        new_act = menu.addAction("+ New album")
+        new_act = menu.addAction(tr("+ New album"))
         new_act.triggered.connect(self.new_album_requested.emit)
         if self._current_id is not None:
-            ren = menu.addAction("Rename current...")
+            ren = menu.addAction(tr("Rename current..."))
             ren.triggered.connect(lambda: self.rename_requested.emit(self._current_id))
-            de = menu.addAction("Delete current...")
+            de = menu.addAction(tr("Delete current..."))
             de.triggered.connect(lambda: self.delete_requested.emit(self._current_id))
         menu.exec(self.pill.mapToGlobal(self.pill.rect().bottomLeft()))

@@ -23,11 +23,12 @@ from PyQt6.QtWidgets import (
 )
 
 from album_builder.domain.track import Track
+from album_builder.i18n import N_, tr
 
 # The placeholder occupies the single list row when the queue is empty. It is
 # rendered non-interactive (NoItemFlags) so it can be neither selected,
 # highlighted, nor activated - row_activated only fires for real entries.
-_PLACEHOLDER_TEXT = "Nothing queued"
+_PLACEHOLDER_TEXT = N_("Nothing queued")
 
 
 class QueuePane(QFrame):
@@ -42,14 +43,14 @@ class QueuePane(QFrame):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(6)
 
-        title = QLabel("Up Next", objectName="PaneTitle")
+        title = QLabel(tr("Up Next"), objectName="PaneTitle")
         layout.addWidget(title)
 
         self.list = QListWidget()
         self.list.setObjectName("QueueList")
         # WCAG 2.1.1: the list is keyboard-navigable (default) and Enter /
         # Return activates the focused row via itemActivated (Spec 15 §UI surface).
-        self.list.setAccessibleName("Playback queue")
+        self.list.setAccessibleName(tr("Playback queue"))
         self.list.itemActivated.connect(self._on_item_activated)
         layout.addWidget(self.list)
 
@@ -62,7 +63,7 @@ class QueuePane(QFrame):
         separately by `set_current` (a pull, see module docstring)."""
         self.list.clear()
         if not play_order:
-            placeholder = QListWidgetItem(_PLACEHOLDER_TEXT)
+            placeholder = QListWidgetItem(tr(_PLACEHOLDER_TEXT))
             placeholder.setFlags(Qt.ItemFlag.NoItemFlags)
             self.list.addItem(placeholder)
             return

@@ -12,6 +12,7 @@ from __future__ import annotations
 from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
+from album_builder.i18n import tr
 from album_builder.services.player import Player, PlayerState
 from album_builder.ui.window_util import bring_to_front
 
@@ -35,17 +36,17 @@ class TrayIcon(QSystemTrayIcon):
         self._play_pause = QAction(self._play_pause_label(), menu)
         self._play_pause.triggered.connect(player.toggle)
         menu.addAction(self._play_pause)
-        act_next = QAction("Next", menu)
+        act_next = QAction(tr("Next"), menu)
         act_next.triggered.connect(controller.next)
         menu.addAction(act_next)
-        act_prev = QAction("Previous", menu)
+        act_prev = QAction(tr("Previous"), menu)
         act_prev.triggered.connect(controller.previous)
         menu.addAction(act_prev)
         menu.addSeparator()
-        act_show = QAction("Show/Hide", menu)
+        act_show = QAction(tr("Show/Hide"), menu)
         act_show.triggered.connect(self._toggle_window)
         menu.addAction(act_show)
-        act_quit = QAction("Quit", menu)
+        act_quit = QAction(tr("Quit"), menu)
         act_quit.triggered.connect(QApplication.quit)
         menu.addAction(act_quit)
         self.setContextMenu(menu)
@@ -56,7 +57,7 @@ class TrayIcon(QSystemTrayIcon):
         self.show()
 
     def _play_pause_label(self) -> str:
-        return "Pause" if self._player.state() == PlayerState.PLAYING else "Play"
+        return tr("Pause") if self._player.state() == PlayerState.PLAYING else tr("Play")
 
     def _on_state_changed(self, *_a) -> None:
         self._play_pause.setText(self._play_pause_label())

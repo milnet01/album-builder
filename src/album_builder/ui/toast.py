@@ -10,6 +10,7 @@ from __future__ import annotations
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QWidget
 
+from album_builder.i18n import tr
 from album_builder.ui.theme import Glyphs
 
 
@@ -24,11 +25,11 @@ class Toast(QFrame):
         self._auto_dismiss_ms = auto_dismiss_ms
         self.message_label = QLabel("", objectName="ToastMessage")
         self.message_label.setWordWrap(True)
-        self.message_label.setAccessibleName("Notification")
+        self.message_label.setAccessibleName(tr("Notification"))
         self.btn_close = QPushButton(Glyphs.CLOSE, objectName="ToastClose")
         self.btn_close.setFixedSize(24, 24)
         self.btn_close.setProperty("glyphButton", True)
-        self.btn_close.setAccessibleName("Dismiss notification")
+        self.btn_close.setAccessibleName(tr("Dismiss notification"))
         self.btn_close.clicked.connect(self.hide)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
@@ -50,7 +51,7 @@ class Toast(QFrame):
         # widget. Combined with the existing setAccessibleName("Notification")
         # this is the closest live-region announcement available in
         # PyQt6 today.
-        self.setAccessibleName("Notification")
+        self.setAccessibleName(tr("Notification"))
         self.setAccessibleDescription(msg)
         self.message_label.setAccessibleDescription(msg)
         self.show()

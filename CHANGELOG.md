@@ -10,6 +10,14 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Added
 
+- **The app now speaks eight languages, including Arabic and Hebrew.** (MUSI-0368)
+  English, Afrikaans, Arabic, Hebrew, Spanish, French, German and
+  Portuguese. It follows your computer's language, or choose one under
+  View > Language and reopen the app. Arabic and Hebrew mirror the whole
+  window right to left; the play controls stay the usual way round.
+  Approval reports come out in the chosen language too. The translations
+  are AI drafts, not yet checked by native speakers.
+
 - **The Player tab now has its own music library.** (MUSI-0356)
   Search and browse your songs right in the Player, without switching
   to the Album Builder tab. Double-click a song, or press Enter, to play

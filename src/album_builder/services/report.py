@@ -25,7 +25,9 @@ from pathlib import Path
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from PyQt6.QtCore import QLocale
 
+from album_builder.i18n import RTL, current_language, tr
 from album_builder.persistence.atomic_io import (
     _fsync_dir,
     _unique_tmp_path,
@@ -221,11 +223,14 @@ def _build_album_context(album: Any, library: Any) -> dict[str, Any]:
 
 
 def _jinja_env() -> Environment:
-    return Environment(
+    env = Environment(
         loader=FileSystemLoader(str(TEMPLATE_DIR)),
         autoescape=select_autoescape(["html", "xml"]),
         keep_trailing_newline=True,
     )
+    # Spec 25: the template's fixed text is translated through `_`.
+    env.globals["_"] = tr
+    return env
 
 
 def render_html(
@@ -248,7 +253,11 @@ def render_html(
     ctx.update({
         "version": version_string(),
         "approved_date": today.isoformat(),
-        "approved_date_human": today.strftime("%d %B %Y"),
+        # Spec 25: month named in the active language; "dd MMMM yyyy" keeps
+        # the English form strftime("%d %B %Y") produced.
+        "approved_date_human": QLocale(current_language()).toString(today, "dd MMMM yyyy"),
+        "lang": current_language(),
+        "dir": "rtl" if current_language() in RTL else "ltr",
         "artist_view": artist_view,
     })
     return template.render(**ctx)
@@ -397,10 +406,13 @@ def list_warnings(album: Any, library: Any) -> Iterable[str]:
     selected_count = len(album.track_paths)
     target = getattr(album, "target_count", selected_count)
     if selected_count != target:
-        warnings.append(f"selected count {selected_count} != target {target}")
+        warnings.append(
+            tr("selected count {selected} != target {target}",
+               selected=selected_count, target=target)
+        )
     for track_path_str in album.track_paths:
         track_path = Path(track_path_str)
         track = library.find(track_path)
         if track is None or getattr(track, "is_missing", False):
-            warnings.append(f"missing source: {track_path}")
+            warnings.append(tr("missing source: {path}", path=track_path))
     return warnings

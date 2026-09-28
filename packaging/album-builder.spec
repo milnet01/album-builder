@@ -29,6 +29,12 @@ datas += [
     (str(p), "album_builder/services/templates")
     for p in templates.glob("*") if p.is_file()
 ]
+# Spec 25: translation catalogs, read by i18n.py from the package directory.
+translations = ROOT / "src" / "album_builder" / "translations"
+datas += [
+    (str(p), "album_builder/translations")
+    for p in translations.glob("*.json")
+]
 
 icon = ROOT / "packaging" / "album-builder.ico"
 

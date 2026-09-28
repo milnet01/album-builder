@@ -92,6 +92,8 @@ The symlink folder + `playlist.m3u8` are intentionally **kept** on unapprove —
 
 ## Report contents (PDF and HTML — single template, two outputs)
 
+> **Spec 25 (languages):** the template's fixed text is translated through `_`, the root element carries `lang` and `dir`, and `approved_date_human` is `QLocale(code).toString(date, "dd MMMM yyyy")`. The file name keeps its ISO date.
+
 The PDF and HTML are rendered from a **single Jinja2 + CSS template** via WeasyPrint. The HTML is the same template rendered to HTML directly; the PDF is the same HTML rendered to PDF by WeasyPrint.
 
 ### Cover page

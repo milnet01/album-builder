@@ -8,6 +8,7 @@ from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLineEdit, QPushButton
 
 from album_builder.domain.album import AlbumStatus
+from album_builder.i18n import tr
 from album_builder.services.album_store import AlbumStore
 from album_builder.ui.album_switcher import AlbumSwitcher
 from album_builder.ui.target_counter import TargetCounter
@@ -48,24 +49,24 @@ class TopBar(QFrame):
         self.counter.target_changed.connect(self._on_target_changed)
         layout.addWidget(self.counter)
 
-        self.btn_approve = QPushButton(f"{Glyphs.CHECK} Approve...")
+        self.btn_approve = QPushButton(tr("{icon} Approve...", icon=Glyphs.CHECK))
         # objectName lets theme.qt_stylesheet target this button specifically
         # (Spec 11 §Gradients TC-11-08: success -> success-dark gradient).
         self.btn_approve.setObjectName("ApproveButton")
         # L6-H2 (Theme F closure / WCAG 2.2 §4.1.2): a screen reader hearing
         # the button's display text speaks the leading glyph ("check mark
         # Approve"). Override with a clean accessible name.
-        self.btn_approve.setAccessibleName("Approve album")
+        self.btn_approve.setAccessibleName(tr("Approve album"))
         self.btn_approve.setAccessibleDescription(
-            "Lock this album as the final version and generate the report."
+            tr("Lock this album as the final version and generate the report.")
         )
         self.btn_approve.clicked.connect(self._on_approve_clicked)
         layout.addWidget(self.btn_approve)
 
-        self.btn_reopen = QPushButton("Reopen for editing")
-        self.btn_reopen.setAccessibleName("Reopen album for editing")
+        self.btn_reopen = QPushButton(tr("Reopen for editing"))
+        self.btn_reopen.setAccessibleName(tr("Reopen album for editing"))
         self.btn_reopen.setAccessibleDescription(
-            "Unlock the approved album so the selection and order can be edited."
+            tr("Unlock the approved album so the selection and order can be edited.")
         )
         self.btn_reopen.clicked.connect(self._on_reopen_clicked)
         layout.addWidget(self.btn_reopen)

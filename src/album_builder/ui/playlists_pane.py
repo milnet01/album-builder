@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import (
 
 from album_builder.domain.library import Library
 from album_builder.domain.playlist import Playlist
+from album_builder.i18n import tr
 from album_builder.ui.theme import Glyphs
 
 _ID_ROLE = Qt.ItemDataRole.UserRole
@@ -68,19 +69,19 @@ class PlaylistsPane(QFrame):
 
         # --- Playlists (top) ------------------------------------------------
         pl_header = QHBoxLayout()
-        pl_header.addWidget(QLabel("Playlists", objectName="PaneTitle"))
+        pl_header.addWidget(QLabel(tr("Playlists"), objectName="PaneTitle"))
         pl_header.addStretch(1)
-        self.btn_new = QPushButton("New")
-        self.btn_new.setAccessibleName("New playlist")
-        self.btn_delete = QPushButton("Delete")
-        self.btn_delete.setAccessibleName("Delete playlist")
+        self.btn_new = QPushButton(tr("New"))
+        self.btn_new.setAccessibleName(tr("New playlist"))
+        self.btn_delete = QPushButton(tr("Delete"))
+        self.btn_delete.setAccessibleName(tr("Delete playlist"))
         pl_header.addWidget(self.btn_new)
         pl_header.addWidget(self.btn_delete)
         layout.addLayout(pl_header)
 
         self.playlists_list = QListWidget()
         self.playlists_list.setObjectName("PlaylistsList")
-        self.playlists_list.setAccessibleName("Saved playlists")
+        self.playlists_list.setAccessibleName(tr("Saved playlists"))
         # Rename is an inline double-click edit committing rename_committed.
         self.playlists_list.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked)
         self.playlists_list.currentRowChanged.connect(self._on_playlist_row_changed)
@@ -89,23 +90,23 @@ class PlaylistsPane(QFrame):
 
         # --- Tracks (below) -------------------------------------------------
         tr_header = QHBoxLayout()
-        tr_header.addWidget(QLabel("Tracks", objectName="PaneTitle"))
+        tr_header.addWidget(QLabel(tr("Tracks"), objectName="PaneTitle"))
         tr_header.addStretch(1)
-        self.btn_play = QPushButton(f"{Glyphs.PLAY} Play")
-        self.btn_play.setAccessibleName("Play playlist")
+        self.btn_play = QPushButton(tr("{icon} Play", icon=Glyphs.PLAY))
+        self.btn_play.setAccessibleName(tr("Play playlist"))
         self.btn_track_up = QPushButton(Glyphs.UP)
-        self.btn_track_up.setAccessibleName("Move track up")
+        self.btn_track_up.setAccessibleName(tr("Move track up"))
         self.btn_track_down = QPushButton(Glyphs.DOWN)
-        self.btn_track_down.setAccessibleName("Move track down")
-        self.btn_track_remove = QPushButton("Remove")
-        self.btn_track_remove.setAccessibleName("Remove track from playlist")
+        self.btn_track_down.setAccessibleName(tr("Move track down"))
+        self.btn_track_remove = QPushButton(tr("Remove"))
+        self.btn_track_remove.setAccessibleName(tr("Remove track from playlist"))
         for b in (self.btn_play, self.btn_track_up, self.btn_track_down, self.btn_track_remove):
             tr_header.addWidget(b)
         layout.addLayout(tr_header)
 
         self.tracks_list = QListWidget()
         self.tracks_list.setObjectName("PlaylistTracksList")
-        self.tracks_list.setAccessibleName("Playlist tracks")
+        self.tracks_list.setAccessibleName(tr("Playlist tracks"))
         self.tracks_list.currentRowChanged.connect(lambda _row: self._update_buttons())
         layout.addWidget(self.tracks_list)
 
@@ -182,7 +183,7 @@ class PlaylistsPane(QFrame):
             track = self._library.find(path)
             if track is not None:
                 return track.title
-        return f"{Path(path).name} (missing)"
+        return tr("{name} (missing)", name=Path(path).name)
 
     def _update_buttons(self) -> None:
         has_pl = self.current_playlist_id() is not None

@@ -15,6 +15,8 @@ from pathlib import Path
 from PyQt6.QtCore import QObject, QUrl, pyqtSignal
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 
+from album_builder.i18n import tr
+
 logger = logging.getLogger(__name__)
 
 # Window for de-duplicating identical error emits. Qt 6.11 backends can
@@ -280,9 +282,11 @@ class Player(QObject):
             prior = self._state
             self._state = PlayerState.ERROR
             path_str = str(self._source) if self._source else "<no source>"
-            msg = f"Could not decode {path_str}"
-            logger.warning("Player invalid media: %s", msg)
-            self._emit_error(QMediaPlayer.Error.FormatError, msg)
+            logger.warning("Player invalid media: Could not decode %s", path_str)
+            self._emit_error(
+                QMediaPlayer.Error.FormatError,
+                tr("Could not decode {path}", path=path_str),
+            )
             if self._state != prior:
                 self.state_changed.emit(self._state)
 

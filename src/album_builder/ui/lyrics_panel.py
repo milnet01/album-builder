@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 from album_builder.domain.lyrics import Lyrics
+from album_builder.i18n import tr
 from album_builder.services.alignment_status import AlignmentStatus, status_label
 from album_builder.ui.theme import Palette
 
@@ -61,7 +62,7 @@ class LyricsPanel(QFrame):
         self.status_label = QLabel(objectName="LyricsStatus")
         self.status_label.setText(status_label(AlignmentStatus.NO_LYRICS_TEXT))
         top.addWidget(self.status_label, stretch=1)
-        self.align_button = QPushButton("Align now", objectName="LyricsAlignNow")
+        self.align_button = QPushButton(tr("Align now"), objectName="LyricsAlignNow")
         self.align_button.setVisible(False)
         self.align_button.clicked.connect(self.align_now_requested.emit)
         top.addWidget(self.align_button)

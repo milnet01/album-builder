@@ -13,6 +13,7 @@ from __future__ import annotations
 from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout
 
 from album_builder.domain.track import Track
+from album_builder.i18n import tr
 from album_builder.services.playback_controller import PlaybackController
 from album_builder.services.player import Player
 from album_builder.ui.lyrics_panel import LyricsPanel
@@ -31,7 +32,7 @@ class NowPlayingPane(QFrame):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("Now playing", objectName="PaneTitle"))
+        layout.addWidget(QLabel(tr("Now playing"), objectName="PaneTitle"))
 
         # Spec 18: the cover + metadata block is the shared NowPlayingCard; it
         # is transparent so it renders on this Pane's bg_pane backdrop.

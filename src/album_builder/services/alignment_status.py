@@ -9,6 +9,7 @@ from __future__ import annotations
 from enum import Enum, auto
 
 from album_builder.domain.track import Track
+from album_builder.i18n import tr
 from album_builder.persistence.lrc_io import is_lrc_fresh
 from album_builder.ui.theme import Glyphs
 
@@ -46,16 +47,16 @@ def status_label(status: AlignmentStatus, percent: int | None = None) -> str:
     """User-visible string for the LyricsPanel status pill."""
     match status:
         case AlignmentStatus.NO_LYRICS_TEXT:
-            return "LRC: no lyrics text"
+            return tr("LRC: no lyrics text")
         case AlignmentStatus.NOT_YET_ALIGNED:
-            return "LRC: not yet aligned"
+            return tr("LRC: not yet aligned")
         case AlignmentStatus.ALIGNING:
             if percent is None:
-                return "LRC: aligning..."
-            return f"LRC: aligning... {percent}%"
+                return tr("LRC: aligning...")
+            return tr("LRC: aligning... {percent}%", percent=percent)
         case AlignmentStatus.READY:
-            return f"LRC: {Glyphs.CHECK} ready"
+            return tr("LRC: {icon} ready", icon=Glyphs.CHECK)
         case AlignmentStatus.FAILED:
-            return "LRC: alignment failed"
+            return tr("LRC: alignment failed")
         case AlignmentStatus.AUDIO_TOO_SHORT:
-            return "LRC: audio too short to align"
+            return tr("LRC: audio too short to align")

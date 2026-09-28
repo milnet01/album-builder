@@ -60,6 +60,16 @@ Every type except AAC can carry the song's title, artist, album,
 artwork and volume-levelling tags, and the app reads them all. AAC files
 have nowhere to store those details, so they show the file name instead.
 
+### Languages
+
+The app comes in English, Afrikaans, Arabic, Hebrew, Spanish, French,
+German and Portuguese. It follows your computer's language, or pick one
+under **View > Language**; the change applies the next time you open the
+app. Arabic and Hebrew lay the whole window out right to left.
+
+The translations were drafted by an AI and have not yet been checked by
+native speakers, so some wording may be off. Corrections are welcome.
+
 ## Where your music and albums live
 
 - **Your music** is read from `~/Music` unless you choose another

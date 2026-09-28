@@ -4,6 +4,7 @@ AlbumStore + LibraryWatcher + AppState (Phase 2) + Player (Phase 3A)."""
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from pathlib import Path
 from uuid import UUID
 
@@ -25,12 +26,13 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from album_builder import i18n
 from album_builder.domain.track import Track
+from album_builder.i18n import tr
 from album_builder.persistence.lrc_io import read_lrc
 from album_builder.persistence.settings import (
     AudioSettings,
     ReplayGainSettings,
-    UiSettings,
     read_audio,
     read_replaygain,
     read_ui,
@@ -254,7 +256,7 @@ class MainWindow(QMainWindow):
             self._player, self._controller, self.queue_pane, self.playlists_pane,
             self.player_library_pane,
         )
-        self.tabs.addTab(self._player_pane, "Player")
+        self.tabs.addTab(self._player_pane, tr("Player"))
         outer.addWidget(self.tabs, stretch=1)
 
         # Spec 18 now-playing surfaces: the curation pane and the Player pane
@@ -273,10 +275,10 @@ class MainWindow(QMainWindow):
         # empty catalogue without touching the file (it is renamed to
         # .corrupt.bak on the first save). Tell the user via a toast.
         if self._playlist_store.load_failed:
-            self._show_toast(
+            self._show_toast(tr(
                 "playlists.json was unreadable; started an empty list. "
                 "Your original file is preserved as playlists.json.corrupt.bak."
-            )
+            ))
 
         # Debounced state-save timer for splitter / geometry mutations (TC-03-10).
         self._state_save_timer = QTimer(self)
@@ -418,25 +420,25 @@ class MainWindow(QMainWindow):
     def _build_menu_bar(self) -> None:
         bar = self.menuBar()
 
-        file_menu = bar.addMenu("File")
+        file_menu = bar.addMenu(tr("File"))
         # Menu items wrap the EXISTING handlers/shortcuts (Ctrl+N / Ctrl+Q are
         # still bound in _wire_shortcuts); no accelerator is set here to avoid a
         # second, ambiguous binding for the same key. Late-bound lambdas so the
         # handler is looked up on self at trigger time (overridable, testable).
-        file_menu.addAction("New Album", lambda: self._on_new_album())
+        file_menu.addAction(tr("New Album"), lambda: self._on_new_album())
         file_menu.addAction(
-            "Restore Deleted Album...", lambda: self._on_restore_album(),
+            tr("Restore Deleted Album..."), lambda: self._on_restore_album(),
         )
         file_menu.addSeparator()
-        file_menu.addAction("Quit", lambda: self.close())
+        file_menu.addAction(tr("Quit"), lambda: self.close())
 
-        view_menu = bar.addMenu("View")
-        theme_menu = view_menu.addMenu("Theme")
+        view_menu = bar.addMenu(tr("View"))
+        theme_menu = view_menu.addMenu(tr("Theme"))
         self._theme_group = QActionGroup(self)
         self._theme_group.setExclusive(True)
         self._theme_actions: dict[str, object] = {}
         for theme_id, (display_name, _factory) in THEMES.items():
-            act = theme_menu.addAction(display_name)
+            act = theme_menu.addAction(tr(display_name))
             act.setCheckable(True)
             self._theme_group.addAction(act)
             # `triggered` fires on user activation only (not on programmatic
@@ -448,18 +450,38 @@ class MainWindow(QMainWindow):
             )
             self._theme_actions[theme_id] = act
 
+        # Spec 25: View -> Language, after Theme. Native names come from the
+        # catalogs; the choice is saved and applies on the next start.
+        language_menu = view_menu.addMenu(tr("Language"))
+        language_group = QActionGroup(self)
+        language_group.setExclusive(True)
+        stored = read_ui().language
+        for code, label in (
+            ("system", tr("System default")),
+            *((c, i18n.language_name(c)) for c in i18n.SUPPORTED),
+        ):
+            act = language_menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(code == stored)
+            language_group.addAction(act)
+            act.triggered.connect(
+                lambda _checked=False, c=code, name=label: self._on_language_chosen(c, name)
+            )
+
         # Spec 21: Playback -> Volume Levelling, after View and before Help.
-        playback_menu = bar.addMenu("Playback")
-        self._rg_toggle_action = playback_menu.addAction("Volume Levelling (ReplayGain)")
+        playback_menu = bar.addMenu(tr("Playback"))
+        self._rg_toggle_action = playback_menu.addAction(
+            tr("Volume Levelling (ReplayGain)")
+        )
         self._rg_toggle_action.setCheckable(True)
         self._rg_toggle_action.setChecked(self._replaygain.enabled())
         self._rg_toggle_action.triggered.connect(
             lambda checked: self._on_replaygain_toggled(checked)
         )
-        ref_menu = playback_menu.addMenu("Levelling reference")
+        ref_menu = playback_menu.addMenu(tr("Levelling reference"))
         self._rg_mode_group = QActionGroup(self)
         self._rg_mode_group.setExclusive(True)
-        for mode_id, display_name in (("album", "Album"), ("track", "Track")):
+        for mode_id, display_name in (("album", tr("Album")), ("track", tr("Track"))):
             act = ref_menu.addAction(display_name)
             act.setCheckable(True)
             act.setChecked(self._replaygain.mode() == mode_id)
@@ -468,8 +490,8 @@ class MainWindow(QMainWindow):
                 lambda _checked=False, mid=mode_id: self._on_replaygain_mode(mid)
             )
 
-        help_menu = bar.addMenu("Help")
-        help_menu.addAction("Keyboard shortcuts", lambda: self._show_help())
+        help_menu = bar.addMenu(tr("Help"))
+        help_menu.addAction(tr("Keyboard shortcuts"), lambda: self._show_help())
 
     def _apply_theme(self, theme_id: str, *, persist: bool) -> None:
         palette = palette_for(theme_id)
@@ -485,19 +507,15 @@ class MainWindow(QMainWindow):
         if action is not None:
             action.setChecked(True)
         if persist:
-            new_settings = UiSettings(
-                open_report_folder_on_approve=(
-                    self._ui_settings.open_report_folder_on_approve
-                ),
-                theme=theme_id,
-            )
+            # Spec 25: carry the other ui fields (language) forward.
+            new_settings = replace(read_ui(), theme=theme_id)
             try:
                 write_ui(new_settings)
                 self._ui_settings = new_settings
             except OSError as exc:
                 # An uncaught exception in this triggered slot would qFatal the
                 # app; a failed settings write must only cost persistence.
-                self._show_toast(f"Couldn't save theme choice: {exc}")
+                self._show_toast(tr("Couldn't save theme choice: {error}", error=exc))
 
     # ---- ReplayGain (Spec 21) ---------------------------------------
 
@@ -517,7 +535,7 @@ class MainWindow(QMainWindow):
             write_replaygain(new_settings)
             self._replaygain_settings = new_settings
         except OSError as exc:
-            self._show_toast(f"Couldn't save levelling choice: {exc}")
+            self._show_toast(tr("Couldn't save levelling choice: {error}", error=exc))
 
     def _current_album(self):
         cid = self.top_bar.switcher.current_id
@@ -544,7 +562,7 @@ class MainWindow(QMainWindow):
         try:
             album.set_target(n)
         except ValueError as exc:
-            QMessageBox.warning(self, "Cannot lower target", str(exc))
+            QMessageBox.warning(self, tr("Cannot lower target"), str(exc))
             self.top_bar.set_current(album_id)  # revert UI
             return
         self._store.schedule_save(album_id)
@@ -558,24 +576,25 @@ class MainWindow(QMainWindow):
         # Pre-flight summary (Spec 09 §The approve flow step 2).
         warnings = list(list_warnings(album, self._library_watcher.library()))
         warn_text = "\n".join(f"  - {w}" for w in warnings) if warnings else ""
-        body = (
-            f"Approve '{album.name}'?\n\n"
-            f"This will export symlinks + a printable PDF + HTML report, "
-            f"then lock the album from edits until you reopen it.\n\n"
-            f"{len(album.track_paths)} of {album.target_count} tracks selected."
+        body = tr(
+            "Approve '{name}'?\n\n"
+            "This will export symlinks + a printable PDF + HTML report, "
+            "then lock the album from edits until you reopen it.\n\n"
+            "{selected} of {target} tracks selected.",
+            name=album.name, selected=len(album.track_paths), target=album.target_count,
         )
         if warn_text:
-            body += "\n\nWarnings:\n" + warn_text
+            body += "\n\n" + tr("Warnings:\n{warnings}", warnings=warn_text)
         # Custom dialog: Spec 09 §The approve flow step 3 mandates literal
         # button labels ("Approve and generate report" / "Cancel") with
         # default-Cancel for destructive UI. Qt's `question()` shorthand
         # localises to "Yes/No" with default-Yes - wrong on both counts.
         msg = QMessageBox(self)
-        msg.setWindowTitle("Approve album")
+        msg.setWindowTitle(tr("Approve album"))
         msg.setText(body)
         msg.setIcon(QMessageBox.Icon.Question)
         approve_btn = msg.addButton(
-            "Approve and generate report", QMessageBox.ButtonRole.AcceptRole,
+            tr("Approve and generate report"), QMessageBox.ButtonRole.AcceptRole,
         )
         cancel_btn = msg.addButton(QMessageBox.StandardButton.Cancel)
         msg.setDefaultButton(cancel_btn)
@@ -592,8 +611,8 @@ class MainWindow(QMainWindow):
             except (FileNotFoundError, ValueError, OSError, ExportFailed) as exc:
                 approve_failed = True
                 # Spec 09 §Errors: surface via toast + modal warning.
-                self._show_toast(f"Approve failed: {exc}")
-                QMessageBox.warning(self, "Cannot approve", str(exc))
+                self._show_toast(tr("Approve failed: {error}", error=exc))
+                QMessageBox.warning(self, tr("Cannot approve"), str(exc))
                 return
             except Exception as exc:
                 # Catch-all for unexpected exceptions: without this, PyQt6
@@ -606,12 +625,15 @@ class MainWindow(QMainWindow):
                 approve_failed = True
                 logger.exception("approve failed: unexpected exception")
                 traceback.print_exc()
-                self._show_toast(f"Approve failed: {type(exc).__name__}")
+                self._show_toast(tr("Approve failed: {error}", error=type(exc).__name__))
                 QMessageBox.critical(
-                    self, "Cannot approve",
-                    f"Unexpected error during approve:\n\n"
-                    f"{type(exc).__name__}: {exc}\n\n"
-                    "Full traceback printed to terminal/journal.",
+                    self, tr("Cannot approve"),
+                    tr(
+                        "Unexpected error during approve:\n\n"
+                        "{error_type}: {error}\n\n"
+                        "Full traceback printed to terminal/journal.",
+                        error_type=type(exc).__name__, error=exc,
+                    ),
                 )
                 return
         finally:
@@ -625,7 +647,9 @@ class MainWindow(QMainWindow):
         try:
             folder = self._store.folder_for(album_id)
             _, pdf = report_paths_for(album, folder / "reports")
-            self._show_toast(f"Approved {Glyphs.MIDDOT} report at {pdf}")
+            self._show_toast(
+                tr("Approved {icon} report at {path}", icon=Glyphs.MIDDOT, path=pdf)
+            )
             # xdg-open the reports folder (Spec 09 §The approve flow step 6).
             if self._ui_settings.open_report_folder_on_approve:
                 self._open_in_file_manager(folder / "reports")
@@ -638,15 +662,16 @@ class MainWindow(QMainWindow):
             return
         folder = self._store.folder_for(album_id)
         html, pdf = report_paths_for(album, folder / "reports")
-        confirm = (
-            f"Reopening will delete the approved report ({pdf.name} + {html.name}). "
-            "The symlink folder and playlist are kept. Continue?"
+        confirm = tr(
+            "Reopening will delete the approved report ({pdf} + {html}). "
+            "The symlink folder and playlist are kept. Continue?",
+            pdf=pdf.name, html=html.name,
         )
         msg = QMessageBox(self)
-        msg.setWindowTitle("Reopen for editing")
+        msg.setWindowTitle(tr("Reopen for editing"))
         msg.setText(confirm)
         msg.setIcon(QMessageBox.Icon.Warning)
-        continue_btn = msg.addButton("Continue", QMessageBox.ButtonRole.DestructiveRole)
+        continue_btn = msg.addButton(tr("Continue"), QMessageBox.ButtonRole.DestructiveRole)
         cancel_btn = msg.addButton(QMessageBox.StandardButton.Cancel)
         msg.setDefaultButton(cancel_btn)
         msg.exec()
@@ -655,8 +680,8 @@ class MainWindow(QMainWindow):
         try:
             self._store.unapprove(album_id)
         except ReportsCleanupFailed as exc:
-            self._show_toast(f"Reopen partial: {exc}")
-            QMessageBox.warning(self, "Reopen failed", str(exc))
+            self._show_toast(tr("Reopen partial: {error}", error=exc))
+            QMessageBox.warning(self, tr("Reopen failed"), str(exc))
             return
         self._refresh_panes_after_lifecycle_change(album_id)
 
@@ -680,6 +705,18 @@ class MainWindow(QMainWindow):
         self.album_order_pane.set_album(
             self._store.get(album_id), list(self._library_watcher.library().tracks)
         )
+
+    def _on_language_chosen(self, code: str, name: str) -> None:
+        """Spec 25: save the language; it takes effect on the next start."""
+        current = read_ui()
+        if current.language == code:
+            return
+        try:
+            write_ui(replace(current, language=code))
+        except OSError as exc:
+            self._show_toast(tr("Couldn't save language choice: {error}", error=exc))
+            return
+        self._show_toast(tr("Restart Album Builder to use {language}.", language=name))
 
     def _show_toast(self, message: str) -> None:
         """Surface a message via the toast widget. The toast is constructed
@@ -705,18 +742,20 @@ class MainWindow(QMainWindow):
             logger.warning("open folder raised: %s", exc)
 
     def _on_new_album(self) -> None:
-        name, ok = QInputDialog.getText(self, "New album", "Album name (1-80 chars):")
+        name, ok = QInputDialog.getText(
+            self, tr("New album"), tr("Album name (1-80 chars):"),
+        )
         if not ok or not name.strip():
             return
         target, ok = QInputDialog.getInt(
-            self, "Target track count", "How many tracks?", 12, 1, 99,
+            self, tr("Target track count"), tr("How many tracks?"), 12, 1, 99,
         )
         if not ok:
             return
         try:
             album = self._store.create(name=name.strip(), target_count=target)
         except ValueError as exc:
-            QMessageBox.warning(self, "Cannot create album", str(exc))
+            QMessageBox.warning(self, tr("Cannot create album"), str(exc))
             return
         self.top_bar.switcher.set_current(album.id)
 
@@ -725,9 +764,12 @@ class MainWindow(QMainWindow):
         if album is None:
             return
         if QMessageBox.question(
-            self, "Delete album",
-            f"Delete '{album.name}'? You can bring it back later with "
-            "File > Restore Deleted Album.",
+            self, tr("Delete album"),
+            tr(
+                "Delete '{name}'? You can bring it back later with "
+                "File > Restore Deleted Album.",
+                name=album.name,
+            ),
         ) != QMessageBox.StandardButton.Yes:
             return
         self._store.delete(album_id)
@@ -736,30 +778,35 @@ class MainWindow(QMainWindow):
     def _on_restore_album(self) -> None:
         trashed = self._store.trashed()
         if not trashed:
-            self._show_toast("No deleted albums to restore.")
+            self._show_toast(tr("No deleted albums to restore."))
             return
         labels = [
-            f"{t.name} (deleted {t.deleted_at.astimezone():%Y-%m-%d %H:%M})"
+            tr(
+                "{name} (deleted {when})",
+                name=t.name, when=f"{t.deleted_at.astimezone():%Y-%m-%d %H:%M}",
+            )
             if t.deleted_at else t.name
             for t in trashed
         ]
         choice, ok = QInputDialog.getItem(
-            self, "Restore deleted album", "Album to restore:", labels, 0, False,
+            self, tr("Restore deleted album"), tr("Album to restore:"), labels, 0, False,
         )
         if not ok or choice not in labels:
             return
         try:
             album = self._store.restore(trashed[labels.index(choice)].path)
         except (ValueError, OSError) as exc:
-            QMessageBox.warning(self, "Cannot restore album", str(exc))
+            QMessageBox.warning(self, tr("Cannot restore album"), str(exc))
             return
         self.top_bar.switcher.set_current(album.id)
-        self._show_toast(f"Restored '{album.name}'.")
+        self._show_toast(tr("Restored '{name}'.", name=album.name))
 
     # --- Saved playlists (Spec 17, Phase D) --------------------------------
 
     def _on_new_playlist(self) -> None:
-        name, ok = QInputDialog.getText(self, "New playlist", "Playlist name:")
+        name, ok = QInputDialog.getText(
+            self, tr("New playlist"), tr("Playlist name:"),
+        )
         # A cancelled or strip-empty name creates nothing (so Playlist.create's
         # ValueError is never reached). Spec 17 §Create.
         if not ok or not name.strip():
@@ -782,10 +829,12 @@ class MainWindow(QMainWindow):
         # album's .trash), so the safer default-Cancel form is used here rather
         # than the plainer question() Yes/No shorthand (Spec 17 §Delete).
         msg = QMessageBox(self)
-        msg.setWindowTitle("Delete playlist")
-        msg.setText(f"Delete playlist '{pl.name}'? This cannot be undone.")
+        msg.setWindowTitle(tr("Delete playlist"))
+        msg.setText(
+            tr("Delete playlist '{name}'? This cannot be undone.", name=pl.name)
+        )
         msg.setIcon(QMessageBox.Icon.Question)
-        delete_btn = msg.addButton("Delete", QMessageBox.ButtonRole.AcceptRole)
+        delete_btn = msg.addButton(tr("Delete"), QMessageBox.ButtonRole.AcceptRole)
         cancel_btn = msg.addButton(QMessageBox.StandardButton.Cancel)
         msg.setDefaultButton(cancel_btn)
         msg.exec()
@@ -807,13 +856,15 @@ class MainWindow(QMainWindow):
             # Empty or all-missing: play_tracks([]) would clear/stop the live
             # queue, so leave it untouched and toast instead (Spec 17 §Play,
             # TC-17-22).
-            self._show_toast("Playlist is empty or all its tracks are missing.")
+            self._show_toast(tr("Playlist is empty or all its tracks are missing."))
             return
         self._controller.play_tracks(resolved)
 
     def _on_add_to_playlist(self, playlist_id: str | None, tracks: list[Track]) -> None:
         if playlist_id is None:
-            name, ok = QInputDialog.getText(self, "New playlist", "Playlist name:")
+            name, ok = QInputDialog.getText(
+                self, tr("New playlist"), tr("Playlist name:"),
+            )
             if not ok or not name.strip():
                 return  # cancelled / empty: no playlist created, no track added
             playlist_id = self._playlist_store.create(name.strip()).id
@@ -830,7 +881,7 @@ class MainWindow(QMainWindow):
             else:
                 album.deselect(path)
         except ValueError as exc:
-            QMessageBox.warning(self, "Cannot toggle", str(exc))
+            QMessageBox.warning(self, tr("Cannot toggle"), str(exc))
             return
         self._store.schedule_save(album.id)
         self._store.schedule_export(album.id, self._library_watcher.library())
@@ -903,15 +954,17 @@ class MainWindow(QMainWindow):
     def _show_help(self) -> None:
         QMessageBox.information(
             self,
-            "Album Builder — Keyboard shortcuts",
-            "Ctrl+N — New album\n"
-            "Ctrl+Q — Quit\n"
-            "F1 — This help\n"
-            "Space — Play / pause\n"
-            "Left / Right — Seek -5 s / +5 s\n"
-            "Shift+Left / Right — Seek -30 s / +30 s\n"
-            "M — Mute / unmute\n\n"
-            "Transport shortcuts are suppressed while typing in a text field.",
+            tr("{app} — Keyboard shortcuts", app="Album Builder"),
+            tr(
+                "Ctrl+N — New album\n"
+                "Ctrl+Q — Quit\n"
+                "F1 — This help\n"
+                "Space — Play / pause\n"
+                "Left / Right — Seek -5 s / +5 s\n"
+                "Shift+Left / Right — Seek -30 s / +30 s\n"
+                "M — Mute / unmute\n\n"
+                "Transport shortcuts are suppressed while typing in a text field.",
+            ),
         )
 
     # ---- Spec 18: fan-out to both now-playing surfaces ----------------
@@ -962,7 +1015,7 @@ class MainWindow(QMainWindow):
             # Mirrors _on_preview_play's missing-track toast — gives the
             # user feedback when an album-order row points at a track
             # that has vanished from the library since the album was saved.
-            self._toast.show_message(f"Track not in library: {path}")
+            self._toast.show_message(tr("Track not in library: {path}", path=path))
             return
         # Spec 18: fan the previewed track to both surfaces so the Player-tab
         # card/lyrics mirror the preview instead of going stale.
@@ -981,7 +1034,7 @@ class MainWindow(QMainWindow):
             None,
         )
         if track is None:
-            self._toast.show_message(f"Track not in library: {path}")
+            self._toast.show_message(tr("Track not in library: {path}", path=path))
             return
         self._controller.preview(track)
 
@@ -1058,7 +1111,7 @@ class MainWindow(QMainWindow):
         """User clicked "Align now" on the lyrics panel."""
         track = self._current_track()
         if track is None:
-            self._toast.show_message("No track loaded")
+            self._toast.show_message(tr("No track loaded"))
             return
         # Spec 07 §Alignment job: a one-shot dialog confirms the ~1 GB
         # model download. Once the WhisperX models are cached locally,
@@ -1073,11 +1126,13 @@ class MainWindow(QMainWindow):
     def _confirm_alignment_download(self) -> bool:
         button = QMessageBox.question(
             self,
-            "Align lyrics — model download",
-            "Aligning lyrics uses local ML (Whisper + wav2vec2). On first "
-            "use, ~1 GB of model files will download to the HuggingFace "
-            "cache at ~/.cache/huggingface/hub/. Subsequent alignments "
-            "use the cached models silently. Continue?",
+            tr("Align lyrics — model download"),
+            tr(
+                "Aligning lyrics uses local ML (Whisper + wav2vec2). On first "
+                "use, ~1 GB of model files will download to the HuggingFace "
+                "cache at ~/.cache/huggingface/hub/. Subsequent alignments "
+                "use the cached models silently. Continue?",
+            ),
         )
         return button == QMessageBox.StandardButton.Yes
 
@@ -1104,7 +1159,7 @@ class MainWindow(QMainWindow):
         self._tracker.set_lyrics(lyrics)
 
     def _on_alignment_error(self, _path: Path, msg: str) -> None:
-        self._toast.show_message(f"Alignment failed: {msg}")
+        self._toast.show_message(tr("Alignment failed: {error}", error=msg))
         if self._looks_like_whisperx_missing(msg) and not self._whisperx_dialog_shown:
             # Anchor the install hint at sys.executable so it lands in the
             # app's own venv regardless of dev-tree vs installed location;
@@ -1115,12 +1170,15 @@ class MainWindow(QMainWindow):
             import sys as _sys
             QMessageBox.warning(
                 self,
-                "WhisperX not installed",
-                "Lyrics alignment requires the optional WhisperX runtime.\n"
-                "Install it via:\n\n"
-                f"    {_sys.executable} -m pip install whisperx\n\n"
-                "and restart the app. The first run downloads ~1 GB of model "
-                "files to ~/.cache/album-builder/whisper-models/.",
+                tr("WhisperX not installed"),
+                tr(
+                    "Lyrics alignment requires the optional WhisperX runtime.\n"
+                    "Install it via:\n\n"
+                    "    {python} -m pip install whisperx\n\n"
+                    "and restart the app. The first run downloads ~1 GB of model "
+                    "files to ~/.cache/album-builder/whisper-models/.",
+                    python=_sys.executable,
+                ),
             )
             self._whisperx_dialog_shown = True
 
@@ -1134,13 +1192,15 @@ class MainWindow(QMainWindow):
         if self._looks_like_codec_error(msg) and not self._player.codec_dialog_shown():
             QMessageBox.warning(
                 self,
-                "Audio codecs unavailable",
-                "Audio playback failed. This build decodes audio with PyQt6's "
-                "bundled FFmpeg backend, so no separate codec packages are needed "
-                "(the old GStreamer plugins are not used).\n\n"
-                "If playback keeps failing, make sure your audio system (PipeWire "
-                "or PulseAudio) is running, and try another track to rule out a "
-                "corrupt file.",
+                tr("Audio codecs unavailable"),
+                tr(
+                    "Audio playback failed. This build decodes audio with PyQt6's "
+                    "bundled FFmpeg backend, so no separate codec packages are needed "
+                    "(the old GStreamer plugins are not used).\n\n"
+                    "If playback keeps failing, make sure your audio system (PipeWire "
+                    "or PulseAudio) is running, and try another track to rule out a "
+                    "corrupt file.",
+                ),
             )
             self._player.mark_codec_dialog_shown()
 

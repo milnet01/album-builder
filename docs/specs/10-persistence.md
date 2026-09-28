@@ -282,6 +282,7 @@ Spec 12 owns *what settings exist*; this spec owns the bytes. Lives at `<config-
 | `replaygain.enabled` | bool | false (Spec 21; opt-in loudness levelling) |
 | `replaygain.mode` | string | `"album"` or `"track"`; unknown values fall back to `"album"` (Spec 21) |
 | `ui.theme` | string | one of `theme.THEMES` (`"dark-colourful"`, `"light"`, `"dark-ocean"`, `"dark-ember"`, `"dark-slate"`); unknown values fall back to `"dark-colourful"` (Spec 19) |
+| `ui.language` | string | `"system"` (default) or a code in `i18n.SUPPORTED`; unknown values read as `"system"`. Takes effect on restart (Spec 25) |
 | `ui.open_report_folder_on_approve` | bool | true |
 
 ## Errors & edge cases

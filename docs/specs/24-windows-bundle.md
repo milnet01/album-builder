@@ -525,6 +525,8 @@ catcher, the same class Spec 23 carried (its INV-23-8/9/10).
 
 ## 12. Cross-doc impact
 
+> **Spec 25 (languages):** `packaging/album-builder.spec` lists `src/album_builder/translations/*.json` as data, and the bundled `DejaVuSans.ttf` must cover every catalog's characters (TC-25-12).
+
 - **`ROADMAP.md`** - flip Phase Dist-3 to shipped when implemented; annotate the
   epic's Dist-3 bullet where §3 refines it (one-folder zip not one-file; the
   point-of-use HTML fallback; MSYS2-sourced GTK; the windows-latest-only build with

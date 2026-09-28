@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from album_builder.i18n import N_
+
 
 @dataclass(frozen=True)
 class Palette:
@@ -509,11 +511,11 @@ class Glyphs:
 # ALLOWED_THEMES both derive from these ids (settings.py lists them literally to keep
 # persistence Qt/ui-free; TC-19-05 asserts the two stay in sync).
 THEMES: dict[str, tuple[str, Callable[[], Palette]]] = {
-    "dark-colourful": ("Dark Colourful", Palette.dark_colourful),
-    "light": ("Light", Palette.light),
-    "dark-ocean": ("Dark Ocean", Palette.dark_ocean),
-    "dark-ember": ("Dark Ember", Palette.dark_ember),
-    "dark-slate": ("Dark Slate", Palette.dark_slate),
+    "dark-colourful": (N_("Dark Colourful"), Palette.dark_colourful),
+    "light": (N_("Light"), Palette.light),
+    "dark-ocean": (N_("Dark Ocean"), Palette.dark_ocean),
+    "dark-ember": (N_("Dark Ember"), Palette.dark_ember),
+    "dark-slate": (N_("Dark Slate"), Palette.dark_slate),
 }
 
 

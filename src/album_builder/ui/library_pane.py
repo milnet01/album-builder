@@ -33,6 +33,7 @@ from PyQt6.QtWidgets import (
 from album_builder.domain.album import Album, AlbumStatus
 from album_builder.domain.library import Library
 from album_builder.domain.track import Track
+from album_builder.i18n import N_, tr
 from album_builder.ui.theme import Glyphs, Palette
 
 if TYPE_CHECKING:
@@ -89,18 +90,18 @@ def _build_usage_tooltip(album_ids, store) -> str | None:
     names.sort(key=str.casefold)
     safe_names = [_plain_text_safe(n) for n in names]
     body = "\n".join(f"  {Glyphs.MIDDOT} {n}" for n in safe_names)
-    return f"Used in approved albums:\n{body}"
+    return tr("Used in approved albums:\n{body}", body=body)
 
 
 COLUMNS: list[tuple[str, str]] = [
     ("▶", "_play"),   # PLAY glyph - Spec 06 per-row preview-play
-    ("Title", "title"),
-    ("Artist", "artist"),
-    ("Album", "album"),
-    ("Composer", "composer"),
-    ("Duration", "duration_seconds"),
+    (N_("Title"), "title"),
+    (N_("Artist"), "artist"),
+    (N_("Album"), "album"),
+    (N_("Composer"), "composer"),
+    (N_("Duration"), "duration_seconds"),
     ("✓", "_toggle"),
-    ("Used", "_used"),   # Spec 13 - cross-album popularity badge
+    (N_("Used"), "_used"),   # Spec 13 - cross-album popularity badge
 ]
 
 # Spec 01: search filters across title, artist, album_artist, composer, album.
@@ -228,7 +229,7 @@ class TrackTableModel(QAbstractTableModel):
         if orientation != Qt.Orientation.Horizontal:
             return None
         if role == Qt.ItemDataRole.DisplayRole:
-            return COLUMNS[section][0]
+            return tr(COLUMNS[section][0])
         if role == Qt.ItemDataRole.AccessibleTextRole:
             # Spec 13 §Accessibility: descriptive accessible name for the
             # new Used column; other columns return the visible header
@@ -236,8 +237,8 @@ class TrackTableModel(QAbstractTableModel):
             # screen-reader behaviour on the rest of the header.
             attr = COLUMNS[section][1]
             if attr == "_used":
-                return "Cross-album reuse count"
-            return COLUMNS[section][0]
+                return tr("Cross-album reuse count")
+            return tr(COLUMNS[section][0])
         return None
 
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):
@@ -264,12 +265,12 @@ class TrackTableModel(QAbstractTableModel):
                 return Glyphs.PAUSE if is_active_playing else Glyphs.PLAY
             if role == Qt.ItemDataRole.AccessibleTextRole:
                 if is_active_playing:
-                    return f"Pause {track.title}"
-                return f"Preview-play {track.title}"
+                    return tr("Pause {title}", title=track.title)
+                return tr("Preview-play {title}", title=track.title)
             if role == Qt.ItemDataRole.ToolTipRole:
                 if is_active_playing:
-                    return "Pause this track"
-                return "Preview-play this track"
+                    return tr("Pause this track")
+                return tr("Preview-play this track")
             if role == Qt.ItemDataRole.UserRole:
                 # Sortable but uninformative; group by title casefold so a
                 # header click on this column doesn't crash. Spec 06 doesn't
@@ -284,10 +285,12 @@ class TrackTableModel(QAbstractTableModel):
             if role == Qt.ItemDataRole.AccessibleTextRole:
                 # Spec 11 / WCAG 2.2 §4.1.2: screen readers should hear
                 # "selected" / "not selected", not "black circle".
-                return f"{'selected' if selected else 'not selected'}: {track.title}"
+                if selected:
+                    return tr("selected: {title}", title=track.title)
+                return tr("not selected: {title}", title=track.title)
             if role == Qt.ItemDataRole.ToolTipRole and is_approved:
                 # Spec 04 row state table: approved -> non-interactive tooltip.
-                return "Album is approved; reopen for editing to change selection."
+                return tr("Album is approved; reopen for editing to change selection.")
             if role == Qt.ItemDataRole.UserRole:
                 # Sort key for the toggle column - keep selected rows together.
                 return (selected, track.path.name.casefold())
@@ -320,8 +323,8 @@ class TrackTableModel(QAbstractTableModel):
                 if count == 0:
                     return ""
                 if count == 1:
-                    return "Used in 1 other approved album"
-                return f"Used in {count} other approved albums"
+                    return tr("Used in 1 other approved album")
+                return tr("Used in {count} other approved albums", count=count)
             if role == Qt.ItemDataRole.ToolTipRole:
                 if count == 0 or usage is None:
                     return None
@@ -500,11 +503,13 @@ class LibraryPane(QFrame):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(6)
 
-        title = QLabel("Library", objectName="PaneTitle")
+        title = QLabel(tr("Library"), objectName="PaneTitle")
         layout.addWidget(title)
 
         self.search_box = QLineEdit(
-            placeholderText=f"{Glyphs.SEARCH}  search title, artist, album, composer…",
+            placeholderText=tr(
+                "{icon}  search title, artist, album, composer…", icon=Glyphs.SEARCH,
+            ),
         )
         self.search_box.textChanged.connect(self._on_search_changed)
         layout.addWidget(self.search_box)
@@ -569,18 +574,22 @@ class LibraryPane(QFrame):
         # Spec 15 (Phase B): right-click context menu with the playback actions.
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._on_context_menu)
-        self.table.setAccessibleName("Track library")
+        self.table.setAccessibleName(tr("Track library"))
         if player_mode:
             self.table.setColumnHidden(toggle_col, True)
             self.table.setColumnHidden(used_col, True)
             self.table.setAccessibleDescription(
-                "Searchable list of tracks. Double-click a track or press Enter "
-                "to play from it. Click the first column to play or pause that track.",
+                tr(
+                    "Searchable list of tracks. Double-click a track or press Enter "
+                    "to play from it. Click the first column to play or pause that track.",
+                ),
             )
         else:
             self.table.setAccessibleDescription(
-                "Searchable list of tracks. First column previews playback; "
-                "last column toggles inclusion in the current album.",
+                tr(
+                    "Searchable list of tracks. First column previews playback; "
+                    "last column toggles inclusion in the current album.",
+                ),
             )
         layout.addWidget(self.table)
 
@@ -737,25 +746,25 @@ class LibraryPane(QFrame):
         clicked = self._model.track_at(src.row())
         menu = QMenu(self.table)
         menu.addAction(
-            "Play all",
+            tr("Play all"),
             lambda: self.play_tracks_requested.emit(self.view_order_tracks(), 0),
         )
         menu.addAction(
-            "Play from here",
+            tr("Play from here"),
             lambda: self.play_tracks_requested.emit(self.view_order_tracks(), view_row),
         )
         menu.addAction(
-            "Play next", lambda: self.play_next_requested.emit(clicked),
+            tr("Play next"), lambda: self.play_next_requested.emit(clicked),
         )
         menu.addAction(
-            "Add to queue", lambda: self.enqueue_requested.emit([clicked]),
+            tr("Add to queue"), lambda: self.enqueue_requested.emit([clicked]),
         )
         # Spec 17 (Phase D): "Add to playlist" submenu. "New playlist..." emits
         # a None id (MainWindow prompts a name + creates); one entry per known
         # playlist adds to it directly. v1 adds the single right-clicked track.
-        playlist_menu = menu.addMenu("Add to playlist")
+        playlist_menu = menu.addMenu(tr("Add to playlist"))
         playlist_menu.addAction(
-            "New playlist...",
+            tr("New playlist..."),
             lambda: self.add_to_playlist_requested.emit(None, [clicked]),
         )
         for pl_id, name in self._playlists_meta:

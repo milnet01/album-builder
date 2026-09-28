@@ -24,11 +24,12 @@ import os
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QSharedMemory
+from PyQt6.QtCore import QLibraryInfo, QLocale, QSharedMemory, Qt, QTranslator
 from PyQt6.QtGui import QIcon
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMainWindow
 
+from album_builder import i18n
 from album_builder.persistence import settings
 from album_builder.persistence.state_io import load_state
 from album_builder.services.album_store import AlbumStore
@@ -75,6 +76,10 @@ def run() -> int:
     if icon is not None:
         app.setWindowIcon(icon)
 
+    setup_language(
+        app, settings.read_ui().language, system_code=QLocale.system().name().split("_")[0],
+    )
+
     lock = acquire_single_instance_lock()
     if lock is None:
         signal_raise_existing_instance()
@@ -100,6 +105,30 @@ def run() -> int:
         server.close()
         lock.detach()
     return rc
+
+
+def setup_language(app: QApplication, setting: str, *, system_code: str) -> str:
+    """Resolve and activate the UI language before any window is built
+    (Spec 25, Public API `app.py`). Returns the resolved code.
+
+    Installs Qt's own `qtbase_<code>` catalog when one ships (none for `af`;
+    `pt` is `pt_BR`), and mirrors the layout for right-to-left languages.
+    """
+    code = i18n.resolve(setting, system_code)
+    i18n.set_language(code)
+    qt_name = "qtbase_pt_BR" if code == "pt" else f"qtbase_{code}"
+    translator = QTranslator(app)
+    if code != "en" and translator.load(
+        qt_name, QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath),
+    ):
+        app.installTranslator(translator)
+        # Keep a reference so tests (and a future re-run) can remove it.
+        app._album_builder_translators = [
+            *getattr(app, "_album_builder_translators", []), translator,
+        ]
+    if code in i18n.RTL:
+        app.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+    return code
 
 
 def _selftest() -> int:

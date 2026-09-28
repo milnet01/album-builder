@@ -79,10 +79,12 @@ def test_menu_bar_structure(main_window) -> None:
 # Spec: TC-19-09
 def test_live_switch_applies_persists_and_preserves_flag(main_window, monkeypatch) -> None:
     win = main_window
-    # Start with the open-report flag False, to prove the theme write preserves it.
+    # Start with the open-report flag False on disk, to prove the theme write
+    # preserves it (Spec 25: ui-block writes carry the other fields forward).
     win._ui_settings = UiSettings(
         open_report_folder_on_approve=False, theme=win._current_theme
     )
+    write_ui(win._ui_settings)
     panel = win.now_playing_pane.lyrics_panel
     seen: list = []
     orig = panel.set_palette

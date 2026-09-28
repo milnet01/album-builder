@@ -14,6 +14,7 @@ from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout
 
 from album_builder.domain.track import Track
+from album_builder.i18n import tr
 
 
 class NowPlayingCard(QFrame):
@@ -62,7 +63,7 @@ class NowPlayingCard(QFrame):
         self.comment_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.comment_label)
 
-        self.placeholder_label = QLabel("(nothing loaded)", objectName="PlaceholderText")
+        self.placeholder_label = QLabel(tr("(nothing loaded)"), objectName="PlaceholderText")
         self.placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.placeholder_label)
 
@@ -85,7 +86,7 @@ class NowPlayingCard(QFrame):
         self.album_label.setText(track.album or "")
         self.artist_label.setText(track.artist or "")
         if track.composer:
-            self.composer_label.setText(f"composer: {track.composer}")
+            self.composer_label.setText(tr("composer: {composer}", composer=track.composer))
         else:
             self.composer_label.setText("")
         if track.comment:
@@ -96,13 +97,13 @@ class NowPlayingCard(QFrame):
     def _set_cover(self, track: Track) -> None:
         if not track.cover_data:
             self.cover_label.clear()
-            self.cover_label.setText("(no cover)")
+            self.cover_label.setText(tr("(no cover)"))
             return
         pix = QPixmap()
         pix.loadFromData(track.cover_data)
         if pix.isNull():
             self.cover_label.clear()
-            self.cover_label.setText("(cover unavailable)")
+            self.cover_label.setText(tr("(cover unavailable)"))
             return
         scaled = pix.scaledToHeight(
             260, Qt.TransformationMode.SmoothTransformation,

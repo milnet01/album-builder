@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 
 from album_builder.domain.album import Album, AlbumStatus
 from album_builder.domain.track import Track
+from album_builder.i18n import tr
 from album_builder.ui.theme import Glyphs
 
 MISSING_ROLE = Qt.ItemDataRole.UserRole + 1
@@ -55,8 +56,8 @@ class _OrderRowWidget(QWidget):
         self.btn_play = QPushButton(Glyphs.PLAY, objectName="RowPlay")
         self.btn_play.setFixedSize(24, 24)
         self.btn_play.setProperty("glyphButton", True)
-        self.btn_play.setAccessibleName(f"Preview-play {self._title}")
-        self.btn_play.setToolTip("Preview-play this track")
+        self.btn_play.setAccessibleName(tr("Preview-play {title}", title=self._title))
+        self.btn_play.setToolTip(tr("Preview-play this track"))
         self.btn_play.clicked.connect(lambda: on_preview(self._path))
 
         self.label = QLabel(text, objectName="OrderRowLabel")
@@ -107,12 +108,12 @@ class _OrderRowWidget(QWidget):
         the same preview signal — main_window dispatches load-vs-toggle."""
         if playing:
             self.btn_play.setText(Glyphs.PAUSE)
-            self.btn_play.setAccessibleName(f"Pause {self._title}")
-            self.btn_play.setToolTip("Pause this track")
+            self.btn_play.setAccessibleName(tr("Pause {title}", title=self._title))
+            self.btn_play.setToolTip(tr("Pause this track"))
         else:
             self.btn_play.setText(Glyphs.PLAY)
-            self.btn_play.setAccessibleName(f"Preview-play {self._title}")
-            self.btn_play.setToolTip("Preview-play this track")
+            self.btn_play.setAccessibleName(tr("Preview-play {title}", title=self._title))
+            self.btn_play.setToolTip(tr("Preview-play this track"))
 
 
 class _NoTextDelegate(QStyledItemDelegate):
@@ -237,7 +238,7 @@ class AlbumOrderPane(QFrame):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
-        layout.addWidget(QLabel("Album order", objectName="PaneTitle"))
+        layout.addWidget(QLabel(tr("Album order"), objectName="PaneTitle"))
 
         self.list = _OrderList()
         self.list.setObjectName("AlbumOrderList")
@@ -245,10 +246,12 @@ class AlbumOrderPane(QFrame):
         self.list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         # WCAG 2.2 §4.1.2 (Name, Role, Value) - screen readers announce the
         # purpose of the list rather than the widget class.
-        self.list.setAccessibleName("Album track order")
+        self.list.setAccessibleName(tr("Album track order"))
         self.list.setAccessibleDescription(
-            "Drag tracks to reorder. Each row has a preview-play button. "
-            "Approved albums are read-only.",
+            tr(
+                "Drag tracks to reorder. Each row has a preview-play button. "
+                "Approved albums are read-only.",
+            ),
         )
         self.list.model().rowsMoved.connect(self._on_rows_moved)
         layout.addWidget(self.list)

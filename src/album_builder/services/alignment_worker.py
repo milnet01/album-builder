@@ -19,6 +19,7 @@ from pathlib import Path
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from album_builder.domain.lyrics import LyricLine, Lyrics
+from album_builder.i18n import tr
 from album_builder.persistence.lrc_io import write_lrc
 
 logger = logging.getLogger(__name__)
@@ -77,7 +78,7 @@ class AlignmentWorker(QThread):
             write_lrc(self._track_path, lyrics)
         except OSError as exc:
             logger.warning("Could not write LRC for %s: %s", self._track_path, exc)
-            self.failed.emit(f"could not write LRC: {exc}")
+            self.failed.emit(tr("could not write LRC: {error}", error=exc))
             return
         self.finished_ok.emit(lyrics)
 

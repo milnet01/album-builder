@@ -16,6 +16,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QFrame, QSplitter, QTabWidget, QVBoxLayout, QWidget
 
 from album_builder.domain.track import Track
+from album_builder.i18n import tr
 from album_builder.services.playback_controller import PlaybackController
 from album_builder.services.player import Player
 from album_builder.ui.library_pane import LibraryPane
@@ -57,8 +58,8 @@ class PlayerPane(QWidget):
         # Right column: lyrics (the tall element) over an Up Next / Playlists
         # tab group. The queue_pane / playlists_pane are reparented in here.
         tabs = QTabWidget()
-        tabs.addTab(queue_pane, "Up Next")
-        tabs.addTab(playlists_pane, "Playlists")
+        tabs.addTab(queue_pane, tr("Up Next"))
+        tabs.addTab(playlists_pane, tr("Playlists"))
 
         right = QSplitter(Qt.Orientation.Vertical)
         right.setChildrenCollapsible(False)

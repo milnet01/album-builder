@@ -10,6 +10,7 @@ from pathlib import Path
 
 import platformdirs
 
+from album_builder.i18n import SUPPORTED
 from album_builder.persistence.atomic_io import atomic_write_text
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,8 @@ class UiSettings:
 
     open_report_folder_on_approve: bool = True
     theme: str = "dark-colourful"
+    # Spec 25: "system" or a code in i18n.SUPPORTED; takes effect on restart.
+    language: str = "system"
 
 
 def settings_dir() -> Path:
@@ -286,7 +289,11 @@ def read_ui() -> UiSettings:
         theme = raw_theme
     else:
         theme = "dark-colourful"
-    return UiSettings(open_report_folder_on_approve=open_flag, theme=theme)
+    raw_language = block.get("language", "system")
+    language = raw_language if raw_language in SUPPORTED else "system"
+    return UiSettings(
+        open_report_folder_on_approve=open_flag, theme=theme, language=language,
+    )
 
 
 def write_ui(ui: UiSettings) -> None:
@@ -295,5 +302,6 @@ def write_ui(ui: UiSettings) -> None:
     data["ui"] = {
         "open_report_folder_on_approve": ui.open_report_folder_on_approve,
         "theme": ui.theme,
+        "language": ui.language,
     }
     _write_settings(data)
