@@ -18,9 +18,9 @@ Source lives in `src/album_builder/`.
   (reading tags from audio files with mutagen), `Album` (selection, order,
   approval state), `Lyrics`, `Playlist`, `PlayQueue`, `slug`. Reads song
   files; writes nothing.
-- **persistence** (`persistence/`) — every byte the app writes, and its
-  loading: albums, app state, settings, playlists, lyrics sidecars, the
-  schema migration runner, atomic writes and the debounced writer.
+- **persistence** (`persistence/`) — the app's saved data and its loading:
+  albums, app state, settings, playlists, lyrics sidecars, the schema
+  migration runner, atomic writes and the debounced writer.
 - **services** (`services/`) — Qt objects that own the app's live state and
   do the work: album store, library watcher, player and playback control,
   lyrics tracking and alignment, playlists, usage index, ReplayGain, export
@@ -51,8 +51,11 @@ Source lives in `src/album_builder/`.
 
 ## What every part does the same way
 
-- **Writing files** — only through `persistence/atomic_io.py` (temp file,
-  fsync, `os.replace`). Frequent saves go through `persistence/debounce.py`.
+- **Writing files** — saved data is written only through
+  `persistence/atomic_io.py` (temp file, fsync, `os.replace`), and frequent
+  saves go through `persistence/debounce.py`. The approved album folder is
+  built by `services/export.py` and `services/report.py` in a staging
+  folder or temp file, then renamed into place.
 - **Song files are read-only.** The only files the app adds to the music
   folder are lyrics sidecars (`<song>.lrc`, `.lrc.bak`).
 - **Saved-file versions** — each JSON file carries `schema_version` and
