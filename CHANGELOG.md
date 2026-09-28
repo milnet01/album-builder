@@ -14,6 +14,12 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
   Choose File > Restore Deleted Album, pick it from the list, and it
   returns exactly as it was, with its tracks, order and reports.
 
+### Fixed
+
+- **No more dark boxes behind text.**
+  Song details, headings, the lyrics status line and the time readouts
+  now sit cleanly on their panel instead of each drawing a dark strip.
+
 ## [0.8.1] - 2026-09-25
 
 **Theme:** The Linux download is back, plus display fixes.

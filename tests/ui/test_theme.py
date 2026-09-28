@@ -81,3 +81,27 @@ def test_qt_stylesheet_styles_scrollbars() -> None:
     Plasma/system widget, which clashes visibly with the dark palette."""
     qss = qt_stylesheet(Palette.dark_colourful())
     assert "QScrollBar" in qss
+
+
+# Spec: TC-11-12
+def test_plain_label_shows_the_surface_behind_it(qapp) -> None:
+    """A label with no id-scoped rule must not paint the generic QWidget
+    bg_base fill: inside a #Pane it shows the pane's bg_pane. The fill drew a
+    dark strip behind every line of now-playing text."""
+    from PyQt6.QtGui import QColor
+    from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout
+
+    p = Palette.dark_colourful()
+    pane = QFrame(objectName="Pane")
+    pane.setStyleSheet(qt_stylesheet(p))
+    label = QLabel("", objectName="NowPlayingMeta")
+    label.setFixedSize(80, 30)
+    QVBoxLayout(pane).addWidget(label)
+    pane.resize(200, 100)
+    pane.show()
+    qapp.processEvents()
+
+    img = pane.grab().toImage()
+    centre = label.geometry().center()
+    assert img.pixelColor(centre) == QColor(p.bg_pane)
+    pane.close()

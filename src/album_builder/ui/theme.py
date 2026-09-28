@@ -154,6 +154,13 @@ def qt_stylesheet(p: Palette) -> str:
            dpi conversion and stay font-anchored across screen scales. */
         font-size: 11.5px;
     }}
+    /* Text sits directly on whatever surface holds it. Without this, every
+       label inherits the QWidget bg_base fill above and paints a dark strip
+       across the lighter bg_pane panels. Id-scoped label rules (e.g. the
+       cover's bg_pane fill) are more specific and still win. */
+    QLabel {{
+        background-color: transparent;
+    }}
     QFrame#Pane {{
         background-color: {p.bg_pane};
         border: 1px solid {p.border};
