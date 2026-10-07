@@ -56,18 +56,25 @@ Source lives in `src/album_builder/`.
   `persistence/atomic_io.py` (temp file, fsync, `os.replace`), and frequent
   saves go through `persistence/debounce.py`. The approved album folder is
   built by `services/export.py` and `services/report.py` in a staging
-  folder or temp file, then renamed into place.
-- **Song files are read-only.** The only files the app adds to the music
-  folder are lyrics sidecars (`<song>.lrc`, `.lrc.bak`).
+  folder or temp file, then renamed into place. Two best-effort files are
+  written directly: migration backups (`<file>.v<N>.bak`) and the album
+  folder's `.export-log`.
+- **Song files are read-only.** The app adds to the music folder only
+  lyrics sidecars (`<song>.lrc`, `.lrc.bak`) and, once Add music is built
+  (MUSI-0371), the songs it copies in.
 - **Saved-file versions** — each JSON file carries `schema_version`.
   Albums, app state and playlists load through `persistence/schema.py`,
-  which upgrades older files forward and refuses newer ones. Settings only
-  stamp the version on save, and do not check it on load (MUSI-0384).
-- **Errors** — a service reports a failure through a signal or a return
-  value; the ui shows it as a toast or dialog. No exception may leave a Qt
+  which upgrades older files forward and refuses newer ones. Albums and
+  playlists then leave a newer file untouched; app state treats it as
+  corrupt and overwrites it with defaults. Settings only stamp the version
+  on save, and do not check it on load (MUSI-0384).
+- **Errors** — a service reports a failure through a signal, a return
+  value or a named exception (`ExportFailed`, `ReportsCleanupFailed`); the
+  ui catches it and shows a toast or dialog. No exception may leave a Qt
   slot: on Windows an escaping exception ends the app (MUSI-0379).
 - **Long work** runs off the main thread (`QThread`, as alignment does) and
-  reports back by signal.
+  reports back by signal. Alignment is the only work that does so today;
+  export and report rendering run on the main thread.
 - **Text the user sees** goes through `tr()` (`N_()` for module constants)
   and appears in every catalog in `translations/`.
 - **Logging** — `logging.getLogger(__name__)` per module.
