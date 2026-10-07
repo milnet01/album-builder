@@ -37,35 +37,35 @@ Source lives in `src/album_builder/`.
 - **domain** depends on nothing in the app, and never imports PyQt6.
 - **persistence** may import domain, `i18n`, and PyQt6's `QtCore` (for the
   debounce timer) — never `QtWidgets`, services or ui.
-- **services** may import domain, persistence and `i18n`, and never ui. Two
+- **services** may import domain, persistence, `i18n` and `version`, and
+  never ui. Two
   current breaches are MUSI-0383: `services/alignment_status.py` imports
   `Glyphs` from `ui/theme.py`, and `services/mpris.py` imports
   `bring_to_front` from `ui/window_util.py` inside `Raise()`.
-- **ui** may import services, domain and `i18n`. It reaches persistence
-  only from `ui/main_window.py`, for settings, app state and reading a
-  lyrics file.
-- **shell** may import any part. The other parts may import only `i18n`
-  and `version` from the shell, never `app.py`.
+- **ui** may import services, domain, `i18n` and `version`. It reaches
+  persistence only from `ui/main_window.py`, for settings, app state and
+  reading a lyrics file.
+- **shell** may import any part. No other part imports `app.py`.
 - **Signals flow up; writes flow down.** Services tell the ui what changed
   through Qt signals; the ui asks services to act and never writes a file
   itself, except through the persistence calls named above.
 
 ## What every part does the same way
 
-- **Writing files** — saved data is written only through
-  `persistence/atomic_io.py` (temp file, fsync, `os.replace`), and frequent
-  saves go through `persistence/debounce.py`. The approved album folder is
-  built by `services/export.py` and `services/report.py` in a staging
-  folder or temp file, then renamed into place. Two best-effort files are
-  written directly: migration backups (`<file>.v<N>.bak`) and the album
-  folder's `.export-log`.
+- **Writing files** — saved data (the JSON files and lyrics sidecars) is
+  written only through `persistence/atomic_io.py` (temp file, fsync,
+  `os.replace`), and frequent saves go through `persistence/debounce.py`.
+  The approved album folder is built by `services/export.py` and
+  `services/report.py` in a staging folder or temp file, then renamed into
+  place.
 - **Song files are read-only.** The app adds to the music folder only
   lyrics sidecars (`<song>.lrc`, `.lrc.bak`) and, once Add music is built
   (MUSI-0371), the songs it copies in.
 - **Saved-file versions** — each JSON file carries `schema_version`.
   Albums, app state and playlists load through `persistence/schema.py`,
-  which upgrades older files forward and refuses newer ones. Albums and
-  playlists then leave a newer file untouched; app state treats it as
+  which upgrades older files forward and refuses newer ones. Albums then
+  leave a newer file untouched. Playlists keep it until the first save,
+  which renames it to `playlists.json.corrupt.bak`. App state treats it as
   corrupt and overwrites it with defaults. Settings only stamp the version
   on save, and do not check it on load (MUSI-0384).
 - **Errors** — a service reports a failure through a signal, a return
