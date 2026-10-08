@@ -32,6 +32,7 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
+from collections.abc import Callable
 
 from PyQt6.QtCore import (
     QMetaType,
@@ -184,15 +185,17 @@ def _cover_suffix(cover_mime: str | None) -> str:
 class MediaPlayer2Adaptor(QDBusAbstractAdaptor):
     """Root `org.mpris.MediaPlayer2` interface - app identity + Raise/Quit."""
 
-    def __init__(self, host: QObject, window, app: QApplication) -> None:
+    def __init__(
+        self, host: QObject, raise_window: Callable[[], None], app: QApplication
+    ) -> None:
         super().__init__(host)
-        self._window = window
+        # Supplied by the ui, so services never import ui (docs/design.md).
+        self._raise_window = raise_window
         self._app = app
 
     @pyqtSlot()
     def Raise(self) -> None:
-        from album_builder.ui.window_util import bring_to_front
-        bring_to_front(self._window)
+        self._raise_window()
 
     @pyqtSlot()
     def Quit(self) -> None:
@@ -389,11 +392,16 @@ class MprisService(QObject):
     the actual D-Bus send is gated by `available`.
     """
 
-    def __init__(self, player: Player, controller, window, parent: QObject | None = None) -> None:
+    def __init__(
+        self,
+        player: Player,
+        controller,
+        raise_window: Callable[[], None],
+        parent: QObject | None = None,
+    ) -> None:
         super().__init__(parent)
         self._player = player
         self._controller = controller
-        self._window = window
 
         self._art_url: str | None = None
         self._art_path: str | None = None
@@ -403,7 +411,7 @@ class MprisService(QObject):
         # url + trackid counter through bound getters (one source of truth).
         self._host = QObject(self)
         self._root_adaptor = MediaPlayer2Adaptor(
-            self._host, window, QApplication.instance()
+            self._host, raise_window, QApplication.instance()
         )
         self._player_adaptor = MediaPlayer2PlayerAdaptor(
             self._host, player, controller,

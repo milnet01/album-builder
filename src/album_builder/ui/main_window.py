@@ -78,7 +78,7 @@ from album_builder.ui.theme import THEMES, Glyphs, palette_for, qt_stylesheet
 from album_builder.ui.toast import Toast
 from album_builder.ui.top_bar import TopBar
 from album_builder.ui.tray import TrayIcon
-from album_builder.ui.window_util import fit_to_screen
+from album_builder.ui.window_util import bring_to_front, fit_to_screen
 from album_builder.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -377,7 +377,9 @@ class MainWindow(QMainWindow):
         # (no second pipeline) and self-guard on desktop capability - no session
         # bus or no system tray degrades to a silent no-op. Parented to self so
         # they live and die with MainWindow.
-        self._mpris = MprisService(self._player, self._controller, self, parent=self)
+        self._mpris = MprisService(
+            self._player, self._controller, lambda: bring_to_front(self), parent=self
+        )
         self._tray = TrayIcon(
             self._player, self._controller, self, self.windowIcon(), parent=self
         )

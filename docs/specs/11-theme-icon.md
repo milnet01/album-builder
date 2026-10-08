@@ -52,7 +52,7 @@ Single-source the symbolic glyphs that other UI specs reference. These are Unico
 
 | Glyph | Codepoint | Used by | Visual |
 |---|---|---|---|
-| `⋮⋮` | `U+22EE U+22EE` (two adjacent vertical-ellipsis — renders as a 2x3 dot grid in practice; see `theme.py` Glyphs.DRAG_HANDLE comment for the visual trade-off) | Spec 05 drag handle | 14 px font-size, `text-tertiary`, hover → `text-secondary` |
+| `⋮⋮` | `U+22EE U+22EE` (two adjacent vertical-ellipsis — renders as a 2x3 dot grid in practice; see `glyphs.py` Glyphs.DRAG_HANDLE comment for the visual trade-off) | Spec 05 drag handle | 14 px font-size, `text-tertiary`, hover → `text-secondary` |
 | `▲` / `▼` | `U+25B2` / `U+25BC` | Spec 04 target counter up/down | 12 px, `text-primary`; disabled → `text-disabled`; 28 × 28 px button hit target |
 | `●` / `○` | `U+25CF` / `U+25CB` | Spec 04 selection toggle | 14 px; ON → `accent-primary-2`; OFF → `text-tertiary`; ON+missing → `warning` |
 | `🔒` | `U+1F512` | Spec 03 approved album prefix, Spec 09 lock state | 13 px inline with album name |

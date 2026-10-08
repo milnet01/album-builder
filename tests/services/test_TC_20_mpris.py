@@ -42,6 +42,7 @@ from album_builder.services.mpris import (
 )
 from album_builder.services.playback_controller import PlaybackController
 from album_builder.services.player import Player, PlayerState
+from album_builder.ui.window_util import bring_to_front
 
 INTEGRATION = pytest.mark.skipif(
     os.environ.get("AB_INTEGRATION_DBUS") != "1",
@@ -299,7 +300,7 @@ def test_player_adaptor_can_flags() -> None:
 def _service() -> MprisService:
     player = Player()
     controller = PlaybackController(player)
-    return MprisService(player, controller, QWidget())
+    return MprisService(player, controller, lambda: None)
 
 
 # Spec: TC-20-09
@@ -406,7 +407,7 @@ def test_root_adaptor_properties_and_methods(qtbot, monkeypatch) -> None:
     window = QWidget()
     qtbot.addWidget(window)
     window.hide()
-    a = MediaPlayer2Adaptor(host, window, app)
+    a = MediaPlayer2Adaptor(host, lambda: bring_to_front(window), app)
 
     assert a.CanQuit is True
     assert a.CanRaise is True
@@ -448,7 +449,7 @@ def test_metadata_wire_signatures_over_real_bus(qtbot) -> None:
     in-process. This is the direct proof the SIGABRT fix stays conformant."""
     player = Player()
     controller = PlaybackController(player)
-    svc = MprisService(player, controller, QWidget())
+    svc = MprisService(player, controller, lambda: None)
     assert svc.available, "no session bus available for the integration test"
     controller.current_track = lambda: _track()
     svc._refresh_art(_track())

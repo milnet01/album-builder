@@ -185,6 +185,19 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: test.
   Source: windows-check-2026-09-28.
 
+- 📋 [MUSI-0385] **Row play/pause tests flake under heavy machine load.**
+  tests/ui/test_TC_06_17_18_19_row_play_pause.py:
+  test_active_playing_row_click_pauses_without_reload timed out in
+  qtbot.waitUntil (3000 ms) and test_active_paused_row_click_resumes_
+  without_reload saw STOPPED after pause(). Seen once in ./local-CI.sh
+  on 2026-10-08 at load average ~12-13; the file passed twice alone and
+  the full gate passed on rerun. Both wait on the real QtMultimedia
+  backend's state change. Find why the backend can stop rather than
+  pause under load before widening any timeout.
+  **Layman:** Two automatic checks of the play/pause button sometimes fail when the computer is very busy, even though the app is fine.
+  Kind: test.
+  Source: in-session-2026-10-08.
+
 ## 0.9.4 — Add music
 
 - 📋 [MUSI-0371] **"Add music" on-ramp: drop or pick files to add to the library.**
@@ -214,7 +227,7 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: fix.
   Source: windows-check-2026-09-28.
 
-- 📋 [MUSI-0383] **Move the Glyphs constants out of ui/theme.py so services never import ui.**
+- ✅ [MUSI-0383] **Move the Glyphs constants out of ui/theme.py so services never import ui.**
   docs/design.md: services never import ui. The one breach is
   services/alignment_status.py importing Glyphs from ui/theme.py (kept
   there so Spec 11's glyphs have one home). Move Glyphs to a module both
@@ -226,6 +239,11 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   import of bring_to_front from ui/window_util.py. A line-anchored grep
   misses imports inside functions; search with leading whitespace
   allowed.
+  Resolved (2026-10-08): Glyphs moved to src/album_builder/glyphs.py
+  (ui.theme re-exports it). MprisService now takes a raise_window
+  function from main_window.py instead of importing ui. Locked by
+  tests/test_layer_imports.py, which parses every module so imports
+  inside functions count. design.md's breach sentence deleted.
   **Layman:** Tidy-up so the app's background code no longer borrows icons from the screen code.
   Kind: refactor.
   Source: design-2026-09-28.

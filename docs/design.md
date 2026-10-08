@@ -26,9 +26,10 @@ Source lives in `src/album_builder/`.
   lyrics tracking and alignment, playlists, usage index, ReplayGain, export
   (numbered links and playlist file), report rendering, MPRIS.
 - **ui** (`ui/`) — windows, panes and widgets, the theme, the tray.
-- **shell** (`app.py`, `i18n.py`, `version.py`, `__main__.py`) — start-up,
-  the single-instance lock, `--version` / `--selftest`, and translation
-  (`tr()` with catalogs in `translations/`).
+- **shell** (`app.py`, `i18n.py`, `version.py`, `glyphs.py`, `__main__.py`)
+  — start-up, the single-instance lock, `--version` / `--selftest`,
+  translation (`tr()` with catalogs in `translations/`), and the `Glyphs`
+  symbols the ui and services both show.
 - **packaging** (`packaging/`, `.github/workflows/`) — the AppImage and the
   Windows zip. **tests** (`tests/`) mirror the four layers.
 
@@ -37,12 +38,10 @@ Source lives in `src/album_builder/`.
 - **domain** depends on nothing in the app, and never imports PyQt6.
 - **persistence** may import domain, `i18n`, and PyQt6's `QtCore` (for the
   debounce timer) — never `QtWidgets`, services or ui.
-- **services** may import domain, persistence, `i18n` and `version`, and
-  never ui. Two
-  current breaches are MUSI-0383: `services/alignment_status.py` imports
-  `Glyphs` from `ui/theme.py`, and `services/mpris.py` imports
-  `bring_to_front` from `ui/window_util.py` inside `Raise()`.
-- **ui** may import services, domain, `i18n` and `version`. It reaches
+- **services** may import domain, persistence, `i18n`, `version` and
+  `glyphs`, and never ui. `tests/test_layer_imports.py` checks that domain,
+  persistence and services never import ui.
+- **ui** may import services, domain, `i18n`, `version` and `glyphs`. It reaches
   persistence only from `ui/main_window.py`, for settings, app state and
   reading a lyrics file.
 - **shell** may import any part. No other part imports `app.py`.

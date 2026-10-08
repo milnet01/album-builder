@@ -9,14 +9,13 @@ from __future__ import annotations
 from enum import Enum, auto
 
 from album_builder.domain.track import Track
+from album_builder.glyphs import Glyphs
 from album_builder.i18n import tr
 from album_builder.persistence.lrc_io import is_lrc_fresh
-from album_builder.ui.theme import Glyphs
 
 # `status_label` below returns user-visible strings, so it's already a UI
-# helper co-located with the service. Pulling Glyphs from ui.theme keeps
-# Spec 11 §Glyphs single-sourced rather than duplicating the literal here.
-# (Theme J closure.)
+# helper co-located with the service. Pulling Glyphs from album_builder.glyphs
+# keeps Spec 11's glyphs single-sourced without services importing ui (MUSI-0383).
 
 
 class AlignmentStatus(Enum):
