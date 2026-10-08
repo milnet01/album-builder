@@ -58,8 +58,8 @@ Source lives in `src/album_builder/`.
   `services/report.py` in a staging folder or temp file, then renamed into
   place.
 - **Song files are read-only.** The app adds to the music folder only
-  lyrics sidecars (`<song>.lrc`, `.lrc.bak`) and, once Add music is built
-  (MUSI-0371), the songs it copies in.
+  lyrics sidecars (`<song>.lrc`, `.lrc.bak`) and the songs Add music
+  copies in (`services/add_music.py`, MUSI-0371).
 - **Saved-file versions** — each JSON file carries `schema_version`.
   Albums, app state, settings and playlists load through
   `persistence/schema.py`, which upgrades older files forward and refuses

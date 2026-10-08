@@ -8,6 +8,15 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+### Added
+
+- **Add music: drag songs onto the window, or use File → Add Music...** (MUSI-0371)
+  Songs and whole folders (with their subfolders) are copied into your
+  music folder and show up in the library straight away. Your original
+  files are left exactly where they were. If a song has the same name as
+  one you already have, both are kept: the new copy gets a number, like
+  "Song (2).mp3", and a message tells you which ones.
+
 ### Fixed
 
 - **Going back to an older copy of the app no longer wipes your settings.** (MUSI-0384)

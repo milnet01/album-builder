@@ -200,13 +200,24 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
 
 ## 0.9.4 — Add music
 
-- 📋 [MUSI-0371] **"Add music" on-ramp: drop or pick files to add to the library.**
+- ✅ [MUSI-0371] **"Add music" on-ramp: drop or pick files to add to the library.**
   Deferred out of MUSI-0356 Phase MP-2 (Spec 18 §Out of scope). It
   writes into the user's Tracks/ folder, which the project treats as
   untouchable without explicit confirmation, so it needs its own
   design decision (copy vs link, confirmation, name clashes) and spec.
   Decided (user, 2026-09-28): drag-and-drop COPIES files into Tracks/.
   Originals stay untouched; no links, no per-drop prompt.
+  Decided (user, 2026-10-08): a same-named file is kept as "Name (2).ext"
+  and the user is told which ones; drag onto the window or an "Add
+  music..." menu item with a file chooser; a dropped folder copies every
+  song inside it and its subfolders, flat into the music folder; other
+  files are ignored. No spec: the 2026-09-28 "and spec" is withdrawn.
+  Resolved (2026-10-08): services/add_music.py copies via a hidden .part
+  name then renames; AddMusicWorker runs it off the ui thread.
+  MainWindow accepts drops and has File > Add Music...; renamed or
+  failed copies get a message box, a plain success a toast. Tests:
+  tests/services/test_add_music.py, tests/ui/test_add_music_ui.py.
+  Not yet run by hand on Windows.
   **Layman:** Let people add songs by dragging them onto the app, once we decide how it should treat the music folder.
   Kind: feature.
   Source: in-session-2026-09-28.
@@ -268,6 +279,20 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   **Layman:** An older copy of the app could quietly misread or overwrite settings saved by a newer one.
   Kind: fix.
   Source: review-contract-2026-09-28 design.md loop 1.
+
+## 0.9.5 — Duplicate checker
+
+- 📋 [MUSI-0386] **Duplicate checker: find songs in the music folder that are the same song twice.**
+  Asked for alongside Add music (MUSI-0371): years of shared MP3s
+  leave libraries with hundreds of duplicates. Open questions for the
+  owner before building: what counts as a duplicate (identical files,
+  same title + artist, or both, shown separately), and whether it only
+  lists them or may also remove them. Discovery S7 says the app never
+  deletes song files, so removal would need S7 amended first; the
+  working assumption is list-only.
+  **Layman:** Shows you songs you have more than once, so you can tidy up a library that grew from shared copies.
+  Kind: feature.
+  Source: user-request-2026-10-08.
 
 ## 0.9.3 — Window fits smaller screens
 

@@ -34,6 +34,7 @@ from PyQt6.QtWidgets import (
 )
 
 from album_builder import i18n
+from album_builder.domain.library import SUPPORTED_EXTENSIONS
 from album_builder.domain.track import Track
 from album_builder.i18n import tr
 from album_builder.persistence.lrc_io import read_lrc
@@ -49,6 +50,7 @@ from album_builder.persistence.settings import (
     write_ui,
 )
 from album_builder.persistence.state_io import AppState, WindowState, save_state
+from album_builder.services.add_music import AddMusicResult, AddMusicWorker
 from album_builder.services.album_store import (
     AlbumStore,
     ReportsCleanupFailed,
@@ -290,6 +292,10 @@ class MainWindow(QMainWindow):
         # updated on resize so it always sits above the bottom edge.
         self._toast = Toast(self)
 
+        # MUSI-0371: songs dropped on the window are copied into the music folder.
+        self.setAcceptDrops(True)
+        self._add_music_worker: AddMusicWorker | None = None
+
         # Spec 17 §Startup degradation: a corrupt playlists.json started an
         # empty catalogue without touching the file (it is renamed to
         # .corrupt.bak on the first save). Tell the user via a toast.
@@ -454,6 +460,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction(
             tr("Choose Music Folder..."), lambda: self._on_choose_music_folder(),
         )
+        file_menu.addAction(tr("Add Music..."), lambda: self._on_add_music())
         file_menu.addSeparator()
         file_menu.addAction(tr("Quit"), lambda: self.close())
 
@@ -746,6 +753,72 @@ class MainWindow(QMainWindow):
             self._show_toast(tr("Couldn't save music folder: {error}", error=exc))
             return
         self._library_watcher.set_folder(folder)
+
+    # ---- Add music (MUSI-0371) ---------------------------------------------
+
+    def _on_add_music(self) -> None:
+        """Pick songs to copy into the music folder."""
+        patterns = " ".join(f"*{ext}" for ext in sorted(SUPPORTED_EXTENSIONS))
+        chosen, _ = QFileDialog.getOpenFileNames(
+            self, tr("Add Music..."), str(Path.home()), f"{tr('Songs')} ({patterns})",
+        )
+        if chosen:
+            self._start_add_music([Path(p) for p in chosen])
+
+    def dragEnterEvent(self, event) -> None:
+        if any(url.isLocalFile() for url in event.mimeData().urls()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event) -> None:
+        # No exception may leave a Qt event handler: on Windows it aborts.
+        try:
+            paths = [Path(u.toLocalFile()) for u in event.mimeData().urls() if u.isLocalFile()]
+            if paths:
+                event.acceptProposedAction()
+                self._start_add_music(paths)
+        except Exception:
+            logger.exception("add music: drop failed")
+
+    def _start_add_music(self, paths: list[Path]) -> None:
+        if self._add_music_worker is not None:
+            self._show_toast(tr("Still adding songs. Try again when it finishes."))
+            return
+        worker = AddMusicWorker(paths, self._library_watcher.library().folder, parent=self)
+        worker.done.connect(self._on_add_music_done)
+        worker.finished.connect(worker.deleteLater)
+        self._add_music_worker = worker
+        self._show_toast(tr("Adding songs..."))
+        worker.start()
+
+    def _on_add_music_done(self, result: AddMusicResult) -> None:
+        self._add_music_worker = None
+        try:
+            self._library_watcher.refresh()
+            self._report_add_music(result)
+        except Exception:
+            logger.exception("add music: showing the result failed")
+
+    def _report_add_music(self, result: AddMusicResult) -> None:
+        """A toast for a plain success; a message box that stays until closed
+        when a song was saved under a new name or could not be copied."""
+        lines = [tr("Songs added: {count}", count=len(result.added))]
+        if result.renamed:
+            lines += ["", tr(
+                "These have the same name as a song you already have. "
+                "Both are kept; the new copy was saved as:"
+            )]
+            lines += [f"  {new}" for _old, new in result.renamed]
+        if result.failed:
+            lines += ["", tr("These could not be copied:")]
+            lines += [f"  {name}: {error}" for name, error in result.failed]
+        if result.renamed or result.failed:
+            QMessageBox.information(self, tr("Add Music..."), "\n".join(lines))
+        elif result.added:
+            self._show_toast(lines[0])
+        else:
+            self._show_toast(tr("No songs found to add."))
 
     def _on_language_chosen(self, code: str, name: str) -> None:
         """Spec 25: save the language; it takes effect on the next start."""
@@ -1282,6 +1355,10 @@ class MainWindow(QMainWindow):
         # one stderr line at the end so the user has something visible
         # to act on rather than a silent stack trace in the log.
         failures: list[str] = []
+        # MUSI-0371: let an Add music copy finish; a QThread destroyed while
+        # running aborts the process.
+        if self._add_music_worker is not None:
+            self._add_music_worker.wait()
         try:
             # Spec 20: drop the bus name (clean relaunch) + remove the cover-art
             # temp file, and hide the tray icon. Self-guarded on the no-op path.

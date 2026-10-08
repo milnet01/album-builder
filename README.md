@@ -48,6 +48,10 @@ See [`CHANGELOG.md`](CHANGELOG.md) for what changed in each release.
 - **Stays up to date.** Add or remove songs in your music folder and the
   library updates by itself. Your albums and choices are remembered
   between sessions.
+- **Adds music for you.** Drag songs or whole folders onto the window,
+  or use *File → Add Music...*. They are copied into your music folder
+  and the originals stay where they were. If a song has the same name as
+  one you already have, both are kept and you are told the new name.
 
 ### Music files it reads
 
