@@ -286,7 +286,27 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: fix.
   Source: review-contract-2026-09-28 design.md loop 1.
 
-## 0.9.5 — Duplicate checker
+## 0.9.5 — Linux download is back
+
+- ✅ [MUSI-0387] **The 0.9.4 AppImage build failed: the pinned Python base file was replaced upstream.**
+  AppImage run 37793945948 (tag v0.9.4) stopped at stage 2 with wget
+  exit 8: niess/python-appimage's python3.13 tag had replaced
+  python3.13.15-...AppImage with python3.13.16. Same failure as v0.8.0.
+  0.9.4 shipped with the Windows zip only. Owner's decisions
+  (2026-10-08): release 0.9.5 with the fix rather than attach a locally
+  built AppImage to 0.9.4; the build follows the 3.13 tag's current
+  patch instead of pinning one, and logs which it used.
+  Resolved (2026-10-08): build-appimage.sh looks up the python3.13
+  tag's current cp313 manylinux2014 asset (highest patch) through the
+  GitHub API, with the workflow's token, and logs it; PYTHON_APPIMAGE_ASSET
+  still forces an exact one. Local container build took 3.13.16 and
+  the AppImage passed --version and --selftest. Locked by
+  tests/test_TC_23_appimage.py (no patch-pinned asset).
+  **Layman:** The Linux download was missing from 0.9.4; this brings it back and stops the same break happening again.
+  Kind: fix.
+  Source: release-0.9.4-2026-10-08.
+
+## 0.9.6 — Duplicate checker
 
 - 📋 [MUSI-0386] **Duplicate checker: find songs in the music folder that are the same song twice.**
   Asked for alongside Add music (MUSI-0371): years of shared MP3s

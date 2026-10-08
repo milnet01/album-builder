@@ -8,6 +8,15 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Linux download (AppImage) is back.** (MUSI-0387)
+  The previous release came out with only the Windows download, because
+  a file the Linux build needs had been renamed by the project that
+  provides it. The build now finds the current file by itself, so the
+  same thing should not stop a Linux download again. This release has
+  everything the previous one added, including Add music.
+
 ## [0.9.4] - 2026-10-08
 
 **Theme:** Add music.

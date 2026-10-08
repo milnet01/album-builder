@@ -30,6 +30,8 @@ jobs:
 
       - name: Build the AppImage
         run: ./packaging/build-appimage.sh
+        env:
+          GH_TOKEN: ${{ github.token }}  # looks up the current Python base (MUSI-0387)
 
       - name: Verify the extracted bundle (static, no run)
         # No AppImage run here: the headless runner lacks the base GL/EGL libs a

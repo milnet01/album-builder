@@ -81,3 +81,18 @@ def test_desktop_valid(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_python_base_follows_the_minor_not_a_pinned_patch() -> None:
+    # Spec: INV-23-10 (MUSI-0387). niess/python-appimage's `python3.13` tag
+    # REPLACES its asset on every CPython bug-fix release, so a file name pinned
+    # to one patch (python3.13.15-...) 404s the day upstream moves on. That broke
+    # the v0.8.0 and v0.9.4 AppImage builds. The script must look the current
+    # asset up under the pinned tag instead of naming a patch.
+    import re
+
+    script = (PROJECT_ROOT / "packaging" / "build-appimage.sh").read_text(encoding="utf-8")
+    code = "\n".join(line for line in script.splitlines() if not line.lstrip().startswith("#"))
+    assert 'PYTHON_APPIMAGE_TAG="python3.13"' in code
+    assert not re.search(r"python3\.13\.\d+-cp313", code), "a patch-level asset is pinned"
+    assert "api.github.com/repos/niess/python-appimage/releases/tags/" in code

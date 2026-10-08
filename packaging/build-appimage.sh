@@ -12,11 +12,13 @@ set -euo pipefail
 # dependency-currency sweep - never `latest`/`HEAD`/a branch. -------------------
 BASE_IMAGE="ubuntu:22.04@sha256:0d779ea97881505f5ef0039336ee85edba27519bdba968c284c86ee066a973c8"
 PYTHON_APPIMAGE_TAG="python3.13"                                     # niess/python-appimage (per-minor tag); 3.13 == CI's tested interpreter
-# The per-minor tag REPLACES its asset on each CPython patch release, so the old
-# file 404s (wget exit 8) the day upstream moves on - v0.8.0's AppImage build
-# failed that way. List the current one with:
-#   gh api repos/niess/python-appimage/releases/tags/python3.13 --jq '.assets[].name'
-PYTHON_APPIMAGE_ASSET="python3.13.15-cp313-cp313-manylinux2014_x86_64.AppImage"
+# The per-minor tag REPLACES its asset on each CPython patch release, so a pinned
+# file name 404s (wget exit 8) the day upstream moves on - the v0.8.0 and v0.9.4
+# AppImage builds failed that way. So the minor (3.13) stays pinned and the patch
+# follows the tag: the outer half looks the current asset up and logs it
+# (MUSI-0387, owner's decision 2026-10-08). Set PYTHON_APPIMAGE_ASSET to rebuild
+# with an exact one.
+PYTHON_APPIMAGE_ASSET_RE='^python3\.13\.([0-9]+)-cp313-cp313-manylinux2014_x86_64\.AppImage$'
 APPIMAGETOOL_VERSION="1.9.1"                                         # AppImage/appimagetool latest stable
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -37,6 +39,26 @@ if [ "${_ALBUM_BUILDER_IN_CONTAINER:-}" != "1" ]; then
         echo "  openSUSE: sudo zypper install podman   Debian/Ubuntu: sudo apt install podman" >&2
         exit 1
     fi
+    if [ -z "${PYTHON_APPIMAGE_ASSET:-}" ]; then
+        # GH_TOKEN / GITHUB_TOKEN when set: CI shares IPs, and the anonymous API
+        # limit is per IP.
+        token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+        auth=()
+        [ -n "$token" ] && auth=(-H "Authorization: Bearer $token")
+        PYTHON_APPIMAGE_ASSET="$(
+            curl -fsSL "${auth[@]}" \
+                "https://api.github.com/repos/niess/python-appimage/releases/tags/$PYTHON_APPIMAGE_TAG" |
+            python3 -c '
+import json, re, sys
+pat = re.compile(sys.argv[1])
+found = [(int(m.group(1)), a["name"]) for a in json.load(sys.stdin)["assets"]
+         if (m := pat.match(a["name"]))]
+if not found:
+    sys.exit("build-appimage: no asset matches " + sys.argv[1])
+print(max(found)[1])' "$PYTHON_APPIMAGE_ASSET_RE"
+        )"
+    fi
+    echo "build-appimage: Python base $PYTHON_APPIMAGE_ASSET (tag $PYTHON_APPIMAGE_TAG)"
     mkdir -p "$REPO_ROOT/dist"
     # Chown the output back to the invoking user ONLY when the container runs as
     # real root (rootful, e.g. Docker on CI) - there the artifact would otherwise
