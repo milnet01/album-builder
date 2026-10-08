@@ -61,12 +61,12 @@ Source lives in `src/album_builder/`.
   lyrics sidecars (`<song>.lrc`, `.lrc.bak`) and, once Add music is built
   (MUSI-0371), the songs it copies in.
 - **Saved-file versions** — each JSON file carries `schema_version`.
-  Albums, app state and playlists load through `persistence/schema.py`,
-  which upgrades older files forward and refuses newer ones. Albums then
-  leave a newer file untouched. Playlists keep it until the first save,
-  which renames it to `playlists.json.corrupt.bak`. App state treats it as
-  corrupt and overwrites it with defaults, and settings only stamp the
-  version on save without checking it on load; MUSI-0384 fixes both.
+  Albums, app state, settings and playlists load through
+  `persistence/schema.py`, which upgrades older files forward and refuses
+  newer ones. Albums, app state and settings then leave a newer file
+  untouched; app state and settings run on defaults instead. Playlists
+  keep it until the first save, which renames it to
+  `playlists.json.corrupt.bak`.
 - **Errors** — a service reports a failure through a signal, a return
   value or a named exception (`ExportFailed`, `ReportsCleanupFailed`); the
   ui catches it and shows a toast or dialog. No exception may leave a Qt

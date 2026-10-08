@@ -12,6 +12,12 @@ import platformdirs
 
 from album_builder.i18n import SUPPORTED
 from album_builder.persistence.atomic_io import atomic_write_text
+from album_builder.persistence.schema import (
+    SchemaTooNewError,
+    UnreadableSchemaError,
+    migrate_forward,
+    written_by_newer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +26,10 @@ SETTINGS_SCHEMA_VERSION = 1
 """Spec 10 §`settings.json` schema (v1). Every write stamps this value so a
 hand-rolled file without ``schema_version`` self-heals on the next save and
 the migration runner has an unambiguous starting point when v2 lands."""
+
+SETTINGS_MIGRATIONS: dict = {}
+"""``from_version -> fn(dict) -> dict`` for persistence.schema.migrate_forward.
+Empty until settings v2."""
 
 DEFAULT_VOLUME = 80
 DEFAULT_MUTED = False
@@ -132,7 +142,22 @@ def _read_settings_dict() -> dict:
             type(data).__name__,
         )
         return {}
-    return data
+    # A hand-written file may lack schema_version; read it as v1 (the next
+    # save stamps it). Anything else goes through the migration runner.
+    if not isinstance(data.get("schema_version"), int):
+        data["schema_version"] = SETTINGS_SCHEMA_VERSION
+    try:
+        return migrate_forward(
+            data, current=SETTINGS_SCHEMA_VERSION, migrations=SETTINGS_MIGRATIONS,
+        )
+    except SchemaTooNewError as exc:
+        # TC-10-27: a newer app's settings are not misread; run on defaults.
+        # _write_settings will not overwrite the file either.
+        logger.warning("settings.json: %s; using defaults", exc)
+        return {}
+    except UnreadableSchemaError as exc:
+        logger.warning("settings.json: %s; falling back to default", exc)
+        return {}
 
 
 def read_tracks_folder() -> Path | None:
@@ -194,8 +219,11 @@ def _write_settings(data: dict) -> None:
     emits a Spec 10-conformant document and a hand-edited file missing
     ``schema_version`` self-heals on the next save.
     """
-    data["schema_version"] = SETTINGS_SCHEMA_VERSION
     path = settings_path()
+    if written_by_newer(path, SETTINGS_SCHEMA_VERSION):
+        logger.warning("settings.json: written by a newer Album Builder; not saving over it")
+        return
+    data["schema_version"] = SETTINGS_SCHEMA_VERSION
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(path, json.dumps(data, indent=2, sort_keys=True))
 

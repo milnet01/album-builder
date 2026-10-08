@@ -312,7 +312,7 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-10-10** — Self-heal on load: `len(track_paths) > target_count` → bump `target_count` and write back; warning logged.
 - **TC-10-11** — Self-heal on load: `.approved` marker present + `status="draft"` (or vice versa) → reconcile to "approved" wins; write back.
 - **TC-10-12** — `state.json` corrupt JSON → fall back to defaults (`AppState()`); the corrupt file is rewritten with defaults; warning logged.
-- **TC-10-13** — `state.json` `schema_version > 1` → fall back to defaults (state is cosmetic; no error dialog).
+- **TC-10-13** — `state.json` `schema_version > 1` → fall back to defaults (state is cosmetic; no error dialog). The file is kept byte-for-byte: neither the load nor any later save writes it (MUSI-0384).
 - **TC-10-14** — `DebouncedWriter`: 5 calls to `schedule(key, fn)` within the 250 ms window → `fn` runs exactly once.
 - **TC-10-15** — `DebouncedWriter.flush_all()` runs every pending callback synchronously and clears them.
 - **TC-10-16** — Independent keys debounce independently (one flush does not delay the other).
@@ -326,6 +326,7 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-10-24** (Phase 4) — Album-name validation rejects names matching `.* - \d{4}-\d{2}-\d{2}$` after `sanitise_title()`; the rejection surfaces at create + rename time, not at approve time.
 - **TC-10-25** — Atomic pair two-variant enumeration: for a date stem with both the full pair (`{name} - {date}.{html,pdf}`) and the artist-view pair (`{name} - {date} - artist.{html,pdf}`) on disk, the load-time scan processes both pairs independently. A half-pair in the artist variant (one `.html` final, the matching `.pdf.*.tmp` from a Phase-2 crash, full variant complete) results in deletion of **only** the artist-pair members; the full pair survives byte-identically. The reverse case (half-pair in the full variant, artist complete) is also covered: full pair deleted, artist pair survives. Cross-references Spec 09 TC-09-30.
 - **TC-10-26** — Atomic pair date-stem extraction for artist variant: a `reports/` directory containing only artist-variant files (e.g., the full variant was manually deleted by the user) must still surface the date stem so the scan can decide whether the artist pair is complete or a half-pair. The extracted stem MUST be the date alone (`YYYY-MM-DD`), not include the ` - artist` suffix.
+- **TC-10-27** — `settings.json` `schema_version > 1` → every `read_*` returns its defaults (the newer file is not misread), and no `write_*` changes the file. A file with no `schema_version` reads as v1 (MUSI-0384).
 
 ## Out of scope (v1)
 

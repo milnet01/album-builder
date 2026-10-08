@@ -10,7 +10,9 @@ rather than a silent overwrite.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping
+from pathlib import Path
 
 
 class SchemaTooNewError(Exception):
@@ -22,6 +24,21 @@ class UnreadableSchemaError(Exception):
 
 
 Migration = Callable[[dict], dict]
+
+
+def written_by_newer(path: Path, current: int) -> bool:
+    """True if `path` holds a JSON object whose int `schema_version` is above
+    `current`. A missing, unreadable or malformed file is not newer.
+
+    Writers of a file the app also reads at runtime (state.json,
+    settings.json) check this before saving, so an older app never
+    overwrites a newer app's file (MUSI-0384)."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    version = data.get("schema_version") if isinstance(data, dict) else None
+    return isinstance(version, int) and not isinstance(version, bool) and version > current
 
 
 def migrate_forward(

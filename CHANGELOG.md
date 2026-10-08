@@ -10,6 +10,12 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Fixed
 
+- **Going back to an older copy of the app no longer wipes your settings.** (MUSI-0384)
+  If a newer version of Album Builder saved your settings or window
+  layout, an older version used to reset them or read them wrongly. Now
+  it uses its own defaults for that session and leaves the newer files
+  exactly as they were, so the newer version finds them intact.
+
 - **On Windows, the "Album Builder" and "Player" tabs are readable again.** (MUSI-0382)
   They showed as white boxes with faint text. They now follow the
   chosen colour theme, like the rest of the window.

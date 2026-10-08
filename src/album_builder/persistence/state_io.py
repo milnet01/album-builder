@@ -2,7 +2,9 @@
 
 Corrupt or future-version state.json falls back to defaults rather than
 raising, because state is purely cosmetic (window size, last selection)
-and the user shouldn't see a fatal error over a broken cache file.
+and the user shouldn't see a fatal error over a broken cache file. A corrupt
+file is rewritten with defaults; a file from a newer app is never written
+(TC-10-13, MUSI-0384).
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from album_builder.persistence.schema import (
     SchemaTooNewError,
     UnreadableSchemaError,
     migrate_forward,
+    written_by_newer,
 )
 
 CURRENT_SCHEMA_VERSION = 1
@@ -123,7 +126,12 @@ def load_state(project_root: Path) -> AppState:
         raw = json.loads(raw_bytes.decode("utf-8"))
         from_version = raw.get("schema_version") if isinstance(raw, dict) else None
         data = migrate_forward(raw, current=CURRENT_SCHEMA_VERSION, migrations=MIGRATIONS)
-    except (json.JSONDecodeError, OSError, SchemaTooNewError, UnreadableSchemaError) as exc:
+    except SchemaTooNewError as exc:
+        # TC-10-13: a newer app's file is kept. Run on defaults; save_state
+        # will not overwrite it either.
+        logger.warning("%s: %s; using defaults and leaving the file alone", path, exc)
+        return AppState()
+    except (json.JSONDecodeError, OSError, UnreadableSchemaError) as exc:
         # Spec 10 TC-10-12: corrupt state.json -> defaults + REWRITE so the
         # next reader sees consistent state, even if the user closes the app
         # without further mutation.
@@ -177,6 +185,9 @@ def save_state(project_root: Path, state: AppState) -> None:
     # No datetimes, so no `_to_iso` wiring needed; sort_keys=True enforces
     # the Spec 10 JSON formatting rule.
     path = _state_path(project_root)
+    if written_by_newer(path, CURRENT_SCHEMA_VERSION):
+        logger.warning("%s: written by a newer Album Builder; not saving over it", path)
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(
         {
