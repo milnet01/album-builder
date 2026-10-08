@@ -15,10 +15,10 @@ right.](docs/screenshots/album-builder-curate.png)
 
 ## Status
 
-**v0.9.4 (2026-10-08): add music by dragging songs onto the
-window, or with File → Add Music....** Your originals stay
-where they were, and a song whose name you already have is
-kept as a numbered copy. The 0.9 releases also brought more
+**v0.9.5 (2026-10-08): add music by dragging songs onto the
+window, or with File → Add Music...; the Linux download is
+back.** Your originals stay where they were, and a song whose
+name you already have is kept as a numbered copy. The 0.9 releases also brought more
 languages, including Arabic and Hebrew, which mirror the
 window right to left; a music library in the Player tab;
 choosing your music folder from the File menu; bringing back

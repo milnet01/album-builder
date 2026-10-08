@@ -8,6 +8,10 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-10-08
+
+**Theme:** Linux download is back.
+
 ### Fixed
 
 - **The Linux download (AppImage) is back.** (MUSI-0387)
