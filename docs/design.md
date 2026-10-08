@@ -66,8 +66,8 @@ Source lives in `src/album_builder/`.
   which upgrades older files forward and refuses newer ones. Albums then
   leave a newer file untouched. Playlists keep it until the first save,
   which renames it to `playlists.json.corrupt.bak`. App state treats it as
-  corrupt and overwrites it with defaults. Settings only stamp the version
-  on save, and do not check it on load (MUSI-0384).
+  corrupt and overwrites it with defaults, and settings only stamp the
+  version on save without checking it on load; MUSI-0384 fixes both.
 - **Errors** — a service reports a failure through a signal, a return
   value or a named exception (`ExportFailed`, `ReportsCleanupFailed`); the
   ui catches it and shows a toast or dialog. No exception may leave a Qt

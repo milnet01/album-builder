@@ -230,12 +230,16 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: refactor.
   Source: design-2026-09-28.
 
-- 📋 [MUSI-0384] **settings.json does not go through the schema runner, so a newer file is read silently.**
+- 📋 [MUSI-0384] **settings.json and state.json mishandle a file from a newer app: settings read it silently, state resets it to defaults.**
   persistence/settings.py stamps SETTINGS_SCHEMA_VERSION on save but
   _read_settings_dict only json.loads it: no migrate_forward, no refusal
   of a newer version (albums, state and playlists do use
   persistence/schema.py). Found by both review lanes on docs/design.md.
   Wire settings through the runner before any settings v2.
+  Scope widened (2026-10-08, owner's decision): app state too.
+  persistence/state_io.py load_state catches SchemaTooNewError with
+  the corrupt-file errors and overwrites a newer state.json with
+  defaults. Keep the newer file instead, as albums do.
   **Layman:** An older copy of the app could quietly misread or overwrite settings saved by a newer one.
   Kind: fix.
   Source: review-contract-2026-09-28 design.md loop 1.

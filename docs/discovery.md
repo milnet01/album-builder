@@ -39,7 +39,8 @@ ties the choice, the order, the lyrics and the finished album together.
   requirements runs the download and builds an album with nothing else
   installed. Lyrics alignment is the one optional extra.
 - **S7** — Your song files are never renamed, moved, changed or deleted.
-  The one thing the app adds beside a song is its lyrics file (`.lrc`).
+  The app adds only lyrics files (`.lrc`) and the songs you add with Add
+  music (MUSI-0371).
 
 ## What it deliberately does not do
 
