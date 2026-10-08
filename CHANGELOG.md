@@ -8,6 +8,10 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-10-08
+
+**Theme:** Add music.
+
 ### Added
 
 - **Add music: drag songs onto the window, or use File → Add Music...** (MUSI-0371)

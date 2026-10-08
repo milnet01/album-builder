@@ -15,11 +15,14 @@ right.](docs/screenshots/album-builder-curate.png)
 
 ## Status
 
-**v0.9.3 (2026-09-28): the window fits smaller screens, and the Windows
-download works again.** The 0.9 releases also brought more languages,
-including Arabic and Hebrew, which mirror the window right to left; a
-music library in the Player tab; choosing your music folder from the
-File menu; and bringing back an album you deleted.
+**v0.9.4 (2026-10-08): add music by dragging songs onto the
+window, or with File → Add Music....** Your originals stay
+where they were, and a song whose name you already have is
+kept as a numbered copy. The 0.9 releases also brought more
+languages, including Arabic and Hebrew, which mirror the
+window right to left; a music library in the Player tab;
+choosing your music folder from the File menu; bringing back
+an album you deleted; and a window that fits smaller screens.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for what changed in each release.
 
