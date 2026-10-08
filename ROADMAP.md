@@ -218,6 +218,12 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   failed copies get a message box, a plain success a toast. Tests:
   tests/services/test_add_music.py, tests/ui/test_add_music_ui.py.
   Not yet run by hand on Windows.
+  Verified on Windows 10 (2026-10-08, CI run 37783713439 zip of
+  66341e6, ssh wintest, demo songs): File > Add Music... copied a new
+  song (toast "Songs added: 1") and kept a same-named one as
+  "02 - Slow Tide (2).mp3" with the message box; the owner dragged a
+  file onto the window by hand and it was kept as "new-song (2).mp3".
+  Machine cleaned afterwards.
   **Layman:** Let people add songs by dragging them onto the app, once we decide how it should treat the music folder.
   Kind: feature.
   Source: in-session-2026-09-28.

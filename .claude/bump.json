@@ -1,6 +1,7 @@
 {
   "version_source": "src/album_builder/version.py",
   "version_pattern": "__version__ = \"([0-9]+\\.[0-9]+\\.[0-9]+)\"",
+  "tag": "v{NEW}",
   "files": [
     {
       "path": "src/album_builder/version.py",
