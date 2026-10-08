@@ -37,34 +37,13 @@ checkout it is meant to run.
 
 bandit / pyright / shellcheck / semgrep / gitleaks / trivy are installed (see `/audit`).
 
-### Distribution (Specs 23-24 / Phases Dist-2, Dist-3)
+### Distribution
 
-`packaging/build-appimage.sh` builds the downloadable `AlbumBuilder-<version>-x86_64.AppImage`
-inside a digest-pinned `ubuntu:22.04` container (needs Docker or Podman), so a
-local build matches the CI release. `.github/workflows/appimage.yml` runs that
-same script on a `v*` tag + manual dispatch and attaches the AppImage to the
-GitHub Release. The build script is the single source of truth (the workflow only
-invokes it + smoke-tests + uploads) — mirrors the `ci.yml` -> `local-CI.sh` pattern.
+AppImage and Windows builds: `.claude/rules/distribution.md` (loads when `packaging/` or a workflow is read; read it by hand otherwise).
 
-`packaging/build-windows.ps1` (Spec 24) is the Windows analogue: a PyInstaller
-one-folder bundle zipped to `AlbumBuilder-<version>-windows-x64.zip`, with
-WeasyPrint's GTK/Pango DLLs sourced from MSYS2. PyInstaller cannot cross-compile,
-so it builds **only** on the `windows-latest` runner (`.github/workflows/windows.yml`)
-— *not* reproducible on this Linux machine; validated by CI `--version`/`--selftest`
-plus a manual Windows run. Spec 24 also adds a point-of-use fallback: if the PDF
-engine can't load or a report won't render, `services/report.py::render_report`
-writes an HTML-only report instead of crashing approve (§4.3b), and
-`persistence/atomic_pair.py::scan_reports_dir` keeps a lone `.html` with no `.tmp`
-as a complete single-file report.
+## Architecture
 
-## Architecture (4 layers, signals up + writes down)
-
-- **`domain/`** — pure Python, no Qt. Reads song files (tags via mutagen), writes nothing — every write is `persistence/`'s. See `docs/design.md` for the dependency rules. `Album` (mutable, `_require_draft` guards), `Library`/`Track` (frozen), `slug`, `lyrics`. Specs 01 / 02 / 04 / 05 / 07.
-- **`persistence/`** — atomic JSON + LRC. `album_io` / `state_io` / `settings` / `schema` (migration runner) / `atomic_io` (`os.replace` + pid+uuid tmp) / `atomic_pair` (multi-file scan) / `debounce` (250 ms per-key) / `lrc_io`. Spec 10 owns the bytes.
-- **`services/`** — Qt-aware orchestrators. `AlbumStore` (CRUD + signals + `.trash` + drift detection), `LibraryWatcher`, `Player`, `LyricsTracker`, `AlignmentService` + `AlignmentWorker` (QThread WhisperX) + `AlignmentStatus`, `UsageIndex` (Spec 13 cross-album popularity), `export` (M3U + symlinks), `report` (Jinja2 + WeasyPrint). Only place QObjects own mutable state.
-- **`ui/`** — widgets. `LibraryPane`, `AlbumOrderPane`, `TopBar` (hosts `AlbumSwitcher` + `TargetCounter` + approve/reopen), `MainWindow`, `NowPlayingPane`, `TransportBar`, `LyricsPanel`, `Toast`, `theme` (Palette + QSS + `Glyphs` namespace).
-
-Signals flow up via `pyqtSignal(object)`. Disk writes flow down through `DebouncedWriter` keyed by album UUID.
+Four layers, signals up and writes down. Parts and dependency rules: `docs/design.md`. Per-layer detail: `.claude/rules/architecture.md` (loads when `src/` or `tests/` is read natively).
 
 ## Project conventions
 
@@ -82,12 +61,9 @@ Signals flow up via `pyqtSignal(object)`. Disk writes flow down through `Debounc
 
 `/audit`, `/indie-review`, `/debt-sweep`, `/release`, `/bump`, `/feature-test`, `/triage`, `/security-review`, `/review` apply. Findings land in `ROADMAP.md`.
 
-## Inherited rules
+## Push and CI
 
-Global rules apply in full unless this file overrides them — don't restate, follow:
-
-- **`~/.claude/CLAUDE.md`** — development discipline (§1-5: no workarounds without root-cause fix, shortest correct implementation, reuse before rewriting, six-month test, current external-library idioms), git push cadence (§6: public repo push freely; private batch + confirm), PR-workflow opt-in (§7), and the **Karpathy clarity rules** (§8-12: surface ambiguity, push back when a simpler path exists, reproduce-before-fix for bugs, stay in your lane on edits, state a verify-step plan for multi-step work).
-- **`/mnt/Games/CLAUDE.md`** — privileged commands use `SUDO_ASKPASS=/usr/libexec/ssh/ksshaskpass sudo -A -p "Claude Code: <action>"`.
+Global and `/mnt/Games/CLAUDE.md` rules apply in full; this file overrides them only where it says so.
 
 Public GitHub repo (`milnet01/album-builder`) — push freely on main; free Linux CI minutes. CI is `.github/workflows/ci.yml`; its single check step runs `./local-CI.sh` (ruff + full pytest), so running that script locally reproduces the CI gate exactly.
 
