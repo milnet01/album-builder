@@ -212,7 +212,7 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: test.
   Source: in-session-2026-10-08.
 
-- 📋 [MUSI-0388] **The test suite froze once on GitHub inside the player's stop() at window close.**
+- ✅ [MUSI-0388] **The test suite froze once on GitHub inside the player's stop() at window close.**
   GitHub CI run 38038388285 (commit a2d72e7, 2026-10-10) hung at
   ~86-93% of the suite (tests/ui/test_main_window.py or
   test_now_playing_pane.py by collection order) until the 15-minute job
@@ -237,6 +237,20 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   prctl(PR_SET_PTRACER_ANY) and runs eu-stack/gdb on the pytest process
   when one test passes ~60 s (ptrace_scope is 1 here and on CI). Lead
   only: the CI runner has no audio server.
+  Resolved (2026-10-10): the 2026-10-10 "not the GIL deadlock" note
+  above was wrong. The new test hang watchdog (tests/_hang_watchdog.py)
+  caught 10 hangs in 120 loop runs of test_main_window.py +
+  test_now_playing_pane.py under load, every one with the same native
+  stack: the main thread holds the GIL inside QMediaPlayer.stop() and
+  waits on Qt's connection mutex (QObject::disconnect); a Qt worker
+  thread holds that mutex in ~QObject and waits on the GIL in
+  sipQAudioOutput::disconnectNotify, PyQt's per-instance check for a
+  Python override. sip caches "no override" after the first check
+  (pyqt6-sip 13.13 sip_core.c, *pymc = 1), so Player now runs that check
+  once on the main thread at construction (connect + disconnect a no-op
+  on the audio output's volumeChanged). After: 0 hangs in 180 runs under
+  the same load; the before/after 60-run pair ran side by side. A
+  production close could hit the same path, so this fixes the app too.
   **Layman:** The automatic checks on GitHub froze once while closing the app's test window; a rerun passed, so the cause is still to be found.
   Kind: investigate.
   Source: in-session-2026-10-10 CI run 38038388285.

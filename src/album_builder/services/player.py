@@ -27,6 +27,26 @@ logger = logging.getLogger(__name__)
 _ERROR_DEDUPE_WINDOW_S = 0.05
 
 
+def _noop(*_args: object) -> None:
+    pass
+
+
+def _prime_notify_override_check(output: QAudioOutput) -> None:
+    """Make PyQt decide now, on this thread, that `output` has no Python
+    connectNotify / disconnectNotify (MUSI-0388).
+
+    The first time Qt calls either on a PyQt-created object, PyQt takes the
+    GIL to look for a Python override, then caches "none" for that object.
+    QtMultimedia's backend can make that first call on its own thread while
+    tearing down, holding Qt's connection lock - and if the main thread is
+    inside QMediaPlayer.stop() at that moment, it holds the GIL and waits for
+    that lock: a deadlock (caught by the test hang watchdog). One connect and
+    disconnect here runs both checks while taking the GIL is safe.
+    """
+    output.volumeChanged.connect(_noop)
+    output.volumeChanged.disconnect(_noop)
+
+
 class PlayerState(Enum):
     STOPPED = auto()
     PLAYING = auto()
@@ -66,6 +86,7 @@ class Player(QObject):
         super().__init__(parent)
         self._player = QMediaPlayer(self)
         self._output = QAudioOutput(self)
+        _prime_notify_override_check(self._output)
         self._player.setAudioOutput(self._output)
         self._source: Path | None = None
         self._duration_seconds = 0.0

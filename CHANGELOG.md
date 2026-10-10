@@ -8,6 +8,12 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The app no longer risks freezing when music stops as you close it** (MUSI-0388)
+  Rarely, stopping playback while the window closed could leave the app
+  stuck. The automatic checks caught it happening, and it is now fixed.
+
 ## [0.9.6] - 2026-10-10
 
 **Theme:** Find duplicates.
