@@ -198,6 +198,26 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: test.
   Source: in-session-2026-10-08.
 
+- 📋 [MUSI-0388] **The test suite froze once on GitHub inside the player's stop() at window close.**
+  GitHub CI run 38038388285 (commit a2d72e7, 2026-10-10) hung at
+  ~86-93% of the suite (tests/ui/test_main_window.py or
+  test_now_playing_pane.py by collection order) until the 15-minute job
+  limit. The 120 s faulthandler dump: main thread in Player.stop
+  (services/player.py, self._player.stop()) <- MainWindow.closeEvent <-
+  pytest-qt _close_widgets, during teardown; the only other thread had
+  no Python frame. The rerun of the same commit passed (986 passed, 12
+  skipped), as did the previous commit's run, so it is intermittent.
+  Same shape as the FFmpeg/GIL deadlock of MUSI-0174, but the
+  conftest native message handler that fixed that one was in place, so
+  a different path reaches it; and like MUSI-0367 it fires in closeEvent.
+  Related: MUSI-0385. Log saved at
+  ~/.cache/album-builder/gh-run-hang.log. Find what the other thread
+  waits on before changing any timeout.
+  **Layman:** The automatic checks on GitHub froze once while closing the app's test window; a rerun passed, so the cause is still to be found.
+  Kind: investigate.
+  Source: in-session-2026-10-10 CI run 38038388285.
+  Lanes: tests, services.
+
 ## 0.9.4 — Add music
 
 - ✅ [MUSI-0371] **"Add music" on-ramp: drop or pick files to add to the library.**
