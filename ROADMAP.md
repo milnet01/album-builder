@@ -75,6 +75,20 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: doc.
   Source: in-session-2026-09-28.
 
+- 📋 [MUSI-0389] **The app can update itself to the newest release.**
+  Covers both shipped builds: the Linux AppImage and the Windows
+  zip. Open questions for the design: check on start or only on
+  request; ask before installing or install silently; how the
+  download is verified before it replaces the running copy; what
+  happens when the check is offline. The AppImage has an existing
+  update mechanism (embedded update information plus zsync) worth
+  weighing against a custom check of the GitHub releases page.
+  The launcher that runs a live checkout must not self-update.
+  **Layman:** The app tells you when a newer version is out and can install it for you, so you never have to download it by hand.
+  Kind: feature.
+  Source: user-request-2026-10-10.
+  Lanes: services, ui, packaging.
+
 ## 1.0.0 — Every sign of success proven
 
 1.0 ships when S1-S7 in docs/discovery.md each have a passing check
