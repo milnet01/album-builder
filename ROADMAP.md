@@ -308,14 +308,18 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
 
 ## 0.9.6 — Duplicate checker
 
-- 📋 [MUSI-0386] **Duplicate checker: find songs in the music folder that are the same song twice.**
+- ✅ [MUSI-0386] **Duplicate checker: find songs in the music folder that are the same song twice.**
   Asked for alongside Add music (MUSI-0371): years of shared MP3s
-  leave libraries with hundreds of duplicates. Open questions for the
-  owner before building: what counts as a duplicate (identical files,
-  same title + artist, or both, shown separately), and whether it only
-  lists them or may also remove them. Discovery S7 says the app never
-  deletes song files, so removal would need S7 amended first; the
-  working assumption is list-only.
+  leave libraries with hundreds of duplicates. Owner decided (2026-10-10): show
+  two lists, exact copies (identical files) and likely copies (same
+  title + artist). List only: the app never removes song files, so
+  discovery S7 stands unchanged.
+  Done (2026-10-10): File > Find Duplicates... lists exact copies
+  (size, then SHA-256) and likely copies (title + artist, case and
+  spacing ignored) in a read-only window; nothing is deleted. No spec
+  (spec-format.md section 1: two parts, nothing binds to it, owner
+  settled the design). Tests: tests/services/test_duplicates.py,
+  tests/ui/test_duplicates_ui.py.
   **Layman:** Shows you songs you have more than once, so you can tidy up a library that grew from shared copies.
   Kind: feature.
   Source: user-request-2026-10-08.

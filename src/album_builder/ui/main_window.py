@@ -60,6 +60,7 @@ from album_builder.services.alignment_service import (
     whisperx_models_cached,
 )
 from album_builder.services.alignment_status import AlignmentStatus, compute_status
+from album_builder.services.duplicates import DuplicateReport, DuplicateWorker
 from album_builder.services.export import ExportFailed
 from album_builder.services.library_watcher import LibraryWatcher
 from album_builder.services.lyrics_tracker import LyricsTracker
@@ -71,6 +72,7 @@ from album_builder.services.replaygain import ReplayGainService
 from album_builder.services.report import list_warnings, report_paths_for
 from album_builder.services.usage_index import UsageIndex
 from album_builder.ui.album_order_pane import AlbumOrderPane
+from album_builder.ui.duplicates_dialog import DuplicatesDialog
 from album_builder.ui.library_pane import LibraryPane
 from album_builder.ui.now_playing_pane import NowPlayingPane
 from album_builder.ui.player_pane import PlayerPane
@@ -295,6 +297,8 @@ class MainWindow(QMainWindow):
         # MUSI-0371: songs dropped on the window are copied into the music folder.
         self.setAcceptDrops(True)
         self._add_music_worker: AddMusicWorker | None = None
+        self._duplicate_worker: DuplicateWorker | None = None
+        self._duplicates_dialog: DuplicatesDialog | None = None
 
         # Spec 17 §Startup degradation: a corrupt playlists.json started an
         # empty catalogue without touching the file (it is renamed to
@@ -461,6 +465,9 @@ class MainWindow(QMainWindow):
             tr("Choose Music Folder..."), lambda: self._on_choose_music_folder(),
         )
         file_menu.addAction(tr("Add Music..."), lambda: self._on_add_music())
+        file_menu.addAction(
+            tr("Find Duplicates..."), lambda: self._on_find_duplicates(),
+        )
         file_menu.addSeparator()
         file_menu.addAction(tr("Quit"), lambda: self.close())
 
@@ -819,6 +826,42 @@ class MainWindow(QMainWindow):
             self._show_toast(lines[0])
         else:
             self._show_toast(tr("No songs found to add."))
+
+    # ---- Duplicate checker (MUSI-0386) -------------------------------------
+
+    def _on_find_duplicates(self) -> None:
+        """List songs held more than once; never removes one (discovery S7)."""
+        if self._duplicate_worker is not None:
+            self._show_toast(tr("Still looking for duplicates. Try again when it finishes."))
+            return
+        worker = DuplicateWorker(self._library_watcher.library().tracks, parent=self)
+        worker.done.connect(self._on_duplicates_done)
+        worker.finished.connect(worker.deleteLater)
+        self._duplicate_worker = worker
+        self._show_toast(tr("Looking for duplicate songs..."))
+        worker.start()
+
+    def _on_duplicates_done(self, report: DuplicateReport) -> None:
+        self._duplicate_worker = None
+        try:
+            if report.error:
+                QMessageBox.warning(
+                    self, tr("Find Duplicates..."),
+                    tr("The duplicate check failed: {error}", error=report.error),
+                )
+                return
+            if not (report.exact or report.likely or report.unreadable):
+                self._show_toast(tr("No duplicate songs found."))
+                return
+            library = self._library_watcher.library()
+            if self._duplicates_dialog is not None:
+                self._duplicates_dialog.close()
+            self._duplicates_dialog = DuplicatesDialog(
+                report, {t.path: t for t in library.tracks}, library.folder, parent=self,
+            )
+            self._duplicates_dialog.show()
+        except Exception:
+            logger.exception("duplicates: showing the result failed")
 
     def _on_language_chosen(self, code: str, name: str) -> None:
         """Spec 25: save the language; it takes effect on the next start."""
@@ -1359,6 +1402,8 @@ class MainWindow(QMainWindow):
         # running aborts the process.
         if self._add_music_worker is not None:
             self._add_music_worker.wait()
+        if self._duplicate_worker is not None:
+            self._duplicate_worker.wait()
         try:
             # Spec 20: drop the bus name (clean relaunch) + remove the cover-art
             # temp file, and hide the tray icon. Self-guarded on the no-op path.

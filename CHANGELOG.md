@@ -8,6 +8,15 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+### Added
+
+- **Find songs you have twice: File → Find Duplicates...** (MUSI-0386)
+  It shows two lists. The first is exact copies: the same file saved
+  more than once. The second is likely copies: songs with the same
+  title and artist, such as a song saved again from a different
+  download. It only lists them. Album Builder never deletes a song,
+  so you remove the copies you don't want in your file manager.
+
 ## [0.9.5] - 2026-10-08
 
 **Theme:** Linux download is back.

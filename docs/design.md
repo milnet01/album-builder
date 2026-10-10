@@ -23,7 +23,8 @@ Source lives in `src/album_builder/`.
   migration runner, atomic writes and the debounced writer.
 - **services** (`services/`) — Qt objects that own the app's live state and
   do the work: album store, library watcher, player and playback control,
-  lyrics tracking and alignment, playlists, usage index, ReplayGain, export
+  lyrics tracking and alignment, playlists, usage index, ReplayGain, add
+  music, the duplicate checker, export
   (numbered links and playlist file), report rendering, MPRIS.
 - **ui** (`ui/`) — windows, panes and widgets, the theme, the tray.
 - **shell** (`app.py`, `i18n.py`, `version.py`, `glyphs.py`, `__main__.py`)
@@ -72,8 +73,8 @@ Source lives in `src/album_builder/`.
   ui catches it and shows a toast or dialog. No exception may leave a Qt
   slot: on Windows an escaping exception ends the app (MUSI-0379).
 - **Long work** runs off the main thread (`QThread`, as alignment does) and
-  reports back by signal. Alignment is the only work that does so today;
-  export and report rendering run on the main thread.
+  reports back by signal. Alignment, Add music and the duplicate checker
+  do so; export and report rendering run on the main thread.
 - **Text the user sees** goes through `tr()` (`N_()` for module constants)
   and appears in every catalog in `translations/`.
 - **Logging** — `logging.getLogger(__name__)` per module.

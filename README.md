@@ -55,6 +55,10 @@ See [`CHANGELOG.md`](CHANGELOG.md) for what changed in each release.
   or use *File → Add Music...*. They are copied into your music folder
   and the originals stay where they were. If a song has the same name as
   one you already have, both are kept and you are told the new name.
+- **Finds songs you have twice.** *File → Find Duplicates...* shows two
+  lists: exact copies of the same file, and songs with the same title and
+  artist. It only lists them. It never deletes a song; you remove the
+  copies you don't want in your file manager.
 
 ### Music files it reads
 
