@@ -227,6 +227,16 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Related: MUSI-0385. Log saved at
   ~/.cache/album-builder/gh-run-hang.log. Find what the other thread
   waits on before changing any timeout.
+  Located (2026-10-10): not the MUSI-0174 GIL deadlock. PyQt6 drops the
+  GIL during an ordinary Qt call (a Python thread kept running through
+  QThread.msleep), so the main thread does not hold it inside
+  QMediaPlayer.stop(). The other thread's "no Python frame" is a Qt
+  thread with a Python thread state, not proof it waits on the GIL.
+  The wait is in native code that faulthandler cannot show. Next: catch
+  a native stack - a test-session watchdog that calls
+  prctl(PR_SET_PTRACER_ANY) and runs eu-stack/gdb on the pytest process
+  when one test passes ~60 s (ptrace_scope is 1 here and on CI). Lead
+  only: the CI runner has no audio server.
   **Layman:** The automatic checks on GitHub froze once while closing the app's test window; a rerun passed, so the cause is still to be found.
   Kind: investigate.
   Source: in-session-2026-10-10 CI run 38038388285.
