@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import ctypes
 import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -90,6 +93,67 @@ def _qt_native_message_handler(qapp):
 
     qInstallMessageHandler(None)
     yield
+
+
+# Hang watchdog (MUSI-0388): a child process that captures a native stack of
+# the pytest process when one test runs past AB_HANG_WATCHDOG_SECS (default 60,
+# below faulthandler_timeout so both dumps land). 0 turns it off. Linux only.
+# The log sits beside the CI hang logs in ~/.cache/album-builder/.
+_HANG_LOG = Path(
+    os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
+) / "album-builder" / "test-hang-stacks.log"
+_watchdog: subprocess.Popen[bytes] | None = None
+
+
+def _allow_any_ptracer() -> None:
+    # kernel.yama.ptrace_scope=1 (here and on CI) lets a process trace only its
+    # descendants; eu-stack is our grandchild, so opt in to being traced.
+    pr_set_ptracer, pr_set_ptracer_any = 0x59616D61, ctypes.c_ulong(-1)
+    ctypes.CDLL(None, use_errno=True).prctl(pr_set_ptracer, pr_set_ptracer_any, 0, 0, 0)
+
+
+def pytest_configure(config):
+    # Started here, not in a fixture: output capture is suspended during
+    # configure, so the watchdog's stderr is the real terminal / CI log.
+    global _watchdog
+    secs = os.environ.get("AB_HANG_WATCHDOG_SECS", "60")
+    if sys.platform != "linux" or float(secs) <= 0:
+        return
+    _allow_any_ptracer()
+    _watchdog = subprocess.Popen(
+        [sys.executable, str(Path(__file__).with_name("_hang_watchdog.py")),
+         str(os.getpid()), secs, str(_HANG_LOG)],
+        stdin=subprocess.PIPE, bufsize=0,
+    )
+
+
+def pytest_unconfigure(config):
+    global _watchdog
+    if _watchdog is not None:
+        _watchdog.stdin.close()  # EOF tells the watchdog to exit
+        _watchdog.wait(timeout=10)
+        _watchdog = None
+
+
+def _tell_watchdog(line: str) -> None:
+    global _watchdog
+    if _watchdog is None:
+        return
+    try:
+        _watchdog.stdin.write(line.encode("utf-8") + b"\n")
+    except OSError:  # watchdog died; the suite must not care
+        _watchdog = None
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_protocol(item, nextitem):
+    # Wraps setup, call AND teardown: the CI hang was in pytest-qt's
+    # widget-closing teardown, which a fixture's own teardown would not cover.
+    _tell_watchdog(f"start {item.nodeid}")
+    try:
+        return (yield)
+    finally:
+        _tell_watchdog("end")
 
 
 @pytest.fixture

@@ -55,13 +55,15 @@ jobs:
         # WeasyPrint's "HarfBuzz-Subset will be required" warning, and
         # `desktop-file-utils` lets TC-23-03's .desktop check run instead of
         # skipping; the developer machine has both, so local and CI now run
-        # the same tests (2026-10-10).
+        # the same tests (2026-10-10). `elfutils` supplies eu-stack, which the
+        # test hang watchdog (tests/_hang_watchdog.py, MUSI-0388) uses to print
+        # a native stack of a test stuck past 60 s.
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 \
             fonts-dejavu-core libgl1 libegl1 libxkbcommon0 libdbus-1-3 dbus \
-            libpulse0 libasound2t64 desktop-file-utils
+            libpulse0 libasound2t64 desktop-file-utils elfutils
 
       - name: Create virtualenv and install dependencies
         run: |
