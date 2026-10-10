@@ -2,9 +2,10 @@
 # Local mirror of GitHub CI (.github/workflows/ci.yml).
 #
 # CI runs THIS script as its single check step, so whatever runs here IS the
-# CI gate -- the two cannot drift. The workflow's other steps only build the
-# environment this script assumes is already present (checkout, Python, the
-# WeasyPrint/Qt system libs, and a `.venv/` with the dev dependencies).
+# CI gate. The workflow's other steps only build the environment this script
+# assumes is already present (checkout, Python, the WeasyPrint/Qt system libs,
+# and a `.venv/` with the dev dependencies). A local run first upgrades
+# `.venv/` to the versions CI would install, so the two test the same code.
 #
 # Run it locally exactly as CI does:
 #     ./local-CI.sh
@@ -44,6 +45,32 @@ if [[ "${1:-}" == "--docs" ]]; then
   "$PY" tools/check_md_links.py
   echo "== local-CI --docs: PASSED =="
   exit 0
+fi
+
+# CI builds a fresh venv from requirements-dev.txt on every run, and those
+# carry floors only, so CI always tests the newest release of every
+# dependency. Bring the local venv to the same versions first, or a new
+# release (a ruff rule, a Qt patch) breaks CI without breaking this run.
+# Owner's choice, 2026-10-10. Skipped in CI, whose venv is minutes old.
+# Offline, it warns and tests what is installed.
+if [[ -z "${CI:-}" ]]; then
+  echo "== dependencies (bring to CI's versions) =="
+  before=$("$PY" -m pip freeze 2>/dev/null || true)
+  # Offline, pip still exits 0 (the installed versions satisfy the floors)
+  # and only prints connection warnings, so read those too.
+  if upgrade_out=$("$PY" -m pip install --upgrade --upgrade-strategy eager \
+        --disable-pip-version-check --timeout 15 --retries 1 -q \
+        -r requirements-dev.txt 2>&1) \
+     && [[ "$upgrade_out" != *"Retrying"* && "$upgrade_out" != *"Could not fetch"* ]]; then
+    after=$("$PY" -m pip freeze 2>/dev/null || true)
+    changed=$(diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") \
+        | sed -n 's/^> /  now /p' || true)
+    echo "${changed:-  already current}"
+  else
+    echo "local-CI: WARNING - could not update the venv (offline?), so this"
+    echo "local-CI:   run tests the installed versions and CI may use newer ones."
+    printf '%s\n' "$upgrade_out" | tail -n 3
+  fi
 fi
 
 echo "== environment =="

@@ -65,7 +65,7 @@ Four layers, signals up and writes down. Parts and dependency rules: `docs/desig
 
 Global and `/mnt/Games/CLAUDE.md` rules apply in full; this file overrides them only where it says so.
 
-Public GitHub repo (`milnet01/album-builder`) — push freely on main; free Linux CI minutes. CI is `.github/workflows/ci.yml`; its single check step runs `./local-CI.sh` (ruff + full pytest), so running that script locally reproduces the CI gate exactly.
+Public GitHub repo (`milnet01/album-builder`) — push freely on main; free Linux CI minutes. CI is `.github/workflows/ci.yml`; its single check step runs `./local-CI.sh` (ruff + full pytest), so running that script locally reproduces the CI gate exactly. A local run first upgrades `.venv/` to the newest release of every dependency, as CI's fresh install does (owner's choice, 2026-10-10); offline it warns and tests what is installed.
 
 Documentation-only pushes (every path matches `*.md`, `docs/*` or `LICENSE`) skip the tests: the pre-push hook runs `./local-CI.sh --docs` (a Markdown link check) and `ci.yml`'s `paths-ignore` skips GitHub CI. The hook learns this from local git config, which a fresh clone lacks — restore it with:
 

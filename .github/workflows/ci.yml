@@ -2,7 +2,8 @@ name: CI
 
 # Lint + full test suite on every push to main and every pull request.
 # The single check step is `./local-CI.sh`, so a green local run and a green
-# CI run exercise the identical commands -- they cannot drift.
+# CI run exercise the identical commands. A local run also upgrades its venv
+# to the newest releases first, matching the fresh install below.
 
 # A documentation-only push to main runs nothing here: no test reads a .md file and
 # ruff reads only Python. Keep this list equal to `git config
