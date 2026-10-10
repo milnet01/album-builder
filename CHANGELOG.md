@@ -8,6 +8,10 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-10-10
+
+**Theme:** Find duplicates.
+
 ### Added
 
 - **Find songs you have twice: File → Find Duplicates...** (MUSI-0386)
