@@ -136,10 +136,20 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: test.
   Source: check-queue-2026-09-28.
 
-- 📋 [MUSI-0375] **S4 check: approved playlist plays in order in VLC and the default player.**
+- ✅ [MUSI-0375] **S4 check: approved playlist plays in order in VLC and the default player.**
   Serves S4 (docs/discovery.md). Approve a demo album, open its .m3u in
   VLC and in the desktop's default player, confirm every track plays in
   the set order. Manual check; note the players and versions used.
+  Checked 2026-10-15. A 12-song album was approved with the current
+  code, its songs picked in a shuffled order (0240, 0374, 0256, ...) so
+  file-name order would not pass by accident
+  (~/.cache/album-builder-demo/approve_s4.py). Its playlist.m3u8 was
+  played headless, 1 s per song: VLC 3.0.24 (cvlc, dummy audio) and
+  mpv 0.41.0 each opened all 12 in exactly the album order (diffed
+  against the approve output). The desktop's default for M3U here is
+  Celluloid 0.30, a front end to mpv; its window was not opened, so
+  the default player is proven through its engine, not its own
+  playlist handling. Windows' default player not tested.
   **Layman:** Checks the finished playlist really plays, in order, in common players.
   Kind: test.
   Source: check-queue-2026-09-28.
