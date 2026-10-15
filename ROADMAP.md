@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: MUSI=390 -->
+<!-- ants-roadmap-id-high-water: MUSI=391 -->
 
 # Album Builder — Roadmap
 
@@ -89,6 +89,18 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: feature.
   Source: user-request-2026-10-10.
   Lanes: services, ui, packaging.
+
+- 💭 [MUSI-0391] **Report PDFs with Chinese, Japanese or Korean lyrics embed a font some printers reject.**
+  Measured 2026-10-15: text no named report font covers falls back per
+  glyph to a system font. For CJK that is Noto Sans CJK (CFF OpenType),
+  which WeasyPrint 70 embeds in a form poppler reports as "Embedded font
+  file may be invalid". WeasyPrint's full_fonts=True did not help with
+  Cantarell, and with Noto Sans CJK it ran past two minutes without
+  finishing. Options if it matters: bundle a TrueType CJK font, or accept
+  it. Spec 09 Fonts names this case.
+  **Layman:** If a song's lyrics are in Chinese, Japanese or Korean, the printed report may show those characters in the wrong font on some printers.
+  Kind: fix.
+  Source: in-session-2026-10-15 MUSI-0390 review.
 
 ## 1.0.0 — Every sign of success proven
 

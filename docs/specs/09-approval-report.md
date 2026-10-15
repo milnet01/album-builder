@@ -30,8 +30,10 @@ step:export-commit
 
 step:render-tmp
     Render Jinja2 template once → one in-memory HTML string (assets inlined as data: URIs).
-    Write reports/<album> - YYYY-MM-DD.html.tmp via Spec 10 atomic_write_text.
-    Render WeasyPrint(html_string) into reports/<album> - YYYY-MM-DD.pdf.tmp.
+    Render WeasyPrint(html_string) to PDF bytes in memory (a failure here takes the
+    Spec 24 §4.3b HTML-only path below, before any .tmp exists).
+    Write reports/<album> - YYYY-MM-DD.html.tmp and .pdf.tmp, each with flush + fsync
+    (Spec 10 §Atomic pair Phase 1), then fsync reports/.
     Both .tmp files are now on disk. Status still draft. (Atomic-pair invariant
     per Spec 10 §Atomic pair (multi-file transactions): both .tmp written before
     either rename is attempted.)
@@ -150,7 +152,7 @@ Long lyric lines (>500 chars) wrap via CSS `overflow-wrap: anywhere` so a single
 - **Template engine:** Jinja2.
 - **PDF rendering:** WeasyPrint. Fully CSS-driven; supports gradients, custom fonts, page-break controls.
 - **HTML output:** the same Jinja2 render, served as standalone HTML (assets inlined as base64 data URIs so the file is single-file portable for emailing).
-- **Fonts:** the report uses theme-matched fonts. Since Linux availability varies, we either bundle a free-licensed font (e.g., Inter, SIL OFL) or fall back to system sans/serif via CSS `font-family` stack. Glyphs missing from the chosen font (rare Unicode in lyrics) fall back via the CSS stack to `Noto Sans` / `system-ui`; tofu (`?` boxes) is acceptable as last resort, not an error. Every font the PDF embeds must be one a PDF reader accepts. The stack leaves out Cantarell: on openSUSE it resolves to the variable `Cantarell-VF.otf`, whose WeasyPrint subset poppler rejects (`Embedded font file may be invalid`) and Ghostscript replaces with a substitute font (MUSI-0390).
+- **Fonts:** the report uses theme-matched fonts. Since Linux availability varies, we either bundle a free-licensed font (e.g., Inter, SIL OFL) or fall back to system sans/serif via CSS `font-family` stack. Glyphs missing from the chosen font (rare Unicode in lyrics) fall back via the CSS stack to `Noto Sans` / `system-ui`; tofu (`?` boxes) is acceptable as last resort, not an error. Every font the stack names must embed in a form PDF readers accept. The stack leaves out Cantarell: on openSUSE it resolves to the variable `Cantarell-VF.otf`, which WeasyPrint embeds in a form poppler rejects (`Embedded font file may be invalid`) and Ghostscript replaces with a substitute font (MUSI-0390). The stack ends in `"DejaVu Sans"` before the generic `system-ui, sans-serif`, so the last named fallback is a TrueType font. Text in a script none of the named fonts covers (CJK lyrics, say) still falls back glyph by glyph to a system font, which may embed the same way; that case is tracked as MUSI-0391.
 - **Images:** all cover images embedded in the HTML as data URIs to keep the file single-file. PDF embeds them natively.
 - **Helper — `version_string() -> str`:** returns `src.album_builder.version.__version__` at call time. On `ImportError` (frozen-app or test-isolation context), returns `"unknown"` and logs a warning; never aborts the render. Used in §Cover page footer + §Footer.
 
@@ -262,7 +264,7 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-09-28** — Artist-view template stripping. `render_html(album, library, artist_view=True)` produces an HTML string that (a) does **not** contain the cover-art element (`<img class="cover-art">` / `<div class="cover-art">`), (b) does **not** contain the `<div class="status-row">` block, and (c) does **not** contain the `<section class="per-track">` block. The `<table class="tracks">` listing table and the `<footer class="report-footer">` are still present and byte-identical to the full-variant render given the same inputs.
 - **TC-09-29** — Approve renders both pairs. After a successful `AlbumStore.approve(album_id)`, `reports/` contains exactly four files: `{name} - {date}.html`, `{name} - {date}.pdf`, `{name} - {date} - artist.html`, `{name} - {date} - artist.pdf`. All four are non-zero size. Asserted via an exact-count check (not a glob that could pass with only the full variant present).
 - **TC-09-30** — Artist-view atomic-pair recovery is independent of the full variant. A simulated crash between `step:render-rename-html` and `step:render-rename-pdf` of the **artist** pair (with the **full** pair already complete on disk) leaves: full `.html` + full `.pdf` + artist `.html` + artist `.pdf.<pid>.<uuid>.tmp`. The Spec 10 §Atomic pair load-time scan removes both artist-pair members (the orphan `.html` final + the `.tmp` sibling) but **must not** touch the full-variant pair.
-- **TC-09-31** — Embedded fonts are readable. `pdffonts` on the PDF `render_report` writes prints no `Embedded font file may be invalid` line. Skipped where `pdffonts` is absent. It goes red only on a machine that has a font which embeds badly, such as Cantarell's variable font (MUSI-0390).
+- **TC-09-31** — Embedded fonts are readable. `pdffonts` on the PDF `render_report` writes for an album with Latin, Arabic and Hebrew text prints no `Embedded font file may be invalid` line. A second case renders the same album with `Cantarell` forced to the front of the stack and expects that line, so the check is shown to catch a bad font. Both are skipped where `pdffonts` is absent; the second also where Cantarell is not installed (MUSI-0390).
 
 (Visual regression — pixel-diff PDF vs golden — stays manual / opt-in. Not part of the TC contract because pixel-exact comparison is brittle.)
 
@@ -271,5 +273,5 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - Email-the-report directly from the app.
 - Editable report (e.g., add custom artist notes that flow into the report). v2 with an album notes field.
 - Audio previews embedded in HTML (would inflate file size and complicate single-file portability).
-- Multi-language reports.
+- One report holding more than one language (Spec 25 renders each report in the active language).
 - Custom report templates / themes.
