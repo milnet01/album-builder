@@ -335,7 +335,7 @@ requires it) - see §9.
   render with a *system* font (verified: WeasyPrint writes a non-empty PDF with no
   bundled font), so its pass alone does not prove the bundle's font is present.
   (b) and (c) are structural checks no system fallback can mask; AND (d) the
-  workflow re-runs `--selftest` inside a **clean `ubuntu:22.04`** with no
+  workflow runs (a) inside a **clean `ubuntu:22.04`** with no
   WeasyPrint/Pango stack installed (§4.5) - the definitive dynamic proof, since
   there a missing bundled lib or font has no system copy to borrow. *Breaks when:*
   any of the five required §4.2 libraries or its transitive closure is missing
@@ -417,8 +417,8 @@ requires it) - see §9.
   fixed glibc floor and library set, not a bit-reproducible build.
 - **INV-23-11** - The bundle can save a file the way the app saves its data.
   *Test:* (a) TC-23-04 - `--selftest` returns 1 and names the save when
-  `atomic_write_text` fails; (b) the real-bundle `--selftest` runs that INV-23-2
-  already makes, which now include the save. *Breaks when:* the atomic-write path
+  `atomic_write_text` fails; (b) the clean-container `--selftest` run of INV-23-2
+  (d), which now includes the save. *Breaks when:* the atomic-write path
   (`atomic_write_text` -> `_atomic_write` -> `_fsync_dir`) raises on the target
   platform - MUSI-0379's `os.O_DIRECTORY` is the case that shipped.
 
@@ -563,7 +563,7 @@ only this catcher.
 | INV-23-1 (arg path) | `tests/test_TC_23_appimage.py::test_version_flag` (TC-23-01) |
 | INV-23-1 (real bundle) | `appimage.yml` `--version` inside a clean `ubuntu:22.04` (the headless runner lacks the base GL/EGL libs to run it; CI-only) |
 | INV-23-2 (render probe) | `test_TC_23_appimage.py::test_selftest` (TC-23-02, `slow`) |
-| INV-23-2 (real bundle libs + font) | `appimage.yml`: `--selftest` + structural presence of the five required `usr/lib` sonames + `etc/fonts/fonts.conf` + a font, AND `--selftest` inside a clean `ubuntu:22.04` with no Pango stack (the definitive check - no system copy to borrow) |
+| INV-23-2 (real bundle libs + font) | `appimage.yml`: structural presence of the five required `usr/lib` sonames + `etc/fonts/fonts.conf` + a font, AND `--selftest` inside a clean `ubuntu:22.04` with no Pango stack (the definitive check - no system copy to borrow) |
 | INV-23-3 | `appimage.yml` filename-vs-`--version` assertion (in the clean container) + a static grep on the runner that stage 1 reads `version.py` (CI-only) |
 | INV-23-4 | `appimage.yml` `find ... pyproject.toml` + `! grep -q ALBUM_BUILDER_DEV_MODE AppRun` over the extracted AppDir - **CI-only** |
 | INV-23-5 | `appimage.yml` `find ... torch/whisperx` over the extracted AppDir - **CI-only** |
@@ -572,7 +572,7 @@ only this catcher.
 | INV-23-8 | **nothing automated** - proven only by an actual tagged release; the workflow file is the static artifact a cold reader checks |
 | INV-23-9 | **nothing mechanical** - the parity is structural (like `ci.yml` -> `local-CI.sh`); a cold reader confirms `appimage.yml` only calls `build-appimage.sh` |
 | INV-23-10 | `grep` in `build-appimage.sh` that the base image carries an `@sha256:` digest and each tool a version tag (a cold reader, or a CI lint step once the script exists) |
-| INV-23-11 | `test_TC_23_appimage.py::test_selftest_fails_when_save_fails` (TC-23-04) + every real-bundle `--selftest` run listed for INV-23-2 |
+| INV-23-11 | `test_TC_23_appimage.py::test_selftest_fails_when_save_fails` (TC-23-04) + the clean-container `--selftest` run in `appimage.yml` (INV-23-2 (d)) |
 
 ## 12. Cross-doc impact
 
@@ -627,5 +627,6 @@ only this catcher.
 | 4 | 2026-07-28 | 2 cold (internal+shell / cross-doc+arch) | 0 | 2 | 2 | 6 | Cross-doc/architecture lane **converged** (all findings polish; every factual claim re-confirmed exact - Spec 22/12 citations, ROADMAP, README lines 33/36, WeasyPrint six libs, `_running_from_source_tree` hops, linuxdeploy-plugin-python deprecation). Internal/shell lane found concrete testability/shell fixes, no design change. **HIGH:** the §4.3 AppRun snippet lacked a `#!/bin/sh` shebang (AppRun is exec'd directly -> ENOEXEC) -> added; INV-23-3's test could not catch a wrong version *source* while `/bump` keeps `version.py`/`pyproject.toml` synced -> added a static "stage 1 reads `version.py`" check. **MED:** `--selftest` can dlopen a system lib and mask a missing bundle lib -> added a `squashfs-root/usr/lib` soname-presence check (INV-23-2); §4.5 upload now creates the Release if absent (INV-23-8). **LOW:** INV-23-8 test checks the `permissions` block; INV-23-6 gains a real-bundle `desktop-file-validate`; INV-23-5 `find` parens; Spec 09 reference justified (§4.4); "security cadence" -> the standard's actual "sweep"; `runs-on` pinned to `ubuntu-24.04` like `ci.yml`. |
 | 5 | 2026-07-28 | 2 cold (internal+shell / cross-doc+arch) | 0 | 0 | 4 | 1 | Cross-doc/architecture lane **clean again (NO FINDINGS)** - design converged, every fact independently re-verified a 2nd time. Internal/shell lane found shell/test-clause precision, two claims **confirmed by running them**. **MED:** INV-23-2's font half was untested (`--selftest` renders with a *system* font - verified live) -> added a structural `fonts.conf`+font presence check; INV-23-4 used `grep -c ... -> 0`, which exits 1 on zero matches and aborts a `set -e` step (verified live) -> switched to `! grep -q`; §7's CI-only list omitted INV-23-6 (which §4.5/§11 exercise every run) -> added; §4.1 rootful `docker run` would leave `dist/` root-owned -> `--user $(id -u):$(id -g)` + §6 note. **LOW:** AppRun guards a glob-no-match with a clear error. No HIGH/CRITICAL; no design change. |
 | 6 | 2026-10-15 | 2 cold (every lane held every question), via neutral-lane; gate on the MUSI-0380 amendment (INV-23-11, TC-23-04, §4.4 save bullet) | - | - | - | - | Loop 1 of this run. Q1 0 · Q2 0 · Q3 1 · Q4 0 (verified 1 / fixed 1 / dismissed 0). **Q3:** TC-23-04 quoted `selftest: save failed` as if the whole stderr line, while the existing `_selftest` failures append the error after a colon -> §4.4 now says the line starts with that text and the error follows; TC-23-04 asserts stderr contains it. Lane B: no findings. Five open questions resolved clean, none became a finding (where the WeasyPrint import sits, the fault-injection point, `slow` marking, the read-back mismatch text, ROADMAP wording). |
+| 7 | 2026-10-15 | 2 cold (every lane held every question), via neutral-lane | - | - | - | - | Loop 2 of this run, at the spec cap of 2. Q1 0 · Q2 1 · Q3 0 · Q4 0 (verified 1 / fixed 1 / dismissed 0); both lanes raised the same finding, merged. **Q2:** the §11 INV-23-2 row named a `--selftest` on the runner as well as in the clean container, while §4.5 and `appimage.yml` run the AppImage only in the container - and the new INV-23-11 (b) and its §11 row borrowed that list. Fixed: the §11 row names only the container run; INV-23-2 (d) now says it runs (a) there; INV-23-11 (b) and its row cite that one run. **Calm cap:** the finding's anchor was pre-existing text (0 of 1 on text this run wrote); 1 of the run's 2 findings fell inside the gated span (`20e6833`). This loop's fix is read by no lane; implementation is its reader. Four open questions resolved clean (read-back mismatch untested, docstring to update with the code, container `/tmp` fsync, where the test name is fixed). |
 
 _**Converged / accepted at loop 5 (2026-07-28), user decision.** The cross-doc/architecture lane returned zero findings at loops 4 and 5 (design + every cross-reference verified twice); the internal/shell lane's remaining findings were executable-detail precision in test clauses and shell snippets, all fixed. Convergence is designed for 1-3 loops - the extra loops were spent on the loop-1 containerisation rewrite's new surface, not on unstable design. Residual command-level detail validates when `build-appimage.sh` + `appimage.yml` actually run._
