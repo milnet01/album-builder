@@ -95,11 +95,23 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
 1.0 ships when S1-S7 in docs/discovery.md each have a passing check
 (docs/standards/versioning-overrides.md).
 
-- 📋 [MUSI-0372] **S1 check: time opening and searching a 1,000-song library.**
+- ✅ [MUSI-0372] **S1 check: time opening and searching a 1,000-song library.**
   Serves S1 (docs/discovery.md). Generate a 1,000-song demo library
   (extend ~/.cache/album-builder-demo/make_demo.sh), then measure time to
   a loaded library and search response while typing. Record the numbers
   here; turn them into a regression test if cheap.
+  Measured 2026-10-15: S1 passes. Library: 1,000 invented MP3s
+  (775 MB, 200 s each, 30% with lyrics, 20% with cover art), built by
+  ~/.cache/album-builder-demo/make_big.py; timed by time_big.py beside
+  it, which mirrors app.run() offscreen up to window.show(). Four runs,
+  cold page cache (posix_fadvise DONTNEED) and warm alternated: start to
+  window shown 2.40-3.09 s with 1,000 rows (library scan 1.68-2.35 s of
+  that); typing a search one key at a time, slowest keystroke 36 ms
+  (5-36 ms across "harbour" 79 rows, a two-word query, "zzz"). Machine
+  was NOT quiet: another session's ut-bake held ~8.5 of 12 cores (load
+  average ~20), so these are upper bounds. No regression test: a
+  wall-clock assertion would be flaky under exactly this kind of load
+  (see MUSI-0385); rerun time_big.py instead.
   **Layman:** Proves the app stays quick with a big music folder.
   Kind: test.
   Source: check-queue-2026-09-28.
