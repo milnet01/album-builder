@@ -128,7 +128,7 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: test.
   Source: check-queue-2026-09-28.
 
-- 📋 [MUSI-0374] **S3 check: measure lyric timing against the half-second bar.**
+- ✅ [MUSI-0374] **S3 check: measure lyric timing against the half-second bar.**
   Serves S3 (docs/discovery.md). On a few aligned songs, compare each
   LRC line time against a hand-marked start time; report how many lines
   fall within 0.5 s. Needs WhisperX installed.
@@ -148,6 +148,21 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   segments* with lyric lines by index, not line by line, so a segment
   that merges two lines shifts every later line. Speech is easier than
   singing, so a pass is an optimistic bound; say so.
+  Result (2026-10-15): S3 met on speech. A piper voice
+  (en_US-lessac-medium) spoke 10 invented lines over a quiet tone bed;
+  ground truth is each clip's placement plus its speech onset (10 ms RMS
+  frames, cross-checked against ffmpeg silencedetect: the two agree
+  within 0.05 s). AlignmentWorker._do_alignment from this repo's src/,
+  model medium.en (the app default), run in the separate venv.
+  - Gaps 1.5-3 s: 10/10 lines within 0.5 s; worst error 0.047 s.
+  - Gaps 0.3 s: 10/10 lines within 0.5 s; worst error 0.078 s.
+  Both runs gave exactly 10 segments for 10 lines, so the index pairing
+  in _segments_to_lyrics was never stressed. Limits: speech, not
+  singing, so this is an optimistic bound; each line is a full sentence,
+  which likely helps segmentation. A sung song whose lines WhisperX
+  merges into one segment would still shift every later line. The
+  script and outputs are in /mnt/Games/Scripts/Linux/album-builder-s3
+  (s3_check.py; work/result-medium.en*.json); not part of the repo.
   **Layman:** Checks that lyrics light up within half a second of being sung.
   Kind: test.
   Source: check-queue-2026-09-28.
