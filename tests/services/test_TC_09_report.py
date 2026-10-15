@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import io
 import re
+import shutil
+import subprocess
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -457,3 +459,66 @@ def test_TC_09_30_artist_variant_recovery_independent_of_full(tmp_path):
     # Stats: 1 complete (full) + 1 repaired (artist orphan).
     assert stats["pairs_completed"] == 1
     assert stats["pairs_repaired"] == 1
+
+
+# --- TC-09-31 embedded fonts are readable ---
+
+_BAD_FONT_LINE = "Embedded font file may be invalid"
+
+
+def _pdffonts_stderr(pdf: Path) -> str:
+    result = subprocess.run(
+        ["pdffonts", str(pdf)], capture_output=True, text=True, check=True,
+    )
+    return result.stderr
+
+
+def _cantarell_is_variable() -> bool:
+    if shutil.which("fc-match") is None:
+        return False
+    found = subprocess.run(
+        ["fc-match", "--format=%{file}", "Cantarell"], capture_output=True, text=True,
+    )
+    return Path(found.stdout).name == "Cantarell-VF.otf"
+
+
+def _render_multiscript_report(tmp_path) -> Path:
+    paths = _seed_paths(tmp_path, 3)
+    library = _FakeLibrary({
+        paths[0]: _make_track(paths[0], title="Green Hours", artist="The Quiet Orchard"),
+        paths[1]: _make_track(paths[1], title="\u0645\u0631\u062d\u0628\u0627",
+                              lyrics_text="\u0645\u0631\u062d\u0628\u0627 \u0628\u0643"),
+        paths[2]: _make_track(paths[2], title="\u05e9\u05dc\u05d5\u05dd",
+                              lyrics_text="\u05e9\u05dc\u05d5\u05dd \u05e2\u05d5\u05dc\u05dd"),
+    })
+    album = _make_album(paths, name="Fonts")
+    _html, pdf = render_report(
+        album, library, reports_dir=tmp_path / "reports", today=date(2026, 10, 15),
+    )
+    assert pdf is not None
+    return pdf
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(shutil.which("pdffonts") is None, reason="pdffonts not installed")
+def test_TC_09_31_embedded_fonts_are_readable(tmp_path):
+    # Spec: TC-09-31
+    stderr = _pdffonts_stderr(_render_multiscript_report(tmp_path))
+    assert _BAD_FONT_LINE not in stderr, stderr
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(shutil.which("pdffonts") is None, reason="pdffonts not installed")
+@pytest.mark.skipif(not _cantarell_is_variable(), reason="Cantarell is not the variable font")
+def test_TC_09_31_check_catches_cantarell(tmp_path, monkeypatch):
+    # Spec: TC-09-31 - the check above can fail: force Cantarell to the front.
+    real_render_html = report_module.render_html
+
+    def _cantarell_first(*args, **kwargs):
+        return real_render_html(*args, **kwargs).replace(
+            "font-family: ", 'font-family: "Cantarell", ', 1,
+        )
+
+    monkeypatch.setattr(report_module, "render_html", _cantarell_first)
+    stderr = _pdffonts_stderr(_render_multiscript_report(tmp_path))
+    assert _BAD_FONT_LINE in stderr

@@ -309,7 +309,7 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Source: in-session-2026-10-10 CI run 38038388285.
   Lanes: tests, services.
 
-- 🚧 [MUSI-0390] **The report PDF embeds a broken font where Cantarell is installed, so it can print wrong.**
+- ✅ [MUSI-0390] **The report PDF embeds a broken font where Cantarell is installed, so it can print wrong.**
   Found running the S5 check. report.html.j2's font stack puts "Cantarell"
   before "Noto Sans"; on openSUSE that resolves to the variable font
   /usr/share/fonts/truetype/Cantarell-VF.otf (CFF). WeasyPrint 70 embeds a
@@ -320,6 +320,12 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   (TrueType) embed cleanly. Affects source installs on machines with
   Cantarell; the AppImage's own fontconfig lists only DejaVuSans.ttf.
   Fix: drop Cantarell from the report stack (Spec 09 Fonts + a new TC).
+  Shipped 2026-10-15. Spec 09 Fonts + TC-09-31, gated by review-contract
+  (docs/reviews/C-20261015-spec09-fonts.md, 2 loops, cap). The report
+  stack drops Cantarell and ends in "DejaVu Sans" before system-ui.
+  TC-09-31 renders a Latin/Arabic/Hebrew report and runs pdffonts: red
+  before the template change (the "may be invalid" line), green after;
+  its control case forces Cantarell first and must see the line.
   **Layman:** On computers with the Cantarell font, the report PDF carried a damaged copy of it, so some printers would show the wrong font and drop symbols.
   Kind: fix.
   Source: in-session-2026-10-15 MUSI-0376 check.

@@ -15,6 +15,9 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Fixed
 
+- **Printed album reports keep their bold title and symbols** (MUSI-0390)
+  On computers with the Cantarell font, the report PDF carried a damaged copy of that font. Some printers then printed the title in plain type and left out the dots and other symbols. The report now uses a font that every printer reads correctly.
+
 - **The app no longer risks freezing when music stops as you close it** (MUSI-0388)
   Rarely, stopping playback while the window closed could leave the app
   stuck. The automatic checks caught it happening, and it is now fixed.
