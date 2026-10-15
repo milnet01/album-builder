@@ -1,5 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
+<!-- ants-roadmap-id-high-water: MUSI=389 -->
 
 # Album Builder — Roadmap
 
@@ -208,6 +209,18 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   the full gate passed on rerun. Both wait on the real QtMultimedia
   backend's state change. Find why the backend can stop rather than
   pause under load before widening any timeout.
+  Located 2026-10-15 (locate-defect). Every test track is a copy of
+  silent_1s.mp3 (tests/conftest.py tagged_track); the player reports
+  1.071 s. Throwaway sweep, pausing N ms after _on_preview_play on an idle
+  machine: <1000 ms gives PLAYING -> PAUSED; >=~1000 ms gives
+  PLAYING -> STOPPED -> PAUSED (the clip ended by itself first). Idle, the
+  final PAUSED still lands within 50 ms. So under load the clip can end
+  mid-test and the pause lands on a stopped player. Not yet caught:
+  a run that ENDS on STOPPED (needs heavy load). Freezing the main
+  thread with time.sleep did NOT reproduce it - playback stalls too.
+  Fix direction (proposed, user not yet asked to approve): give these two tests a clip long enough that
+  it cannot end mid-test (e.g. 30 s silence); do NOT just widen
+  timeouts. Confirm by asserting no STOPPED between play and pause.
   **Layman:** Two automatic checks of the play/pause button sometimes fail when the computer is very busy, even though the app is fine.
   Kind: test.
   Source: in-session-2026-10-08.
