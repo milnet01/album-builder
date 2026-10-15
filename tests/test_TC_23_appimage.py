@@ -1,6 +1,6 @@
 """Spec 23 (AppImage distribution) - headless entry points and desktop entry.
 
-Covers the unit-testable arg paths of INV-23-1/2 and the desktop-template half
+Covers the unit-testable arg paths of INV-23-1/2/11 and the desktop-template half
 of INV-23-6. The real-bundle checks (INV-23-1/2 against a built AppImage,
 INV-23-4/5 against the extracted AppDir, and INV-23-6 against the bundled
 `.desktop`) live in `.github/workflows/appimage.yml`, not here: a real AppImage
@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from album_builder import app as app_module
+from album_builder.persistence import atomic_io
 from album_builder.version import __version__
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -63,6 +64,22 @@ def test_selftest(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     monkeypatch.setattr(app_module.sys, "argv", ["album-builder", "--selftest"])
     assert app_module.run() == 0
     assert "ok" in capsys.readouterr().out
+
+
+def test_selftest_fails_when_save_fails(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Spec: TC-23-04
+    _forbid_qapplication(monkeypatch)
+
+    def _fsync_dir_as_on_windows(_directory: Path) -> None:
+        # MUSI-0379: the error that escaped the save on Windows.
+        raise AttributeError("module 'os' has no attribute 'O_DIRECTORY'")
+
+    monkeypatch.setattr(atomic_io, "_fsync_dir", _fsync_dir_as_on_windows)
+    monkeypatch.setattr(app_module.sys, "argv", ["album-builder", "--selftest"])
+    assert app_module.run() == 1
+    assert "selftest: save failed" in capsys.readouterr().err
 
 
 @pytest.mark.skipif(

@@ -190,12 +190,18 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   **Layman:** Small improvements: a friendlier first launch, undo for deletions, faster startup, and fixing documents that no longer match the app.
   Kind: implement.
 
-- 📋 [MUSI-0380] **--selftest should also prove a real atomic save works.**
+- ✅ [MUSI-0380] **--selftest should also prove a real atomic save works.**
   Serves S6. The release workflows run --version and --selftest, and
   neither saves anything, so the Windows save crash shipped unnoticed.
   Add an atomic_write_text round-trip in a temp dir to _selftest. This
   amends Spec 23 INV-23-2 and Spec 24's selftest contract, so the spec
   change owes a review-contract gate first.
+  Shipped 2026-10-15. Spec 23 gained INV-23-11 + TC-23-04 and Spec 24
+  INV-24-11 (docs/specs/23-appimage.md, docs/specs/24-windows-bundle.md);
+  review-contract loops 6-7 on Spec 23, calm cap. _selftest now saves
+  and reads back a file through atomic_write_text before the render.
+  TC-23-04 fails the probe with MUSI-0379's AttributeError: red on the
+  old _selftest (returned 0), green after. Gate: 987 passed.
   **Layman:** Make the automatic release check save a file, so a crash like the Windows one is caught before release.
   Kind: test.
   Source: windows-check-2026-09-28.

@@ -132,15 +132,32 @@ def setup_language(app: QApplication, setting: str, *, system_code: str) -> str:
 
 
 def _selftest() -> int:
-    """Liveness probe for the bundled WeasyPrint native stack (Spec 23 INV-23-2).
+    """Liveness probe for a packaged build (Spec 23 INV-23-2, INV-23-11).
 
-    Renders a trivial HTML to PDF using the same Pango/HarfBuzz/fontconfig
-    libraries report generation needs, but without an album - so a packaged
-    build can prove its native libraries load with no display and no data.
-    Returns 0 on a non-empty PDF, 1 on any failure. This is a probe, not report
-    generation: it deliberately does not touch `services/report.py`.
+    First saves and reads back a small file through `atomic_write_text`, the
+    path every album, settings and lyrics save takes - MUSI-0379's Windows
+    crash was on that path, and no release check saved anything. Then renders
+    a trivial HTML to PDF using the same Pango/HarfBuzz/fontconfig libraries
+    report generation needs, but without an album - so a packaged build can
+    prove its native libraries load with no display and no data. Returns 0
+    when both work, 1 on any failure. This is a probe, not report generation:
+    it deliberately does not touch `services/report.py`.
     """
     import tempfile
+
+    from album_builder.persistence.atomic_io import atomic_write_text
+
+    probe = "Album Builder self-test\n"
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            saved = Path(tmp) / "selftest.txt"
+            atomic_write_text(saved, probe)
+            if saved.read_text(encoding="utf-8") != probe:
+                print("selftest: save failed: the file read back different", file=sys.stderr)
+                return 1
+    except Exception as exc:
+        print(f"selftest: save failed: {exc}", file=sys.stderr)
+        return 1
 
     try:
         from weasyprint import HTML

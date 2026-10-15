@@ -8,6 +8,11 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+### Changed
+
+- **The automatic check on each download now also tests saving a file** (MUSI-0380)
+  Before a new Linux or Windows download is published, it now proves it can save a file. A save problem like the one that closed the Windows app in 0.9.1 would stop the release instead of reaching you.
+
 ### Fixed
 
 - **The app no longer risks freezing when music stops as you close it** (MUSI-0388)
