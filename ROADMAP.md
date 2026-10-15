@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: MUSI=391 -->
+<!-- ants-roadmap-id-high-water: MUSI=392 -->
 
 # Album Builder — Roadmap
 
@@ -132,6 +132,22 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Serves S3 (docs/discovery.md). On a few aligned songs, compare each
   LRC line time against a hand-marked start time; report how many lines
   fall within 0.5 s. Needs WhisperX installed.
+  Plan agreed with the owner 2026-10-15 (in progress): no real songs
+  and no hand-marking. Instead, a spoken test track with exactly known
+  line start times. WhisperX 3.8.6 + CPU torch 2.8.0 + piper-tts 1.8.0
+  are installed in a SEPARATE venv,
+  /mnt/Games/Scripts/Linux/album-builder-s3/venv (3.1 GB), so the
+  project .venv and local-CI stay untouched; models download to
+  ~/.cache/huggingface on first use. Next: build ~10 short lines with
+  piper (needs a voice model download), place them at known offsets
+  with 1.5-3 s gaps over a quiet tone bed, detect each clip's speech
+  onset for ground truth, run AlignmentWorker._do_alignment from this
+  repo's src/ inside that venv, compare each LRC time to ground truth,
+  count lines within 0.5 s. Why it is a real test:
+  alignment_worker._segments_to_lyrics pairs WhisperX *transcription
+  segments* with lyric lines by index, not line by line, so a segment
+  that merges two lines shifts every later line. Speech is easier than
+  singing, so a pass is an optimistic bound; say so.
   **Layman:** Checks that lyrics light up within half a second of being sung.
   Kind: test.
   Source: check-queue-2026-09-28.
@@ -172,12 +188,34 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: test.
   Source: check-queue-2026-09-28.
 
-- 📋 [MUSI-0378] **S6 check: a fresh machine runs the download and builds an album.**
+- ✅ [MUSI-0378] **S6 check: a fresh machine runs the download and builds an album.**
   Serves S6 (docs/discovery.md). On a clean Linux machine (glibc 2.35+)
   and a clean 64-bit Windows 10+ machine, run the release download, make
   an album from a few songs, approve it. CI already proves --version and
   --selftest; this proves the whole job. Needed for 1.0
   (docs/standards/versioning-overrides.md).
+  Checked 2026-10-15 against the published v0.9.6 downloads.
+  Linux: AlbumBuilder-0.9.6-x86_64.AppImage in a fresh
+  ubuntu:22.04@sha256:0d779ea9... podman container (the build's
+  BASE_IMAGE) with only libgl1 libegl1 libxkbcommon0 libdbus-1-3
+  libpulse0 libasound2 libxrandr2. --version 0.9.6, --selftest ok; the
+  bundled code (bundled python + AppRun's environment) built and
+  approved a 3-song album from the made-up demo songs: numbered links,
+  playlist.m3u8, .approved, full + artist HTML and PDF; the GUI started
+  offscreen and stayed up. Without libxrandr2 the media plugin
+  (libffmpegmediaplugin.so) does not load, so playback is off; every
+  X11/Wayland desktop ships it, so recorded, not filed. Scripts:
+  /mnt/Games/Scripts/Linux/album-builder-s6/ (run_s6.sh, approve_s6.py).
+  Windows: the 0.9.6 zip on the Windows 10 test PC (ssh wintest; it had
+  no album-builder settings, so near-clean, not brand new). --version
+  0.9.6, --selftest ok (prints a harmless "Fontconfig error: Cannot load
+  default config file"). In the GUI, driven by clicks and keys: library
+  of 10 demo songs loaded, a song played (clock ran 0:01 -> 1:44), New
+  album -> 3 songs picked -> Approve. Result: playlist.m3u8 in the
+  picked order, .approved, full + artist HTML and PDF (A4, Segoe UI and
+  Cascadia Code embedded cleanly); no numbered links, the logged
+  "symlinks unavailable; playlist-only export" path (Spec 22/24).
+  Test PC cleaned afterwards. Found on the way: MUSI-0392.
   **Layman:** Proves the Linux and Windows downloads work on a clean computer with nothing else installed.
   Kind: test.
   Source: review-contract-2026-09-28 versioning-overrides loop 1.
@@ -231,6 +269,10 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   (skipped by decision), cover-art thumbnail cache.
   Serves S1 (docs/discovery.md): a 1,000-song library opens within a few
   seconds and search keeps up. Tagged 2026-09-28.
+  Owner decision 2026-10-15: work this list one part at a time, after
+  MUSI-0374, starting with undo for deleting an album or removing
+  tracks. Check the existing safety net first (AlbumStore's .trash)
+  before building anything.
   **Layman:** Small improvements: a friendlier first launch, undo for deletions, faster startup, and fixing documents that no longer match the app.
   Kind: implement.
 
@@ -349,6 +391,17 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   **Layman:** On computers with the Cantarell font, the report PDF carried a damaged copy of it, so some printers would show the wrong font and drop symbols.
   Kind: fix.
   Source: in-session-2026-10-15 MUSI-0376 check.
+
+- 📋 [MUSI-0392] **On a 1280-pixel screen the library's pick column starts scrolled out of sight.**
+  Seen 2026-10-15 on the Windows test PC (1280x1024, v0.9.6): the
+  library pane shows only the play, Title and Artist columns; the
+  check-mark (pick) column is last and off-screen, so building an album
+  needs a sideways scroll first. Enter on a title cell plays the song
+  rather than picking it. Consider putting the pick column first or
+  pinning it.
+  **Layman:** On a smaller screen, the tick column you use to add songs to an album is hidden off to the right until you scroll sideways.
+  Kind: ux.
+  Source: in-session-2026-10-15 MUSI-0378 Windows check.
 
 ## 0.9.4 — Add music
 
