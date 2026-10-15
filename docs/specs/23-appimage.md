@@ -249,7 +249,9 @@ def run() -> int:
   without changing its contract.)
 - `--selftest` also saves a short text file in a temp folder through
   `persistence.atomic_io.atomic_write_text` and reads it back, before the render.
-  It returns 1 if the save raises or the file reads back different. Album,
+  It returns 1 if the save raises or the file reads back different, after a
+  stderr line starting `selftest: save failed` (the error follows, as in
+  `selftest: render failed: <error>`). Album,
   settings, state and lyric saves all go through `atomic_io`, so this proves the
   bundle can save at all (INV-23-11). Added after MUSI-0379: the Windows build
   crashed on its first save while `--version` and `--selftest` both passed,
@@ -474,8 +476,9 @@ Unit-testable in `tests/` (run in the normal suite):
   the render probe (not the bundle's library closure).
 - **TC-23-03** - `desktop-file-validate` on the rendered `.desktop` exits 0;
   skipped if the tool is absent. Locks INV-23-6.
-- **TC-23-04** (`tests/test_TC_23_appimage.py`) - `run()` with `--selftest` returns 1 and prints
-  `selftest: save failed` on stderr when the atomic write raises the way
+- **TC-23-04** (`tests/test_TC_23_appimage.py`) - `run()` with `--selftest`
+  returns 1, and stderr contains `selftest: save failed`, when the atomic write
+  raises the way
   MUSI-0379's did (an `AttributeError` from `_fsync_dir`). Locks INV-23-11's
   probe.
 
@@ -623,5 +626,6 @@ only this catcher.
 | 3 | 2026-07-28 | 2 cold (internal+shell / cross-doc+arch; code-accuracy skipped - its §2/§4.4 claims byte-unchanged and clean in loops 1-2) | 0 | 2 | 3 | 3 | 9 verified (+1 INFO), all fixed. Architecture confirmed coherent; findings are now refinements, not rewrites. **HIGH:** INV-23-3's filename half had no CI catcher (§4.5 only ran `--version`) -> added a filename-vs-`$VERSION` assertion + listed INV-23-3 in §7's CI-only set; INV-23-10 overclaimed "every build input pinned" while the `pip` deps are deliberately floors-only -> rescoped to build **tooling**, floors-only posture stated. **MED:** INV-23-10 grep was gameable (name-presence, not ref-inspection) -> test now inspects the fetch/run lines; base-image digest given a security-refresh trigger (not a permanent freeze, §12); reconciled Spec 12's AppImage *out-of-scope (v1)* line (now superseded - header + §12). **LOW:** §6 no-network names stage-3 `pip`; INV-23-4 hop-count off-by-one corrected against `app.py`; README citation split to lines 33/36. **INFO:** unsourced "project test convention" reworded to CLAUDE.md's contract-anchor practice. |
 | 4 | 2026-07-28 | 2 cold (internal+shell / cross-doc+arch) | 0 | 2 | 2 | 6 | Cross-doc/architecture lane **converged** (all findings polish; every factual claim re-confirmed exact - Spec 22/12 citations, ROADMAP, README lines 33/36, WeasyPrint six libs, `_running_from_source_tree` hops, linuxdeploy-plugin-python deprecation). Internal/shell lane found concrete testability/shell fixes, no design change. **HIGH:** the §4.3 AppRun snippet lacked a `#!/bin/sh` shebang (AppRun is exec'd directly -> ENOEXEC) -> added; INV-23-3's test could not catch a wrong version *source* while `/bump` keeps `version.py`/`pyproject.toml` synced -> added a static "stage 1 reads `version.py`" check. **MED:** `--selftest` can dlopen a system lib and mask a missing bundle lib -> added a `squashfs-root/usr/lib` soname-presence check (INV-23-2); §4.5 upload now creates the Release if absent (INV-23-8). **LOW:** INV-23-8 test checks the `permissions` block; INV-23-6 gains a real-bundle `desktop-file-validate`; INV-23-5 `find` parens; Spec 09 reference justified (§4.4); "security cadence" -> the standard's actual "sweep"; `runs-on` pinned to `ubuntu-24.04` like `ci.yml`. |
 | 5 | 2026-07-28 | 2 cold (internal+shell / cross-doc+arch) | 0 | 0 | 4 | 1 | Cross-doc/architecture lane **clean again (NO FINDINGS)** - design converged, every fact independently re-verified a 2nd time. Internal/shell lane found shell/test-clause precision, two claims **confirmed by running them**. **MED:** INV-23-2's font half was untested (`--selftest` renders with a *system* font - verified live) -> added a structural `fonts.conf`+font presence check; INV-23-4 used `grep -c ... -> 0`, which exits 1 on zero matches and aborts a `set -e` step (verified live) -> switched to `! grep -q`; §7's CI-only list omitted INV-23-6 (which §4.5/§11 exercise every run) -> added; §4.1 rootful `docker run` would leave `dist/` root-owned -> `--user $(id -u):$(id -g)` + §6 note. **LOW:** AppRun guards a glob-no-match with a clear error. No HIGH/CRITICAL; no design change. |
+| 6 | 2026-10-15 | 2 cold (every lane held every question), via neutral-lane; gate on the MUSI-0380 amendment (INV-23-11, TC-23-04, §4.4 save bullet) | - | - | - | - | Loop 1 of this run. Q1 0 · Q2 0 · Q3 1 · Q4 0 (verified 1 / fixed 1 / dismissed 0). **Q3:** TC-23-04 quoted `selftest: save failed` as if the whole stderr line, while the existing `_selftest` failures append the error after a colon -> §4.4 now says the line starts with that text and the error follows; TC-23-04 asserts stderr contains it. Lane B: no findings. Five open questions resolved clean, none became a finding (where the WeasyPrint import sits, the fault-injection point, `slow` marking, the read-back mismatch text, ROADMAP wording). |
 
 _**Converged / accepted at loop 5 (2026-07-28), user decision.** The cross-doc/architecture lane returned zero findings at loops 4 and 5 (design + every cross-reference verified twice); the internal/shell lane's remaining findings were executable-detail precision in test clauses and shell snippets, all fixed. Convergence is designed for 1-3 loops - the extra loops were spent on the loop-1 containerisation rewrite's new surface, not on unstable design. Residual command-level detail validates when `build-appimage.sh` + `appimage.yml` actually run._
