@@ -237,6 +237,9 @@ phase adds **no** new flags:
   (Spec 23 INV-23-2). Because `windows-latest` has no system GTK stack, a green
   `--selftest` on the runner proves the DLLs are genuinely bundled, not borrowed
   (the Windows analogue of Spec 23's clean-container run).
+- `--selftest` also round-trips an atomic save (Spec 23 INV-23-11). On Windows
+  that is the check MUSI-0379 lacked: the build crashed on its first save while
+  both flags passed (INV-24-11).
 
 `app._selftest` stays independent of `services/report.py` (it needs no album) - it
 is the build's load-probe, run in CI (§4.5). The runtime fallback (§4.3b) is a
@@ -379,6 +382,10 @@ tried first and did not restore stdout under PowerShell output capture.)
   a floating `latest`/branch reference. *Breaks when:* a tooling input is fetched by
   a moving reference, so a changed upstream silently enters an artifact users run
   unsigned.
+- **INV-24-11** - The bundle can save a file the way the app saves its data.
+  *Test:* `AlbumBuilder.exe --selftest` exits 0 on `windows-latest`; its save half
+  (Spec 23 INV-23-11) fails it when `atomic_write_text` raises. *Breaks when:* the
+  atomic-write path raises on Windows, as MUSI-0379's `os.O_DIRECTORY` did.
 
 ## 6. Failure modes
 
@@ -522,8 +529,9 @@ is the leg CI cannot cover (§3) and gates "shipped".
 | INV-24-8 | **nothing automated** - proven only by an actual tagged release; the workflow file is the static artifact a cold reader checks |
 | INV-24-9 | **nothing mechanical** - the parity is structural (like `ci.yml` -> `local-CI.sh`); a cold reader confirms `windows.yml` only calls `build-windows.ps1` |
 | INV-24-10 | **nothing mechanical** - a cold reader (or a future CI lint) confirms PyInstaller and the action carry fixed versions in `build-windows.ps1` / `windows.yml` |
+| INV-24-11 | `windows.yml` `--selftest` on `windows-latest` (the save half, Spec 23 INV-23-11) + `tests/persistence/test_TC_24_04_atomic_write_without_o_directory.py` (TC-24-04) |
 
-Ten rows, **three** bolded `nothing` - the honest error budget (§0 of the format
+Eleven rows, **three** bolded `nothing` - the honest error budget (§0 of the format
 standard). All three are release-plumbing invariants with no per-run automated
 catcher, the same class Spec 23 carried (its INV-23-8/9/10).
 

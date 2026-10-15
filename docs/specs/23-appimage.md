@@ -247,6 +247,13 @@ def run() -> int:
   `services/report.py` (which needs an album). (This is why Spec 09 is a
   reference in the header: Dist-2 must keep its report flow working in the bundle,
   without changing its contract.)
+- `--selftest` also saves a short text file in a temp folder through
+  `persistence.atomic_io.atomic_write_text` and reads it back, before the render.
+  It returns 1 if the save raises or the file reads back different. Album,
+  settings, state and lyric saves all go through `atomic_io`, so this proves the
+  bundle can save at all (INV-23-11). Added after MUSI-0379: the Windows build
+  crashed on its first save while `--version` and `--selftest` both passed,
+  because neither saved anything.
 
 `__version__` is the single version source the build reads (§4.1 stage 1);
 `pyproject.toml`'s `version` is a separate copy kept in sync by `/bump` (§6).
@@ -406,6 +413,12 @@ requires it) - see §9.
   dependency-currency standard's periodic **sweep** (§12), not frozen forever;
   byte-identical `apt` package versions are not pinned (§9) - the guarantee is a
   fixed glibc floor and library set, not a bit-reproducible build.
+- **INV-23-11** - The bundle can save a file the way the app saves its data.
+  *Test:* (a) TC-23-04 - `--selftest` returns 1 and names the save when
+  `atomic_write_text` fails; (b) the real-bundle `--selftest` runs that INV-23-2
+  already makes, which now include the save. *Breaks when:* the atomic-write path
+  (`atomic_write_text` -> `_atomic_write` -> `_fsync_dir`) raises on the target
+  platform - MUSI-0379's `os.O_DIRECTORY` is the case that shipped.
 
 ## 6. Failure modes
 
@@ -461,6 +474,10 @@ Unit-testable in `tests/` (run in the normal suite):
   the render probe (not the bundle's library closure).
 - **TC-23-03** - `desktop-file-validate` on the rendered `.desktop` exits 0;
   skipped if the tool is absent. Locks INV-23-6.
+- **TC-23-04** (`tests/test_TC_23_appimage.py`) - `run()` with `--selftest` returns 1 and prints
+  `selftest: save failed` on stderr when the atomic write raises the way
+  MUSI-0379's did (an `AttributeError` from `_fsync_dir`). Locks INV-23-11's
+  probe.
 
 Each test is written to fail against pre-`--version`/`--selftest` `app.run()`
 (which would construct a `QApplication` and block/headlessly error) before the
@@ -468,7 +485,7 @@ flags are added - the test-first practice the project's test files follow (each
 carries a `# Spec: TC-NN-MM` contract anchor per CLAUDE.md).
 
 CI-only (exercised by `appimage.yml`, not pytest - a real AppImage build is too
-heavy for the unit suite): INV-23-1/2 against the **actual** built artifact,
+heavy for the unit suite): INV-23-1/2/11 against the **actual** built artifact,
 INV-23-3 by comparing the printed version to the produced filename, INV-23-6 by
 `desktop-file-validate` inside the build script (stage 5), and INV-23-4/5 against
 the extracted AppDir are dynamically exercised on every workflow run (every run
@@ -552,6 +569,7 @@ only this catcher.
 | INV-23-8 | **nothing automated** - proven only by an actual tagged release; the workflow file is the static artifact a cold reader checks |
 | INV-23-9 | **nothing mechanical** - the parity is structural (like `ci.yml` -> `local-CI.sh`); a cold reader confirms `appimage.yml` only calls `build-appimage.sh` |
 | INV-23-10 | `grep` in `build-appimage.sh` that the base image carries an `@sha256:` digest and each tool a version tag (a cold reader, or a CI lint step once the script exists) |
+| INV-23-11 | `test_TC_23_appimage.py::test_selftest_fails_when_save_fails` (TC-23-04) + every real-bundle `--selftest` run listed for INV-23-2 |
 
 ## 12. Cross-doc impact
 
