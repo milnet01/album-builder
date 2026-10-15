@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: MUSI=389 -->
+<!-- ants-roadmap-id-high-water: MUSI=390 -->
 
 # Album Builder — Roadmap
 
@@ -296,6 +296,21 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: investigate.
   Source: in-session-2026-10-10 CI run 38038388285.
   Lanes: tests, services.
+
+- 🚧 [MUSI-0390] **The report PDF embeds a broken font where Cantarell is installed, so it can print wrong.**
+  Found running the S5 check. report.html.j2's font stack puts "Cantarell"
+  before "Noto Sans"; on openSUSE that resolves to the variable font
+  /usr/share/fonts/truetype/Cantarell-VF.otf (CFF). WeasyPrint 70 embeds a
+  subset of it that poppler reports as "Syntax Error: Embedded font file
+  may be invalid" on every page, and Ghostscript (used by Linux print
+  filters) draws a substitute: the bold title prints regular, and the
+  "·" separators and "#" glyph go missing. Noto Sans and DejaVu Sans
+  (TrueType) embed cleanly. Affects source installs on machines with
+  Cantarell; the AppImage's own fontconfig lists only DejaVuSans.ttf.
+  Fix: drop Cantarell from the report stack (Spec 09 Fonts + a new TC).
+  **Layman:** On computers with the Cantarell font, the report PDF carried a damaged copy of it, so some printers would show the wrong font and drop symbols.
+  Kind: fix.
+  Source: in-session-2026-10-15 MUSI-0376 check.
 
 ## 0.9.4 — Add music
 
