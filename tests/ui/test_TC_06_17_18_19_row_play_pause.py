@@ -15,8 +15,10 @@ QPushButton text + accessibleName.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
+import pytest
 from PyQt6.QtCore import Qt
 
 from album_builder.domain.album import Album
@@ -25,6 +27,12 @@ from album_builder.services.player import PlayerState
 from album_builder.ui.album_order_pane import AlbumOrderPane
 from album_builder.ui.library_pane import COLUMNS, LibraryPane
 from album_builder.ui.theme import Glyphs
+from tests.conftest import DEFAULT_TAGS, FIXTURES_DIR, _write_tags
+
+# MUSI-0385: the shared 1 s clip can finish by itself before a test pauses
+# it on a busy machine (PLAYING -> STOPPED -> PAUSED). The play/pause tests
+# use a clip long enough that it cannot end mid-test.
+SILENT_30S_MP3 = FIXTURES_DIR / "silent_30s.mp3"
 
 
 def _play_col() -> int:
@@ -55,90 +63,127 @@ def _ord_track(stem: str) -> Track:
 # `main_window` fixture lives in tests/ui/conftest.py (test-audit follow-up).
 
 
-# ---------- TC-06-17 -----------------------------------------------------
-
-# Spec: TC-06-17 — same-row click on the active+playing source pauses without
-# reloading. set_source is called once (the initial load); a second click does
-# not call set_source again, and the player state transitions PLAYING -> PAUSED.
-def test_active_playing_row_click_pauses_without_reload(main_window, qtbot, monkeypatch) -> None:
-    track_paths = [t.path for t in main_window._library_watcher.library().tracks]
-    assert track_paths
-
-    set_source_calls: list[Path | None] = []
-    real_set_source = main_window._player.set_source
-
-    def spy(path):
-        set_source_calls.append(path)
-        real_set_source(path)
-    monkeypatch.setattr(main_window._player, "set_source", spy)
-
-    # First click loads + plays.
-    main_window._on_preview_play(track_paths[0])
-    qtbot.wait(50)
-    assert set_source_calls == [track_paths[0]], "first click loads the track"
-
-    # Force the state to PLAYING for the test (real QMediaPlayer may take
-    # longer than the test window to actually start; the dispatch logic
-    # only cares about the reported state).
-    main_window._player._set_state_for_test(PlayerState.PLAYING)
-
-    # Second click on the same row — must NOT call set_source again. The
-    # dispatch (toggle-vs-reload) runs synchronously inside the click handler,
-    # so the no-reload check is deterministic the instant the call returns.
-    main_window._on_preview_play(track_paths[0])
-    assert set_source_calls == [track_paths[0]], (
-        "TC-06-17: same-row click on active+playing source must not reload "
-        f"(set_source called {len(set_source_calls)} times: {set_source_calls})"
-    )
-    # The toggle routed to the real Player.pause(); its PausedState arrives
-    # asynchronously from the QtMultimedia backend. Poll for it rather than
-    # racing a fixed deadline (mirrors test_transport_play_flips_library_row_glyph
-    # below, which waits on the real PLAYING transition). A fixed 50ms wait
-    # missed this transition under CPU load, flaking the test in a loaded suite.
-    qtbot.waitUntil(
-        lambda: main_window._player.state() == PlayerState.PAUSED, timeout=3000,
-    )
-    # Source unchanged.
-    assert main_window._player.source() == track_paths[0]
+def _stopped_after_playing(states: list[PlayerState]) -> bool:
+    """True when the recorded states show the clip stopping after it began
+    playing - the clip ran out mid-test (MUSI-0385)."""
+    if PlayerState.PLAYING not in states:
+        return False
+    return PlayerState.STOPPED in states[states.index(PlayerState.PLAYING):]
 
 
-# ---------- TC-06-18 -----------------------------------------------------
+class TestRowPlayPauseOnLongClip:
+    """TC-06-17/18 drive the real QtMultimedia backend through play and
+    pause, so they get three-track libraries built from the 30 s clip.
+    `main_window` (tests/ui/conftest.py) picks up this class's `tracks_dir`;
+    every other test keeps the shared 1 s clip."""
 
-# Spec: TC-06-18 — same-row click on the active+paused source resumes.
-def test_active_paused_row_click_resumes_without_reload(main_window, qtbot, monkeypatch) -> None:
-    track_paths = [t.path for t in main_window._library_watcher.library().tracks]
+    @pytest.fixture
+    def tracks_dir(self, tmp_path: Path) -> Path:
+        for name, title in (
+            ("01-intro.mp3", "memoirs intro"),
+            ("02-something-more.mp3", "something more (calm)"),
+            ("03-drift.mp3", "drift"),
+        ):
+            target = tmp_path / name
+            shutil.copy(SILENT_30S_MP3, target)
+            _write_tags(target, **{**DEFAULT_TAGS, "title": title})
+        return tmp_path
 
-    set_source_calls: list[Path | None] = []
-    real_set_source = main_window._player.set_source
+    # ---------- TC-06-17 -------------------------------------------------
 
-    def spy(path):
-        set_source_calls.append(path)
-        real_set_source(path)
-    monkeypatch.setattr(main_window._player, "set_source", spy)
+    # Spec: TC-06-17 — same-row click on the active+playing source pauses
+    # without reloading. set_source is called once (the initial load); a
+    # second click does not call set_source again, and the player state
+    # transitions PLAYING -> PAUSED with no STOPPED between.
+    def test_active_playing_row_click_pauses_without_reload(
+        self, main_window, qtbot, monkeypatch,
+    ) -> None:
+        track_paths = [t.path for t in main_window._library_watcher.library().tracks]
+        assert track_paths
+        states: list[PlayerState] = []
+        main_window._player.state_changed.connect(states.append)
 
-    # Load + play, then pause via the real Player.pause() path so Qt's
-    # underlying QMediaPlayer state matches the python-side state. (Hand-
-    # setting _state = PAUSED while QMediaPlayer is still PlayingState
-    # would make the next play() a Qt-level no-op, blocking the resume.)
-    main_window._on_preview_play(track_paths[0])
-    qtbot.wait(50)
-    assert set_source_calls == [track_paths[0]]
-    main_window._player.pause()
-    qtbot.wait(50)
-    assert main_window._player.state() == PlayerState.PAUSED, (
-        f"setup: expected PAUSED after pause(); got {main_window._player.state()}"
-    )
+        set_source_calls: list[Path | None] = []
+        real_set_source = main_window._player.set_source
 
-    # Click same row again: resume without reload.
-    main_window._on_preview_play(track_paths[0])
-    qtbot.wait(50)
-    assert set_source_calls == [track_paths[0]], (
-        "TC-06-18: same-row click on active+paused source must not reload"
-    )
-    assert main_window._player.state() == PlayerState.PLAYING, (
-        f"TC-06-18: same-row click on active+paused source resumes; "
-        f"state is {main_window._player.state()}"
-    )
+        def spy(path):
+            set_source_calls.append(path)
+            real_set_source(path)
+        monkeypatch.setattr(main_window._player, "set_source", spy)
+
+        # First click loads + plays. Wait on the real PLAYING transition so
+        # the pause below acts on a clip that is actually playing.
+        main_window._on_preview_play(track_paths[0])
+        assert set_source_calls == [track_paths[0]], "first click loads the track"
+        qtbot.waitUntil(
+            lambda: main_window._player.state() == PlayerState.PLAYING, timeout=3000,
+        )
+
+        # Second click on the same row — must NOT call set_source again. The
+        # dispatch (toggle-vs-reload) runs synchronously inside the click
+        # handler, so the no-reload check is deterministic the instant the
+        # call returns.
+        main_window._on_preview_play(track_paths[0])
+        assert set_source_calls == [track_paths[0]], (
+            "TC-06-17: same-row click on active+playing source must not reload "
+            f"(set_source called {len(set_source_calls)} times: {set_source_calls})"
+        )
+        # The toggle routed to the real Player.pause(); its PausedState
+        # arrives asynchronously from the QtMultimedia backend. Poll for it
+        # rather than racing a fixed deadline.
+        qtbot.waitUntil(
+            lambda: main_window._player.state() == PlayerState.PAUSED, timeout=3000,
+        )
+        assert not _stopped_after_playing(states), (
+            f"TC-06-17: the clip stopped between play and pause; states {states}"
+        )
+        # Source unchanged.
+        assert main_window._player.source() == track_paths[0]
+
+    # ---------- TC-06-18 -------------------------------------------------
+
+    # Spec: TC-06-18 — same-row click on the active+paused source resumes.
+    def test_active_paused_row_click_resumes_without_reload(
+        self, main_window, qtbot, monkeypatch,
+    ) -> None:
+        track_paths = [t.path for t in main_window._library_watcher.library().tracks]
+        states: list[PlayerState] = []
+        main_window._player.state_changed.connect(states.append)
+
+        set_source_calls: list[Path | None] = []
+        real_set_source = main_window._player.set_source
+
+        def spy(path):
+            set_source_calls.append(path)
+            real_set_source(path)
+        monkeypatch.setattr(main_window._player, "set_source", spy)
+
+        # Load + play, then pause via the real Player.pause() path so Qt's
+        # underlying QMediaPlayer state matches the python-side state. (Hand-
+        # setting _state = PAUSED while QMediaPlayer is still PlayingState
+        # would make the next play() a Qt-level no-op, blocking the resume.)
+        main_window._on_preview_play(track_paths[0])
+        qtbot.wait(50)
+        assert set_source_calls == [track_paths[0]]
+        main_window._player.pause()
+        qtbot.wait(50)
+        assert main_window._player.state() == PlayerState.PAUSED, (
+            f"setup: expected PAUSED after pause(); got {main_window._player.state()}"
+        )
+        assert not _stopped_after_playing(states), (
+            f"TC-06-18: the clip stopped between play and pause; states {states}"
+        )
+
+        # Click same row again: resume without reload.
+        main_window._on_preview_play(track_paths[0])
+        qtbot.wait(50)
+        assert set_source_calls == [track_paths[0]], (
+            "TC-06-18: same-row click on active+paused source must not reload"
+        )
+        assert main_window._player.state() == PlayerState.PLAYING, (
+            f"TC-06-18: same-row click on active+paused source resumes; "
+            f"state is {main_window._player.state()}"
+        )
 
 
 # ---------- TC-06-15 (amended) -------------------------------------------

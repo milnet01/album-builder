@@ -200,7 +200,7 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: test.
   Source: windows-check-2026-09-28.
 
-- 📋 [MUSI-0385] **Row play/pause tests flake under heavy machine load.**
+- ✅ [MUSI-0385] **Row play/pause tests flake under heavy machine load.**
   tests/ui/test_TC_06_17_18_19_row_play_pause.py:
   test_active_playing_row_click_pauses_without_reload timed out in
   qtbot.waitUntil (3000 ms) and test_active_paused_row_click_resumes_
@@ -221,6 +221,16 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Fix direction (proposed, user not yet asked to approve): give these two tests a clip long enough that
   it cannot end mid-test (e.g. 30 s silence); do NOT just widen
   timeouts. Confirm by asserting no STOPPED between play and pause.
+  Fixed 2026-10-15 (fix direction approved by the user that day). The two
+  tests now sit in TestRowPlayPauseOnLongClip, whose tracks_dir uses
+  tests/fixtures/silent_30s.mp3. Every other test keeps the 1 s clip.
+  Both tests now record state_changed and assert no STOPPED between
+  PLAYING and the pause. TC-06-17 now waits for real PLAYING instead of
+  forcing the state. Red run: throwaway copies with a real 1100 ms
+  qtbot.wait before the pause. On the 1 s clip both failed. TC-06-18
+  failed on the new check (states PLAYING, STOPPED, PAUSED). TC-06-17
+  failed one step earlier: the ended clip made the second click reload.
+  On the 30 s clip both passed. ./local-CI.sh green.
   **Layman:** Two automatic checks of the play/pause button sometimes fail when the computer is very busy, even though the app is fine.
   Kind: test.
   Source: in-session-2026-10-08.
