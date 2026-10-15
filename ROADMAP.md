@@ -144,10 +144,20 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: test.
   Source: check-queue-2026-09-28.
 
-- 📋 [MUSI-0376] **S5 check: approval report prints on A4 in every language.**
+- ✅ [MUSI-0376] **S5 check: approval report prints on A4 in every language.**
   Serves S5 (docs/discovery.md). Approve a demo album in each of the
   eight languages; print or print-preview the PDF on A4 and confirm
   nothing is cut off, with right-to-left layout for Arabic and Hebrew.
+  Checked 2026-10-15 by print preview (no paper). The demo album
+  "Green Hours" rendered in all 8 languages, full and artist view, by
+  ~/.cache/album-builder-demo/render_langs.py: all 16 PDFs are A4
+  (pdfinfo 595.276 x 841.89 pts), 2 pages full / 1 page artist. Every
+  page viewed as rendered by Ghostscript: nothing cut off; Arabic and
+  Hebrew mirror right-to-left (cover on the right, durations on the
+  left). Found and fixed MUSI-0390 on the way (broken embedded font);
+  after it, pdffonts reports no invalid font in any of the 16. Not
+  tested: a real printer, and lyrics in scripts the report fonts lack
+  (MUSI-0391).
   **Layman:** Checks the printed report looks right in every language, Arabic and Hebrew included.
   Kind: test.
   Source: check-queue-2026-09-28.
