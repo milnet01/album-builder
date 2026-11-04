@@ -60,6 +60,9 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   (English + Arabic, demo library) put in
   /mnt/Emulators/aph-handoff/album-builder/ and the Hub website session
   messaged (mailbox id 145).
+  Waiting-on: user (Start Phase MP-1, session continuity, while
+  Distribution's Flatpak and OBS phases wait? Recommend: cut 1.0.0
+  first, then start MP-1, so 1.0 ships what S1-S7 proved, 2026-11-04)
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 
@@ -85,6 +88,10 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   update mechanism (embedded update information plus zsync) worth
   weighing against a custom check of the GitHub releases page.
   The launcher that runs a live checkout must not self-update.
+  Waiting-on: user (Design answers needed before a spec: check on start
+  or on request; ask before installing or install silently. Recommend:
+  check on start at most once a day, always ask, and for the AppImage
+  use its built-in zsync update information, 2026-11-04)
   **Layman:** The app tells you when a newer version is out and can install it for you, so you never have to download it by hand.
   Kind: feature.
   Source: user-request-2026-10-10.
