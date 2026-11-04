@@ -15,10 +15,12 @@ right.](docs/screenshots/album-builder-curate.png)
 
 ## Status
 
-**v0.9.6 (2026-10-10): find songs you have twice, with
-File → Find Duplicates...** It lists exact copies and likely
-copies (same title and artist). It never deletes anything.
-The 0.9 releases also brought adding music by dragging songs
+**v1.0.0 (2026-11-04): every sign of success proven.** You can
+now undo removing a song with Ctrl+Z, the tick column for adding
+songs sits right next to the play button, and printed album
+reports come out on white paper with their bold title intact.
+The 0.9 releases brought finding songs you have twice
+(File → Find Duplicates...); adding music by dragging songs
 onto the window or with File → Add Music...; more
 languages, including Arabic and Hebrew, which mirror the
 window right to left; a music library in the Player tab;

@@ -8,6 +8,10 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-04
+
+**Theme:** Every sign of success proven
+
 ### Added
 
 - **You can undo removing a song from an album** (MUSI-0357)
