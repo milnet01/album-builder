@@ -68,12 +68,12 @@ Three additions, all optional on load:
 | `playback.position_seconds` | number | `>= 0`, one decimal place on write | `0` |
 | `playback.shuffle` | bool | | `false` |
 | `playback.repeat` | string | a `RepeatMode` value: `"off"`, `"one"`, `"all"` | `"off"` |
-| `playback.queue.entries` | array<string> | absolute POSIX paths (Spec 10 §Paths); duplicates allowed | whole `queue` discarded |
+| `playback.queue.entries` | array<string> | absolute POSIX paths; a relative one self-heals per Spec 10 §Paths; duplicates allowed | a non-string entry: whole `queue` discarded |
 | `playback.queue.play_order` | array<int> | a permutation of `range(len(entries))` | whole `queue` discarded |
 | `playback.queue.current` | int | `0 <= current < len(entries)`; a slot in `play_order` | whole `queue` discarded |
 | `window.maximized` | bool | | `false` |
 
-`entries` is natural order and `play_order` holds natural indices, mirroring `PlayQueue._entries` / `_deck`. `current` is the deck slot (`PlayQueue.current_play_order_index()`), so a song queued twice resumes on the right copy. The queue is all-or-nothing because its three fields only mean something together; the other fields self-heal one by one, as the existing `_coerce_window` does.
+`entries` is natural order and `play_order` holds natural indices, mirroring `PlayQueue._entries` / `_deck`. `current` is the deck slot (`PlayQueue.current_play_order_index()`), so a song queued twice resumes on the right copy. The queue is all-or-nothing because its three fields only mean something together; the other fields self-heal one by one, as the existing `_coerce_window` does. An empty queue is written as `"queue": null`, and `null` loads as no queue.
 
 `position_seconds` belongs to the restored current track. `last_played_track_path` is still written and equals the queue's current entry; when both are present and disagree, the queue wins.
 
@@ -109,9 +109,10 @@ class PlaybackController:
 # services/player.py
 class Player:
     def set_source(self, path: Path | None, *, start_seconds: float = 0.0) -> None: ...
+    def resume_point(self) -> float | None: ...  # the held point, or None
 ```
 
-`Player.set_source(..., start_seconds=s)` holds a **resume point**. The first play of that source starts at `s`. A `seek()` before that play moves the resume point. Any later `set_source` drops it. When the duration is known and `s > duration - 5.0`, the resume point is `0` (a song that had nearly finished starts again). Before play, the player is `STOPPED` and `position()` reports the resume point, so the now-playing scrubber and the lyrics line show where play will start.
+`Player.set_source(..., start_seconds=s)` holds a **resume point**. The first play of that source starts at `s`, and then the point is gone. A `seek()` before that play moves the resume point. Any later `set_source` drops it. Wherever the point is read (`resume_point()`, `position()`, the first play), it is `0` when `duration() > 0` and `s > duration() - 5.0` (a song that had nearly finished starts again). Before play, the player is `STOPPED` and `position()` reports the resume point. The point is applied with `QMediaPlayer.setPosition` when the media reaches `LoadedMedia` (§6). That emits `position_changed`, which the now-playing scrubber and the lyrics line follow, so they show where play will start.
 
 ### 4.3 Restore at launch (`MainWindow.__init__`)
 
@@ -119,13 +120,13 @@ Replaces the last-played block. In order:
 
 1. Map each `entries` path to a `Track` in `library_watcher.library()`. Drop the entries with no match and remap `play_order` without them, keeping its relative order.
 2. If the current entry survived, it stays current at `position_seconds`. If not, the current becomes the next surviving slot after it in play order, else the last surviving slot, at position `0`.
-3. If no entry survived, or the stored queue was invalid, fall back to the existing single-track restore of `last_played_track_path` (TC-06-11), now honouring `position_seconds`, with an empty queue.
-4. `PlaybackController.restore(...)` loads it. Nothing calls `Player.play()`.
+3. If no entry survived, or the stored queue was invalid or `null`, fall back to `last_played_track_path` (TC-06-11). If it maps to a library track, the queue becomes that one track, at `position_seconds`. If not, nothing is restored and step 4 is skipped.
+4. `PlaybackController.restore(...)` loads the queue. Nothing calls `Player.play()`.
 5. Select the tab named by `last_tab`. If `window.maximized`, show maximised.
 
 Restoring through the controller means `current_changed` drives the now-playing cards, lyrics sync and ReplayGain, the same path auto-advance uses, instead of the hand-made calls the current block makes.
 
-Spec 06's preview-without-play rule is unchanged: the player is `STOPPED` on launch, so a row-body click still previews another song, and the resume point stays with the loaded one. Spec 06's "row button on a `STOPPED` active source restarts from 0" rule gains one exception: while a resume point is held, `PlaybackController.preview` plays the loaded source instead of reloading it, so it resumes from the resume point.
+Spec 06's preview-without-play rule is unchanged: the player is `STOPPED` on launch, so a row-body click still previews another song, and the resume point stays with the loaded one. Spec 06's "row button on a `STOPPED` active source restarts from 0" rule gains one exception: while `Player.resume_point()` is not `None`, `PlaybackController.preview` of the loaded track calls `Player.play()` instead of reloading it, so it resumes from the resume point.
 
 ### 4.4 Saving
 
@@ -133,7 +134,7 @@ Spec 06's preview-without-play rule is unchanged: the player is `STOPPED` on lau
 - **Quit:** `MainWindow.closeEvent` reads the position **before** `Player.stop()` and passes it to the save.
 - **While `PLAYING`:** a `QTimer` with interval `POSITION_SAVE_INTERVAL_MS = 10_000` starts the existing debounced `_state_save_timer`. It stops on pause or stop.
 - **Pause, seek, `queue_changed`, `current_changed`, shuffle and repeat changes, tab change:** start `_state_save_timer` (the existing 250 ms debounce).
-- **Natural end of the queue** (repeat off, `ended` with no next track): the saved position is `0`.
+- **Natural end of the queue** (repeat off, `ended` with no next track): after it, `QMediaPlayer.position()` stays at the duration, so every save while the player is `STOPPED` and `resume_point()` is `None` writes position `0`, quit included.
 
 ## 5. Invariants
 
@@ -168,7 +169,7 @@ None of these can run yet; every surface below is created by this spec. Each *Te
   *Breaks when:* restore plays, or the queue pane is not fed.
 
 - **INV-8** (TC-26-08) — The first play of the restored source starts at the resume point, whether started from the transport, the row button or MPRIS Play.
-  *Test:* `tests/services/test_TC_26_resume.py::test_first_play_resumes`, `INTEGRATION`-marked, a 35 s wav as in `tests/services/test_player.py::test_seek_lands_within_granularity`, resume point 20 s, asserting `position() >= 19.5` once `PLAYING`. Three cases, one per route: `Player.play()` (MPRIS `Play`), `Player.toggle()` (transport button, MPRIS `PlayPause`) and `PlaybackController.preview(current)` (row button).
+  *Test:* `tests/services/test_TC_26_resume.py::test_first_play_resumes`, `INTEGRATION`-marked, a 35 s wav as in `tests/services/test_player.py::test_seek_lands_within_granularity`, resume point 20 s, asserting the first `position_changed` value emitted after `PLAYING` is `>= 19.5` (the backend's position, not the held point). Three cases, one per route: `Player.play()` (MPRIS `Play`), `Player.toggle()` (transport button, MPRIS `PlayPause`) and `PlaybackController.preview(current)` (row button).
   *Breaks when:* `QMediaPlayer` drops a position set before the media loaded, so play starts at 0; or `preview` reloads the `STOPPED` active source through `play_tracks`, which calls `set_source` and drops the resume point.
 
 - **INV-9** (TC-26-09) — A `set_source` of another track drops the resume point; playing the restored track later starts at 0. A `seek()` before the first play moves the resume point to the seek target.
@@ -176,11 +177,11 @@ None of these can run yet; every surface below is created by this spec. Each *Te
   *Breaks when:* the resume point leaks onto the next source, or a pre-play seek is overwritten by it.
 
 - **INV-10** (TC-26-10) — A resume point more than `duration - 5.0` becomes 0.
-  *Test:* `tests/services/test_TC_26_resume.py::test_near_end_restarts`, using `Player._set_duration_for_test`, with a resume point of `duration - 4.0` and a control of `duration - 6.0` that must keep its value (isolates the threshold).
+  *Test:* `tests/services/test_TC_26_resume.py::test_near_end_restarts`, using `Player._set_duration_for_test` and reading `resume_point()`, with a resume point of `duration - 4.0` and a control of `duration - 6.0` that must keep its value (isolates the threshold).
   *Breaks when:* a nearly finished song resumes in its last seconds and ends at once.
 
 - **INV-11** (TC-26-11) — Quitting while playing at about 12 s writes `position_seconds` of about 12, not 0.
-  *Test:* `tests/ui/test_TC_26_session_restore.py::test_close_saves_position`.
+  *Test:* `tests/ui/test_TC_26_session_restore.py::test_close_saves_position`, with `Player.position` patched to return 12.0 until `Player.stop()` runs and 0.0 after (isolates read-before-stop).
   *Breaks when:* the position is read after `Player.stop()`.
 
 - **INV-12** (TC-26-12) — While `PLAYING`, state is saved at least once per `POSITION_SAVE_INTERVAL_MS`; while `PAUSED` the interval timer is stopped.
@@ -208,7 +209,6 @@ Trust boundary: `state.json` is a file the user can edit. The defence is TC-26-0
 ## 6. Failure modes
 
 - **`QMediaPlayer` ignores a position set while loading.** The resume point is applied when `mediaStatus` reaches `LoadedMedia` and again on the first `play()`. TC-26-08 is the check; it runs against the real backend.
-- **Library still scanning at launch.** `MainWindow.__init__` already matches the last track against `library_watcher.library()`; the queue uses the same snapshot. A song the watcher has not seen yet counts as missing (§4.3 step 2).
 - **Crash or power loss.** At most `POSITION_SAVE_INTERVAL_MS` of position is lost. Spec 10's atomic writes keep the file whole.
 - **Disk full on save.** Unchanged: Spec 10 §Errors & edge cases.
 - **Two copies of the app.** Unchanged: last writer wins (Spec 10).
