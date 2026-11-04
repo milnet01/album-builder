@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: MUSI=393 -->
+<!-- ants-roadmap-id-high-water: MUSI=394 -->
 
 # Album Builder — Roadmap
 
@@ -60,9 +60,8 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   (English + Arabic, demo library) put in
   /mnt/Emulators/aph-handoff/album-builder/ and the Hub website session
   messaged (mailbox id 145).
-  Waiting-on: user (Start Phase MP-1, session continuity, while
-  Distribution's Flatpak and OBS phases wait? Recommend: cut 1.0.0
-  first, then start MP-1, so 1.0 ships what S1-S7 proved, 2026-11-04)
+  Decided (owner, 2026-11-04): cut 1.0.0 first, then start Phase MP-1
+  (session continuity) ahead of Flatpak and OBS.
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 
@@ -88,10 +87,10 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   update mechanism (embedded update information plus zsync) worth
   weighing against a custom check of the GitHub releases page.
   The launcher that runs a live checkout must not self-update.
-  Waiting-on: user (Design answers needed before a spec: check on start
-  or on request; ask before installing or install silently. Recommend:
-  check on start at most once a day, always ask, and for the AppImage
-  use its built-in zsync update information, 2026-11-04)
+  Decided (owner, 2026-11-04): check on start at most once a day;
+  always ask before installing; the AppImage uses its built-in zsync
+  update information. Offline and verification answers are still open
+  for the spec.
   **Layman:** The app tells you when a newer version is out and can install it for you, so you never have to download it by hand.
   Kind: feature.
   Source: user-request-2026-10-10.
@@ -108,6 +107,18 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   **Layman:** If a song's lyrics are in Chinese, Japanese or Korean, the printed report may show those characters in the wrong font on some printers.
   Kind: fix.
   Source: in-session-2026-10-15 MUSI-0390 review.
+
+- 📋 [MUSI-0394] **Store listings: Flatpak/Flathub (Dist-4) and openSUSE OBS packages (Dist-5).**
+  Split from MUSI-0355 when the owner chose to cut 1.0.0 first
+  (2026-11-04). Phase detail stays in MUSI-0355's body. Each phase
+  needs its own spec. Each ends in a publish under the owner's
+  accounts, so the owner does or approves that step.
+  Order: Dist-4 (Flatpak/Flathub), then Dist-5 (OBS, reusing the
+  OBS project the "finbreak" session set up).
+  **Layman:** List the app on Flathub and in openSUSE's package system, so people can install it from their app store.
+  Kind: package.
+  Source: user-decision-2026-11-04.
+  Lanes: packaging.
 
 ## 1.0.0 — Every sign of success proven
 
@@ -242,7 +253,7 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: test.
   Source: review-contract-2026-09-28 versioning-overrides loop 1.
 
-- 🚧 [MUSI-0355] **Distribution & cross-platform packaging (downloadable, runnable builds).**
+- ✅ [MUSI-0355] **Distribution & cross-platform packaging (downloadable, runnable builds).**
   (User request 2026-07-25.) Turn Album Builder from a source-only, Linux-only checkout into downloadable "one file, install and run" builds on Linux and Windows, plus store/repo presence. **Supersedes the "Windows port (cross-platform packaging)" bullet above** (folded in). Spec-first (Spec 22 implemented 2026-07-28 - Phase Dist-1 shipped) + `/cold-eyes` like every phase. Locked decisions (2026-07-25, resequenced 2026-07-28): sequence **Groundwork -> AppImage -> Windows -> Flatpak/Flathub -> OBS**; the heavy WhisperX/torch dependency stays an optional `pip` extra and is kept **out** of the bundles (keeps downloads to a few hundred MB, not GB). Phases:
   - ✅ **Phase Dist-1 — Portability groundwork (code). SHIPPED 2026-07-28.** Windows-safe export per Spec 22: made the numbered-symlink step in `services/export.py` conditional on filesystem support (`_supports_symlinks` probe) and, where symlinks are unavailable, emit **`playlist.m3u8` only** (WinAmp-style remembered paths - no hardlink/copy/consent-dialog, superseding Spec 08's deferred copy fallback); drift checks (`is_export_fresh`, `album_store._symlink_count_matches`) expect zero symlinks there; resolved the config dir via **`platformdirs`** (keeps `settings.py` Qt-free; preserves the relative-`XDG_CONFIG_HOME` guard); swapped the `xdg-open` folder-open for `QDesktopServices.openUrl`. Zero behavior change on Linux. Tests TC-22-01..07 (`tests/services/test_TC_22_distribution.py`, +13); Spec 08 + settings suites pass unmodified. Commits `4c20c44` (code) + `961ee4d` / `0981b84` (cross-spec doc amendments + cold-eyes gate). Prerequisite for AppImage, Windows, and Flatpak - now unblocked.
   - ✅ **Phase Dist-2 — AppImage (Linux single-file). SHIPPED 2026-07-28 - the project's first downloadable, runnable file.** [`AlbumBuilder-0.6.1-x86_64.AppImage`](https://github.com/milnet01/album-builder/releases/tag/v0.6.1) (~121 MB) is attached to the v0.6.1 GitHub Release, built by `appimage.yml` on the tag (build + extracted-bundle checks + a clean-`ubuntu:22.04` run of `--version`/`--selftest` + appimagelint, all green) and verified to launch + render on a clean system. Delivered: `packaging/build-appimage.sh` (containerised build, shellcheck-clean), `.github/workflows/appimage.yml` (tag + dispatch triggers, uploads to the Release), `app.py` `--version`/`--selftest` flags, `tests/test_TC_23_appimage.py` (TC-23-01/02/03), README Download section. Commits `d5fe75e` (code) + `5ce8fa8` (spec reconcile) + `702f885` (doc sync). Pinned build tooling (`ubuntu:22.04@sha256:` [deliberate glibc-floor hold-back, documented], `python-appimage` `python3.13.14` [== CI's tested interpreter], `appimagetool` `1.9.1` [latest stable]) - all pins corrected against live releases and **validated by a green manual dry-run (run `30361141983`, 2026-07-28): build + extracted-bundle checks + a clean-`ubuntu:22.04`-container run of `--version`/`--selftest` + appimagelint all pass** (upload skipped - no tag). The downloadable file is produced by cutting a `v*` tag. **Follow-up:** bump CI + the AppImage bundle to Python 3.14 (latest stable) once the suite is re-run on 3.14 - a dependency-currency sweep item. A self-contained `AlbumBuilder-<version>-x86_64.AppImage` that runs on most distros with no install. **Spec 23 refines the original approach** (cold-eyes-converged, loops 1-5): bundles the Python runtime + PyQt6 (Qt libs + platform + **FFmpeg** multimedia backend - the 6.11 wheel ships FFmpeg, *not* GStreamer, so no GStreamer plugins are bundled) + WeasyPrint's native stack (Pango / PangoFT2 / HarfBuzz / HarfBuzz-subset / fontconfig / gobject - WeasyPrint 69 drops **Cairo / GDK-PixBuf**); built via **`python-appimage`** (the `linuxdeploy`-or-python-appimage fork resolved to python-appimage; `linuxdeploy-plugin-python` is unmaintained) **inside a digest-pinned `ubuntu:22.04` container** (so a local build == the CI release; sets the glibc floor for broad reach). WhisperX/torch stays an optional `pip` extra, out of the bundle. One local script (`packaging/build-appimage.sh`) is the single source of truth; `appimage.yml` runs it on a `v*` tag + manual dispatch and attaches to the GitHub Release. The **simplest** "one downloadable Linux file" — no store account or review gate — so it ships first.
@@ -256,13 +267,14 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   in docs/standards/versioning-overrides.md. Dist-4 (Flatpak/Flathub) and
   Dist-5 (OBS) serve no sign; each needs its own spec and ends in a
   publish under the owner's accounts.
-  Waiting-on: user (Move Dist-4 and Dist-5 to "Later, after 1.0" and cut
-  release 1.0.0? Recommend yes: S6 is already proven by the AppImage and
-  the Windows zip, and the store listings can follow 1.0, 2026-11-04)
+  Decided (owner, 2026-11-04): cut 1.0.0 now; Dist-4 (Flatpak/Flathub)
+  and Dist-5 (OBS) move to "Later, after 1.0" as their own item.
+  Closed 2026-11-04: Dist-1..3 shipped; Dist-4 and Dist-5 moved to
+  MUSI-0394.
   **Layman:** Make the app a simple download you install and run on Linux or Windows, with app-store listings.
   Kind: implement.
 
-- 📋 [MUSI-0357] **Polish & hardening (usability / performance / security).**
+- ✅ [MUSI-0357] **Polish & hardening (usability / performance / security).**
   (Suggestion sweep 2026-07-25; sequenced flexibly - small, high-value items surfaced while reviewing the app.)
   - **Usability - first-run onboarding.** A clear "point me at your music folder" welcome on first launch instead of an empty window.
   - **Usability - undo for destructive actions.** Undo (or confirm-with-restore) for deleting an album or removing tracks (verify the current safety net first).
@@ -322,8 +334,10 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   of a 1400x1400 JPEG (1.7 MB, noise, the slow case) took 23 ms median,
   41 ms max, at load average 15-22. Refute: rerun the timing on an idle
   machine with a real cover.
-  Waiting-on: user (Drop the cover-art cache part? Recommend yes: there
-  is no repeated decode to save, 2026-11-04)
+  Decided (owner, 2026-11-04): cover-art thumbnail cache dropped; there
+  is no repeated decode to save. Nothing in this bullet is left open.
+  Closed 2026-11-04: every sub-item shipped, verified clean, or dropped
+  by decision.
   **Layman:** Small improvements: a friendlier first launch, undo for deletions, faster startup, and fixing documents that no longer match the app.
   Kind: implement.
 
