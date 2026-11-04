@@ -155,7 +155,7 @@ path already covers a non-default startup theme — no palette constructor arg i
 
 ### `ui/main_window.py` — menu bar + apply path
 
-- **Menu bar** (`self.menuBar()`): three menus.
+- **Menu bar** (`self.menuBar()`): this spec adds the entries below; other specs add the rest.
   - **File** — "New Album" (`_on_new_album`), "Quit" (`self.close`). These wrap the
     *existing* handlers/shortcuts (Ctrl+N already maps to new-album; Ctrl+Q to quit);
     the menu adds discoverable entry points, no new behavior.
