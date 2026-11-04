@@ -67,6 +67,13 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   none deferred. The second loop's 6 fixes were read by no reviewer, so
   the build is their check. Loop log:
   docs/reviews/26-session-continuity-loop-log.md.
+  Decided (owner, 2026-11-04) for MP-1: the restored song waits
+  paused at its saved spot (never auto-plays), and the play queue is
+  restored too, not only the song. Next: build Spec 26. In the same
+  commit amend Specs 00, 06 and 10 (Spec 26 §11) and optionally
+  Spec 15's "Default tab on launch" line. INV-8 needs a run by hand
+  with AB_INTEGRATION_AUDIO=1; INV-15 (maximised) needs a check by
+  hand on KDE and on Windows (ssh wintest).
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 
