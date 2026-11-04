@@ -156,21 +156,20 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: test.
   Source: found-2026-11-05-building-spec-26.
 
-- 📋 [MUSI-0396] **Under heavy machine load, a lyrics-alignment test errors on a stray worker signal.**
-  2026-11-05, load average 30 to 60 (other jobs on the machine): the
-  full suite reports an ERROR at setup of
-  tests/services/test_alignment_service.py::test_cancel_for_unknown_path_is_noop,
-  "TypeError: () missing 1 required positional argument: '_path'", from a
-  lambda in services/alignment_service.py's worker wiring. It happens on
-  main at b4c0e4d, before Spec 26: 3 of 3 full runs in a clean checkout.
-  Under lighter load the suite passed (1006 passed on 2026-11-04).
-  Hypothesis, unconfirmed: a worker signal from an earlier test reaches
-  this one.
-  Separate, and fixed in the Spec 26 commit: two full runs aborted with
-  "Fatal Python error: Aborted" during garbage collection in the same
-  area. Spec 26's new unit tests loaded real files into a Player and
-  never released it; they now keep the backend out (no abort in the
-  next runs).
+- ✅ [MUSI-0396] **Under heavy machine load, a lyrics-alignment test errors on a stray worker signal.**
+  Seen 2026-11-05 under load: an ERROR at setup of
+  test_cancel_for_unknown_path_is_noop, "TypeError: () missing 1 required
+  positional argument: '_path'". Cause: earlier tests in
+  test_alignment_service.py ended with their FakeWorker still alive. The
+  service and worker reference each other through the signal lambdas, so
+  the cycle collector freed them later; it clears the lambdas' `_path`
+  defaults, and a queued `finished` delivered after that raised the error
+  in the next test. On 2026-11-05 a scratch script reproduced it 20 of 20
+  times (worker done, collect, then deliver) and 0 of 20 when delivery
+  comes first.
+  Fix, test-only: an autouse fixture waits for every FakeWorker and
+  delivers its queued signals at teardown, failing the test that leaves a
+  worker running. The app keeps one AlignmentService for its lifetime.
   **Layman:** When the computer is very busy, one lyrics test reports an error that has nothing to do with the code it tests.
   Kind: investigate.
   Source: found-2026-11-05-building-spec-26.

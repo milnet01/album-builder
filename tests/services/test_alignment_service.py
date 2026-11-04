@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import QThread, pyqtSignal
+import pytest
+from PyQt6.QtCore import QCoreApplication, QThread, pyqtSignal
 
 from album_builder.domain.lyrics import LyricLine, Lyrics
 from album_builder.domain.track import Track
@@ -12,6 +13,7 @@ from album_builder.persistence.settings import AlignmentSettings
 from album_builder.services.alignment_service import AlignmentService
 from album_builder.services.alignment_status import AlignmentStatus
 
+_created_workers: list[QThread] = []  # every FakeWorker; drained by _workers_finished
 
 class FakeWorker(QThread):
     """Stand-in for `AlignmentWorker` — same signal shape; never imports
@@ -24,6 +26,7 @@ class FakeWorker(QThread):
 
     def __init__(self, track_path: Path, lyrics_text: str, model_size: str = "medium.en"):
         super().__init__()
+        _created_workers.append(self)
         self.track_path = track_path
         self.lyrics_text = lyrics_text
         self.model_size = model_size
@@ -43,6 +46,24 @@ class FakeWorker(QThread):
             track_path=self.track_path,
         )
         self.finished_ok.emit(lyrics)
+
+
+@pytest.fixture(autouse=True)
+def _workers_finished():
+    """Each test leaves no worker behind (MUSI-0396).
+
+    AlignmentService and its worker reference each other through the
+    signal lambdas. A worker still alive when its test ends is freed later
+    by the cycle collector, which clears the lambdas' `_path` defaults; a
+    queued `finished` delivered after that raises "missing 1 required
+    positional argument: '_path'" in whatever test is running. So wait for
+    every thread here, deliver its queued signals while the lambdas are
+    intact, and fail the test that started a worker that never ends."""
+    yield
+    workers, _created_workers[:] = list(_created_workers), []
+    for w in workers:
+        assert w.wait(5000), "FakeWorker still running at teardown"
+    QCoreApplication.processEvents()
 
 
 def _make_track(path: Path, lyrics: str | None, duration: float = 180.0) -> Track:
