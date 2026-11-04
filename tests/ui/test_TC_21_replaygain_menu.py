@@ -19,7 +19,7 @@ def test_playback_menu_structure_and_wiring(main_window, monkeypatch) -> None:
     win = main_window
     # A Playback menu exists, positioned after View and before Help.
     titles = [a.text() for a in win.menuBar().actions()]
-    assert titles == ["File", "View", "Playback", "Help"]
+    assert titles == ["File", "Edit", "View", "Playback", "Help"]
     # Toggle reflects the persisted (default off) state at startup.
     assert win._rg_toggle_action.isChecked() is False
 

@@ -1,6 +1,6 @@
 # 04 — Track Selection & Target Counter
 
-**Status:** Implemented (Phase 2) · **Last updated:** 2026-05-18 · **Depends on:** 00, 01, 02, 10, 11
+**Status:** Implemented (Phase 2) · **Last updated:** 2026-11-04 · **Depends on:** 00, 01, 02, 10, 11
 
 ## Purpose
 
@@ -32,6 +32,18 @@ The mechanism by which a user picks tracks for the current album. Comprises the 
 - When the user deselects a track to drop below target:
   - All disabled OFF toggles re-enable in the same frame.
   - The accent strip remains on the still-selected rows. (The strip is "currently selected for this album," not "album is full.")
+
+### Undo the last removal
+
+Removing a song loses its place in the running order: selecting it again appends it last. Undo puts it back where it was.
+
+- **Edit > Undo Remove Song** and **Ctrl+Z** undo the most recent removal. Only one removal is held; a newer removal replaces it.
+- Undo puts the song back at its old position in the album order. If the album has fewer songs than that position now, it goes last.
+- Undo applies only while the album the song came from is the current album. Otherwise the menu item is disabled and Ctrl+Z does nothing.
+- The menu item is disabled and Ctrl+Z does nothing when no removal is held. A removal stops being held once it is undone, once that song is selected again by hand, or once its album is deleted.
+- If the album is at target or approved, undo leaves the album unchanged, shows a toast saying why, and keeps the removal so it can be undone after the user raises the target or reopens the album.
+- Ctrl+Z inside a text field is that field's own undo, never this one (Spec 00 §Keyboard shortcuts).
+- The held removal lives in memory only. Closing the app forgets it.
 
 ### Visual rules summary
 
@@ -71,6 +83,15 @@ on_deselect(track_path):
     require album.status == DRAFT
     if track_path not in album.track_paths: no-op
     remove track_path from album.track_paths (preserve order of others)
+    persist
+
+on_undo_remove():
+    require held removal (album_id, track_path, old_index)
+    require current album id == album_id
+    require album.status == DRAFT and len(album.track_paths) < album.target_count
+        else: toast reason, keep the held removal, return
+    insert track_path at min(old_index, len(album.track_paths))
+    drop the held removal
     persist
 
 on_target_increase():
@@ -121,7 +142,7 @@ All mutations debounce-write to `album.json` via Spec 10's atomic write. Debounc
 
 Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-04-NN` marker.
 
-**Phase status — shipped in v0.2.0 (Phase 2).** Coverage lives in `tests/domain/test_album.py` (TC-04-01..09), `tests/ui/test_target_counter.py` + `tests/ui/test_top_bar.py` (TC-04-10..13, TC-04-20), and `tests/ui/test_library_pane.py` (TC-04-14..19).
+**Phase status — shipped in v0.2.0 (Phase 2).** Coverage lives in `tests/domain/test_album.py` (TC-04-01..09), `tests/ui/test_target_counter.py` + `tests/ui/test_top_bar.py` (TC-04-10..13, TC-04-20), and `tests/ui/test_library_pane.py` (TC-04-14..19). Undo the last removal (TC-04-21..25, MUSI-0357): `tests/domain/test_album.py` and `tests/ui/test_TC_04_undo_remove.py`.
 
 - **TC-04-01** — `Album.select(track_path)` appends to `track_paths` if absent; is a no-op if already present.
 - **TC-04-02** — `Album.select` and `Album.deselect` raise (or no-op with a warning) when `album.status == APPROVED`.
@@ -143,8 +164,14 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-04-17** — Persistence: every selection / target mutation triggers a debounced (250 ms) atomic write to `album.json`. Rapid toggling of N tracks within the window produces ONE write, not N.
 - **TC-04-18** — UI: a selected library row gets the "in album" accent strip (coloured left border + subtle gradient).
 - **TC-04-19** — UI: a selected row whose track is missing on disk shows the accent strip in `warning` (amber) instead of the theme accent.
+- **TC-04-21** — `Album.restore_track(track_path, index)` inserts the path at `index`, or last when `index >= len(track_paths)`; is a no-op if the path is present; raises `ValueError` at target and when `status == APPROVED`.
+- **TC-04-22** — UI: deselecting the song at position *i*, then Edit > Undo Remove Song (or Ctrl+Z), puts it back at position *i*, and the change is saved. After two removals, undo restores only the second.
+- **TC-04-23** — UI: undo is disabled (menu item greyed, Ctrl+Z no-op) when no removal is held, after the removal is undone, after the song is selected again by hand, and while a different album is current.
+- **TC-04-24** — UI: undo on an album at target leaves `track_paths` unchanged, shows a toast, and keeps the removal; after the target is raised, undo succeeds.
+- **TC-04-25** — UI: Ctrl+Z with focus in a text field does not restore a removed song.
 
 ## Out of scope (v1)
 
 - Multi-select (select N songs at once via shift-click). Could be a v2 nicety.
+- Undo for anything other than removing a song (adding, reordering, target changes), and more than one level of undo.
 - "Replace this song" workflow when the album is full and you want to swap. (Workaround: deselect first.)

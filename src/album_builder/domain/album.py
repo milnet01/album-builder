@@ -143,6 +143,16 @@ class Album:
             return  # absent - no-op, no write
         self.updated_at = _now()
 
+    def restore_track(self, track_path: Path, index: int) -> None:
+        """Undo a deselect: put `track_path` back at `index` (last if past the end)."""
+        self._require_draft("restore a track to")
+        if track_path in self.track_paths:
+            return
+        if len(self.track_paths) >= self.target_count:
+            raise ValueError(f"album is at target ({self.target_count}); raise the target first")
+        self.track_paths.insert(min(index, len(self.track_paths)), track_path)
+        self.updated_at = _now()
+
     def set_target(self, n: int) -> None:
         self._require_draft("set target")
         n = _validate_target(n)

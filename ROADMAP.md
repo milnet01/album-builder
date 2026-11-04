@@ -295,6 +295,12 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   the path; re-selecting appends it last, so the order slot is lost.
   Spec: an amendment to Spec 04 (new behaviour + TCs), not a new spec,
   so no automatic review-contract (global rule 14, 2026-10-31).
+  Progress (2026-11-04), undo for removing a track: SHIPPED. Edit >
+  Undo Remove Song and Ctrl+Z put the last removed song back at its
+  old position (Album.restore_track; MainWindow._on_undo_remove).
+  Spec 04 section Undo the last removal, TC-04-21..25. Still open in
+  this bullet: cover-art thumbnail cache (tag cache skipped by
+  decision).
   **Layman:** Small improvements: a friendlier first launch, undo for deletions, faster startup, and fixing documents that no longer match the app.
   Kind: implement.
 

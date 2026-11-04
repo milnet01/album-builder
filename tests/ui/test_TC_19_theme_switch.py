@@ -68,8 +68,8 @@ def test_library_pane_set_palette_updates_delegate(qtbot) -> None:
 # Spec: TC-19-08
 def test_menu_bar_structure(main_window) -> None:
     top = [a.text() for a in main_window.menuBar().actions()]
-    # Spec 21 added the Playback menu between View and Help.
-    assert top == ["File", "View", "Playback", "Help"]
+    # Spec 21 added Playback between View and Help; Spec 04 (MUSI-0357) added Edit.
+    assert top == ["File", "Edit", "View", "Playback", "Help"]
     actions = _theme_submenu_actions(main_window)
     assert [a.text() for a in actions] == [name for name, _ in THEMES.values()]
     assert all(a.isCheckable() for a in actions)

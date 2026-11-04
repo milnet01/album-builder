@@ -323,3 +323,48 @@ def test_album_equality_is_uuid_identity() -> None:
     assert {a1, a2, a3} == {a1, a3}
     # Foreign objects compare unequal, not raise.
     assert a1 != "not an album"
+
+
+# Spec: TC-04-21
+def test_album_restore_track_inserts_at_index() -> None:
+    a = Album.create(name="x", target_count=5)
+    for letter in "acd":
+        a.select(Path(f"/abs/{letter}.mp3"))
+    a.restore_track(Path("/abs/b.mp3"), 1)
+    assert a.track_paths == [Path(f"/abs/{x}.mp3") for x in "abcd"]
+
+
+# Spec: TC-04-21
+def test_album_restore_track_past_end_goes_last() -> None:
+    a = Album.create(name="x", target_count=5)
+    a.select(Path("/abs/a.mp3"))
+    a.restore_track(Path("/abs/z.mp3"), 7)
+    assert a.track_paths == [Path("/abs/a.mp3"), Path("/abs/z.mp3")]
+
+
+# Spec: TC-04-21
+def test_album_restore_track_present_is_noop() -> None:
+    a = Album.create(name="x", target_count=5)
+    for letter in "ab":
+        a.select(Path(f"/abs/{letter}.mp3"))
+    a.restore_track(Path("/abs/b.mp3"), 0)
+    assert a.track_paths == [Path("/abs/a.mp3"), Path("/abs/b.mp3")]
+
+
+# Spec: TC-04-21
+def test_album_restore_track_refuses_at_target() -> None:
+    a = Album.create(name="x", target_count=1)
+    a.select(Path("/abs/a.mp3"))
+    with pytest.raises(ValueError):
+        a.restore_track(Path("/abs/b.mp3"), 0)
+    assert a.track_paths == [Path("/abs/a.mp3")]
+
+
+# Spec: TC-04-21
+def test_album_restore_track_refuses_when_approved() -> None:
+    a = Album.create(name="x", target_count=3)
+    a.select(Path("/abs/a.mp3"))
+    a.status = AlbumStatus.APPROVED
+    with pytest.raises(ValueError):
+        a.restore_track(Path("/abs/b.mp3"), 0)
+    assert a.track_paths == [Path("/abs/a.mp3")]

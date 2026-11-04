@@ -8,6 +8,14 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+### Added
+
+- **You can undo removing a song from an album** (MUSI-0357)
+  Removed a song by mistake? Choose Edit > Undo Remove Song, or press Ctrl+Z.
+  The song goes back to the same place in the album's running order. Before,
+  adding it again put it at the end. Undo remembers only the last song you
+  removed, and forgets it when you close the app.
+
 ### Changed
 
 - **The automatic check on each download now also tests saving a file** (MUSI-0380)

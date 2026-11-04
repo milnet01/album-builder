@@ -10,6 +10,7 @@ from uuid import UUID
 
 from PyQt6.QtCore import Qt, QTimer, QUrl
 from PyQt6.QtGui import (
+    QAction,
     QActionGroup,
     QDesktopServices,
     QGuiApplication,
@@ -34,6 +35,7 @@ from PyQt6.QtWidgets import (
 )
 
 from album_builder import i18n
+from album_builder.domain.album import AlbumStatus
 from album_builder.domain.library import SUPPORTED_EXTENSIONS
 from album_builder.domain.track import Track
 from album_builder.i18n import tr
@@ -315,8 +317,15 @@ class MainWindow(QMainWindow):
         self._state_save_timer.setInterval(250)
         self._state_save_timer.timeout.connect(self._save_state_now)
 
+        # Spec 04 §Undo the last removal: (album id, song path, old position)
+        # of the most recent removal, in memory only. The menu action is built
+        # later, in _build_menu_bar.
+        self._last_removal: tuple[UUID, Path, int] | None = None
+        self._undo_remove_action: QAction | None = None
+
         # Wire signals
         self.top_bar.switcher.current_album_changed.connect(self._on_current_changed)
+        store.album_removed.connect(self._on_album_removed_for_undo)
         self.top_bar.rename_committed.connect(self._on_rename)
         self.top_bar.target_committed.connect(self._on_target)
         self.top_bar.approve_requested.connect(self._on_approve)
@@ -471,6 +480,14 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(tr("Quit"), lambda: self.close())
 
+        edit_menu = bar.addMenu(tr("Edit"))
+        # Ctrl+Z is bound in _wire_shortcuts (suppressed in text fields), so
+        # this item carries no accelerator, as for the File items above.
+        self._undo_remove_action = edit_menu.addAction(
+            tr("Undo Remove Song"), lambda: self._on_undo_remove(),
+        )
+        self._refresh_undo_remove()
+
         view_menu = bar.addMenu(tr("View"))
         theme_menu = view_menu.addMenu(tr("Theme"))
         self._theme_group = QActionGroup(self)
@@ -589,6 +606,7 @@ class MainWindow(QMainWindow):
         )
         self._state.current_album_id = album_id
         self._state_save_timer.start()
+        self._refresh_undo_remove()
 
     def _on_rename(self, album_id: UUID, new_name: str) -> None:
         self._store.rename(album_id, new_name)
@@ -1032,6 +1050,7 @@ class MainWindow(QMainWindow):
         album = self._current_album()
         if album is None:
             return
+        old_index = album.track_paths.index(path) if path in album.track_paths else None
         try:
             if new_state:
                 album.select(path)
@@ -1040,11 +1059,57 @@ class MainWindow(QMainWindow):
         except ValueError as exc:
             QMessageBox.warning(self, tr("Cannot toggle"), str(exc))
             return
+        if not new_state and old_index is not None:
+            self._last_removal = (album.id, path, old_index)
+        elif new_state and self._last_removal is not None and self._last_removal[:2] == (
+            album.id, path,
+        ):
+            self._last_removal = None  # selected again by hand: nothing to undo
+        self._refresh_undo_remove()
+        self._after_selection_change(album)
+
+    def _after_selection_change(self, album) -> None:
         self._store.schedule_save(album.id)
         self._store.schedule_export(album.id, self._library_watcher.library())
         self.top_bar.set_current(album.id)
         self.library_pane.set_current_album(album)
         self.album_order_pane.set_album(album, list(self._library_watcher.library().tracks))
+
+    def _refresh_undo_remove(self) -> None:
+        if self._undo_remove_action is None:
+            return  # menu not built yet
+        held = self._last_removal
+        self._undo_remove_action.setEnabled(
+            held is not None and held[0] == self.top_bar.switcher.current_id
+        )
+
+    def _on_album_removed_for_undo(self, album_id: UUID) -> None:
+        if self._last_removal is not None and self._last_removal[0] == album_id:
+            self._last_removal = None
+            self._refresh_undo_remove()
+
+    def _on_undo_remove(self) -> None:
+        """Spec 04 §Undo the last removal: put the removed song back in place."""
+        held = self._last_removal
+        album = self._current_album()
+        if held is None or album is None or album.id != held[0]:
+            return
+        _album_id, path, old_index = held
+        if album.status != AlbumStatus.DRAFT:
+            self._show_toast(tr("Album is approved. Reopen it for editing to put the song back."))
+            return
+        if len(album.track_paths) >= album.target_count:
+            self._show_toast(tr("Album is at target. Raise the count to put the song back."))
+            return
+        album.restore_track(path, old_index)
+        self._last_removal = None
+        self._refresh_undo_remove()
+        self._after_selection_change(album)
+
+    def _ctrl_z_pressed(self) -> None:
+        if self._key_in_text_field():
+            return  # the text field's own undo
+        self._on_undo_remove()
 
     def _on_reorder_done(self) -> None:
         album = self._current_album()
@@ -1063,6 +1128,7 @@ class MainWindow(QMainWindow):
         """
         QShortcut(QKeySequence("Ctrl+N"), self, activated=self._on_new_album)
         QShortcut(QKeySequence("Ctrl+Q"), self, activated=self.close)
+        QShortcut(QKeySequence("Ctrl+Z"), self, activated=self._ctrl_z_pressed)
         QShortcut(QKeySequence("F1"), self, activated=self._show_help)
         QShortcut(QKeySequence("Space"), self, activated=self._space_pressed)
         QShortcut(QKeySequence("Left"), self, activated=lambda: self._seek_relative(-5))
@@ -1114,6 +1180,7 @@ class MainWindow(QMainWindow):
             tr("{app} — Keyboard shortcuts", app="Album Builder"),
             tr(
                 "Ctrl+N — New album\n"
+                "Ctrl+Z — Undo removing a song\n"
                 "Ctrl+Q — Quit\n"
                 "F1 — This help\n"
                 "Space — Play / pause\n"

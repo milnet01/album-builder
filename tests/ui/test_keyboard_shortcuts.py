@@ -98,7 +98,7 @@ def test_shortcuts_registered(main_window) -> None:
         s.key().toString() for s in main_window.findChildren(QShortcut)
     }
     expected = {
-        "Ctrl+N", "Ctrl+Q", "F1", "Space",
+        "Ctrl+N", "Ctrl+Q", "Ctrl+Z", "F1", "Space",
         "Left", "Right", "Shift+Left", "Shift+Right", "M",
     }
     assert expected.issubset(keys), f"missing: {expected - keys}"
