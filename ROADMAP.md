@@ -301,6 +301,14 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Spec 04 section Undo the last removal, TC-04-21..25. Still open in
   this bullet: cover-art thumbnail cache (tag cache skipped by
   decision).
+  Cover-art thumbnail cache checked 2026-11-04: covers are decoded in one
+  place, the now-playing card (`now_playing_card.py` `_set_cover`), once
+  per track change; the library shows no thumbnails. One decode + scale
+  of a 1400x1400 JPEG (1.7 MB, noise, the slow case) took 23 ms median,
+  41 ms max, at load average 15-22. Refute: rerun the timing on an idle
+  machine with a real cover.
+  Waiting-on: user (Drop the cover-art cache part? Recommend yes: there
+  is no repeated decode to save, 2026-11-04)
   **Layman:** Small improvements: a friendlier first launch, undo for deletions, faster startup, and fixing documents that no longer match the app.
   Kind: implement.
 
