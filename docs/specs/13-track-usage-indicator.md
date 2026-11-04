@@ -18,9 +18,9 @@ Brainstorm sign-off (2026-05-01): notification-only intent, approved-only scope,
 
 ### The "Used" column
 
-- A new column with the header **"Used"** is appended as the **rightmost** column in the library pane (right of the `✓` toggle, which is the previously-rightmost column in `LibraryPane.COLUMNS` in `src/album_builder/ui/library_pane.py`). The column order becomes:
+- A new column with the header **"Used"** is appended as the **rightmost** column in the library pane (`LibraryPane.COLUMNS` in `src/album_builder/ui/library_pane.py`). The `✓` toggle sits second (Spec 04 §On/off toggle, MUSI-0392). The column order is:
   ```
-  ▶ | Title | Artist | Album | Composer | Duration | ✓ | Used
+  ▶ | ✓ | Title | Artist | Album | Composer | Duration | Used
   ```
 - Width is fixed (~40 px) at construction. Resize mode is `QHeaderView.ResizeMode.Interactive`, matching the existing `_play` / `_toggle` columns (the project doesn't use `Fixed`; `Interactive` is the established "non-stretchable, user-resizable" pattern).
 - Header click sorts the table by reuse count via Qt's default `QSortFilterProxyModel` cycle: first click descending (most-popular first), second click ascending, third click descending again — Qt's two-state cycle, no "clear" position. Matches the existing per-column behaviour for Title / Artist / Duration.

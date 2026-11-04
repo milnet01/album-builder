@@ -97,12 +97,13 @@ def _build_usage_tooltip(album_ids, store) -> str | None:
 
 COLUMNS: list[tuple[str, str]] = [
     ("▶", "_play"),   # PLAY glyph - Spec 06 per-row preview-play
+    # Second, so it is on screen without a sideways scroll (Spec 04 TC-04-26).
+    ("✓", "_toggle"),
     (N_("Title"), "title"),
     (N_("Artist"), "artist"),
     (N_("Album"), "album"),
     (N_("Composer"), "composer"),
     (N_("Duration"), "duration_seconds"),
-    ("✓", "_toggle"),
     (N_("Used"), "_used"),   # Spec 13 - cross-album popularity badge
 ]
 
@@ -592,7 +593,7 @@ class LibraryPane(QFrame):
             self.table.setAccessibleDescription(
                 tr(
                     "Searchable list of tracks. First column previews playback; "
-                    "last column toggles inclusion in the current album.",
+                    "second column toggles inclusion in the current album.",
                 ),
             )
         layout.addWidget(self.table)

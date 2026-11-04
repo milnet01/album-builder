@@ -149,7 +149,7 @@
  "Restored '{name}'.": "تمت استعادة «{name}».",
  "Saved playlists": "قوائم التشغيل المحفوظة",
  "Searchable list of tracks. Double-click a track or press Enter to play from it. Click the first column to play or pause that track.": "قائمة مقاطع قابلة للبحث. انقر نقرًا مزدوجًا على مقطع أو اضغط Enter للتشغيل منه. انقر العمود الأول لتشغيل ذلك المقطع أو إيقافه مؤقتًا.",
- "Searchable list of tracks. First column previews playback; last column toggles inclusion in the current album.": "قائمة مقاطع قابلة للبحث. العمود الأول للاستماع المسبق، والأخير لإضافة المقطع إلى الألبوم الحالي أو إزالته منه.",
+ "Searchable list of tracks. First column previews playback; second column toggles inclusion in the current album.": "قائمة مقاطع قابلة للبحث. العمود الأول للاستماع المسبق، والثاني لإضافة المقطع إلى الألبوم الحالي أو إزالته منه.",
  "Selected: {selected} / {target}": "المختار: {selected} / {target}",
  "Selected: {selected} / {target} {icon}": "المختار: {selected} / {target} {icon}",
  "Show/Hide": "إظهار/إخفاء",

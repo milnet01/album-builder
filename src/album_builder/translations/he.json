@@ -149,7 +149,7 @@
  "Restored '{name}'.": "„{name}” שוחזר.",
  "Saved playlists": "רשימות השמעה שמורות",
  "Searchable list of tracks. Double-click a track or press Enter to play from it. Click the first column to play or pause that track.": "רשימת רצועות עם חיפוש. לחצו פעמיים על רצועה או הקישו Enter כדי להשמיע ממנה והלאה. לחצו על העמודה הראשונה כדי להשמיע או להשהות את הרצועה.",
- "Searchable list of tracks. First column previews playback; last column toggles inclusion in the current album.": "רשימת רצועות עם חיפוש. העמודה הראשונה משמיעה האזנה מקדימה; האחרונה מוסיפה או מסירה את הרצועה מהאלבום הנוכחי.",
+ "Searchable list of tracks. First column previews playback; second column toggles inclusion in the current album.": "רשימת רצועות עם חיפוש. העמודה הראשונה משמיעה האזנה מקדימה; השנייה מוסיפה או מסירה את הרצועה מהאלבום הנוכחי.",
  "Selected: {selected} / {target}": "נבחרו: {selected} / {target}",
  "Selected: {selected} / {target} {icon}": "נבחרו: {selected} / {target} {icon}",
  "Show/Hide": "הצגה/הסתרה",

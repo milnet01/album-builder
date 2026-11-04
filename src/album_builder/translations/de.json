@@ -149,7 +149,7 @@
  "Restored '{name}'.": "„{name}“ wiederhergestellt.",
  "Saved playlists": "Gespeicherte Wiedergabelisten",
  "Searchable list of tracks. Double-click a track or press Enter to play from it. Click the first column to play or pause that track.": "Durchsuchbare Titelliste. Doppelklicke einen Titel oder drücke die Eingabetaste, um ab dort abzuspielen. Klicke die erste Spalte, um den Titel abzuspielen oder zu pausieren.",
- "Searchable list of tracks. First column previews playback; last column toggles inclusion in the current album.": "Durchsuchbare Titelliste. Die erste Spalte spielt zum Vorhören ab; die letzte nimmt den Titel ins aktuelle Album auf oder entfernt ihn.",
+ "Searchable list of tracks. First column previews playback; second column toggles inclusion in the current album.": "Durchsuchbare Titelliste. Die erste Spalte spielt zum Vorhören ab; die zweite nimmt den Titel ins aktuelle Album auf oder entfernt ihn.",
  "Selected: {selected} / {target}": "Ausgewählt: {selected} / {target}",
  "Selected: {selected} / {target} {icon}": "Ausgewählt: {selected} / {target} {icon}",
  "Show/Hide": "Anzeigen/Ausblenden",

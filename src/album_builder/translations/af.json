@@ -149,7 +149,7 @@
  "Restored '{name}'.": "'{name}' teruggesit.",
  "Saved playlists": "Gestoorde snitlyste",
  "Searchable list of tracks. Double-click a track or press Enter to play from it. Click the first column to play or pause that track.": "Deursoekbare lys van snitte. Dubbelklik 'n snit of druk Enter om van daar af te speel. Klik die eerste kolom om daardie snit te speel of te laat wag.",
- "Searchable list of tracks. First column previews playback; last column toggles inclusion in the current album.": "Deursoekbare lys van snitte. Die eerste kolom luister voor; die laaste sit die snit in of uit die huidige album.",
+ "Searchable list of tracks. First column previews playback; second column toggles inclusion in the current album.": "Deursoekbare lys van snitte. Die eerste kolom luister voor; die tweede sit die snit in of uit die huidige album.",
  "Selected: {selected} / {target}": "Gekies: {selected} / {target}",
  "Selected: {selected} / {target} {icon}": "Gekies: {selected} / {target} {icon}",
  "Show/Hide": "Wys/Versteek",

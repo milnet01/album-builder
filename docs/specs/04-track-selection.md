@@ -23,7 +23,7 @@ The mechanism by which a user picks tracks for the current album. Comprises the 
 
 ### On/off toggle (library row)
 
-- Each library row has a circular toggle on the right (●/○ in the dark+colourful palette).
+- Each library row has a circular toggle (●/○ in the dark+colourful palette) in the second column, right of the play button, so it is on screen without a sideways scroll at any window width (MUSI-0392).
 - Clicking ● turns it ○ (deselect). Clicking ○ turns it ● (select). The toggle is per-album: switching albums in the switcher re-renders all toggles to that album's state.
 - When `selected_count == target_count`:
   - All currently-OFF toggles in the library become **disabled** (greyed, unclickable, with a tooltip "Album is at target. Lower the count or deselect a song to add more.").
@@ -142,7 +142,7 @@ All mutations debounce-write to `album.json` via Spec 10's atomic write. Debounc
 
 Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-04-NN` marker.
 
-**Phase status — shipped in v0.2.0 (Phase 2).** Coverage lives in `tests/domain/test_album.py` (TC-04-01..09), `tests/ui/test_target_counter.py` + `tests/ui/test_top_bar.py` (TC-04-10..13, TC-04-20), and `tests/ui/test_library_pane.py` (TC-04-14..19). Undo the last removal (TC-04-21..25, MUSI-0357): `tests/domain/test_album.py` and `tests/ui/test_TC_04_undo_remove.py`.
+**Phase status — shipped in v0.2.0 (Phase 2).** Coverage lives in `tests/domain/test_album.py` (TC-04-01..09), `tests/ui/test_target_counter.py` + `tests/ui/test_top_bar.py` (TC-04-10..13, TC-04-20), and `tests/ui/test_library_pane.py` (TC-04-14..19). Undo the last removal (TC-04-21..25, MUSI-0357): `tests/domain/test_album.py` and `tests/ui/test_TC_04_undo_remove.py`. Toggle column on screen (TC-04-26, MUSI-0392): `tests/ui/test_TC_04_26_pick_column_visible.py`.
 
 - **TC-04-01** — `Album.select(track_path)` appends to `track_paths` if absent; is a no-op if already present.
 - **TC-04-02** — `Album.select` and `Album.deselect` raise (or no-op with a warning) when `album.status == APPROVED`.
@@ -169,6 +169,7 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-04-23** — UI: undo is disabled (menu item greyed, Ctrl+Z no-op) when no removal is held, after the removal is undone, after the song is selected again by hand, and while a different album is current.
 - **TC-04-24** — UI: undo on an album at target leaves `track_paths` unchanged, shows a toast, and keeps the removal; after the target is raised, undo succeeds.
 - **TC-04-25** — UI: Ctrl+Z with focus in a text field does not restore a removed song.
+- **TC-04-26** — UI: the toggle column is the second library column, after the play column; with the table at its minimum width, the whole toggle column lies inside the visible area with no horizontal scroll.
 
 ## Out of scope (v1)
 

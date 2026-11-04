@@ -23,6 +23,11 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Fixed
 
+- **The tick column for adding songs to an album is now right next to the play button** (MUSI-0392)
+  On a smaller screen it used to sit off to the right, so you had to
+  scroll sideways before you could build an album. It is now the second
+  column and is always in view.
+
 - **Printed album reports keep their bold title and symbols** (MUSI-0390)
   On computers with the Cantarell font, the report PDF carried a damaged copy of that font. Some printers then printed the title in plain type and left out the dots and other symbols. The report now uses fonts that PDF viewers and printing software read correctly.
 

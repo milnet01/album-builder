@@ -420,13 +420,16 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: fix.
   Source: in-session-2026-10-15 MUSI-0376 check.
 
-- 📋 [MUSI-0392] **On a 1280-pixel screen the library's pick column starts scrolled out of sight.**
+- ✅ [MUSI-0392] **On a 1280-pixel screen the library's pick column starts scrolled out of sight.**
   Seen 2026-10-15 on the Windows test PC (1280x1024, v0.9.6): the
   library pane shows only the play, Title and Artist columns; the
   check-mark (pick) column is last and off-screen, so building an album
   needs a sideways scroll first. Enter on a title cell plays the song
   rather than picking it. Consider putting the pick column first or
   pinning it.
+  Shipped 2026-11-04: the pick column is now second, right after play
+  (Spec 04 TC-04-26). Enter on a title cell still plays, as Spec 06
+  says.
   **Layman:** On a smaller screen, the tick column you use to add songs to an album is hidden off to the right until you scroll sideways.
   Kind: ux.
   Source: in-session-2026-10-15 MUSI-0378 Windows check.

@@ -149,7 +149,7 @@
  "Restored '{name}'.": "« {name} » restauré.",
  "Saved playlists": "Playlists enregistrées",
  "Searchable list of tracks. Double-click a track or press Enter to play from it. Click the first column to play or pause that track.": "Liste de pistes avec recherche. Double-cliquez sur une piste ou appuyez sur Entrée pour lire à partir d'elle. Cliquez sur la première colonne pour lire ou mettre en pause cette piste.",
- "Searchable list of tracks. First column previews playback; last column toggles inclusion in the current album.": "Liste de pistes avec recherche. La première colonne lance un aperçu ; la dernière ajoute ou retire la piste de l'album actuel.",
+ "Searchable list of tracks. First column previews playback; second column toggles inclusion in the current album.": "Liste de pistes avec recherche. La première colonne lance un aperçu ; la deuxième ajoute ou retire la piste de l'album actuel.",
  "Selected: {selected} / {target}": "Sélection : {selected} / {target}",
  "Selected: {selected} / {target} {icon}": "Sélection : {selected} / {target} {icon}",
  "Show/Hide": "Afficher/Masquer",
