@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: MUSI=392 -->
+<!-- ants-roadmap-id-high-water: MUSI=393 -->
 
 # Album Builder — Roadmap
 
@@ -288,6 +288,13 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   MUSI-0374, starting with undo for deleting an album or removing
   tracks. Check the existing safety net first (AlbumStore's .trash)
   before building anything.
+  Owner decision 2026-11-04, undo for removing a track: build
+  "undo last removal". Edit > Undo and Ctrl+Z put the song back at
+  its old place in the order. Not full undo/redo, not a confirm box.
+  Safety net today (checked 2026-11-04): none. Album.deselect drops
+  the path; re-selecting appends it last, so the order slot is lost.
+  Spec: an amendment to Spec 04 (new behaviour + TCs), not a new spec,
+  so no automatic review-contract (global rule 14, 2026-10-31).
   **Layman:** Small improvements: a friendlier first launch, undo for deletions, faster startup, and fixing documents that no longer match the app.
   Kind: implement.
 
@@ -417,6 +424,14 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   **Layman:** On a smaller screen, the tick column you use to add songs to an album is hidden off to the right until you scroll sideways.
   Kind: ux.
   Source: in-session-2026-10-15 MUSI-0378 Windows check.
+
+- 📋 [MUSI-0393] **The printed report goes on a white background.**
+  Owner decision 2026-11-04: the PDF and printouts use a white
+  background; the on-screen report view stays dark. Today it prints
+  dark on purpose (Spec 09). Needs a Spec 09 amendment.
+  **Layman:** Printing the album report uses white paper colours, saving ink; the on-screen view stays dark.
+  Kind: enhancement.
+  Source: user-request-2026-11-04.
 
 ## 0.9.4 — Add music
 
