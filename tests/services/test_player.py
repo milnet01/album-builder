@@ -298,7 +298,7 @@ def test_missing_source_emits_error(qtbot, tmp_path: Path) -> None:
     p.error.connect(errors.append)
     p.set_source(tmp_path / "does-not-exist.wav")
     p.play()
-    qtbot.waitUntil(lambda: errors, timeout=3000)
+    qtbot.waitUntil(lambda: bool(errors), timeout=3000)
     # Spec contract is "missing source surfaces a specific error", not
     # "some error fires"; without the content check, an unrelated codec
     # failure passes the test and masks a regression in the missing-file path.
@@ -396,7 +396,7 @@ def test_set_source_clears_error_state(qtbot, tmp_path: Path) -> None:
     p.error.connect(errors.append)
     p.set_source(tmp_path / "bad.wav")
     p.play()
-    qtbot.waitUntil(lambda: errors, timeout=3000)
+    qtbot.waitUntil(lambda: bool(errors), timeout=3000)
     assert p.state() == PlayerState.ERROR
     # Acknowledge by setting a (different but still bogus) source.
     p.set_source(tmp_path / "bad2.wav")
