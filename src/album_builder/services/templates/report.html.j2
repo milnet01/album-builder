@@ -174,10 +174,20 @@
     color: var(--text-secondary);
   }
   @media print {
+    /* Spec 09: print on white to save ink; the screen view stays dark. */
+    :root {
+      --bg-base: #ffffff;
+      --bg-pane: #ffffff;
+      --bg-elevated: #f2f2f5;
+      --text-primary: #111216;
+      --text-secondary: #3d3f47;
+      --text-tertiary: #55575f;
+      --border: #c8c9cf;
+    }
     @page {
       size: A4;
       margin: 18mm 14mm;
-      background: var(--bg-base);
+      background: #ffffff;
     }
     body { font-size: 10.5pt; }
     .cover { padding: 30px 0 20px 0; border-bottom: none; }

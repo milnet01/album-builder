@@ -117,7 +117,7 @@ A table:
 | … | | | |
 | | **Total** | | **47:13** |
 
-Visual style: dark background of the report, but with high-contrast text that prints well to b/w too.
+Visual style: on screen, the HTML report has a dark background with high-contrast text. In print — the PDF, and the HTML printed from a browser — it has a white background with dark text, to save ink (owner decision 2026-11-04, MUSI-0393). The light colours live in the template's `@media print` block, so the single-render rule below still holds.
 
 **Composer column elision (three-state rule):**
 
@@ -265,6 +265,7 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 - **TC-09-29** — Approve renders both pairs. After a successful `AlbumStore.approve(album_id)`, `reports/` contains exactly four files: `{name} - {date}.html`, `{name} - {date}.pdf`, `{name} - {date} - artist.html`, `{name} - {date} - artist.pdf`. All four are non-zero size. Asserted via an exact-count check (not a glob that could pass with only the full variant present).
 - **TC-09-30** — Artist-view atomic-pair recovery is independent of the full variant. A simulated crash between `step:render-rename-html` and `step:render-rename-pdf` of the **artist** pair (with the **full** pair already complete on disk) leaves: full `.html` + full `.pdf` + artist `.html` + artist `.pdf.<pid>.<uuid>.tmp`. The Spec 10 §Atomic pair load-time scan removes both artist-pair members (the orphan `.html` final + the `.tmp` sibling) but **must not** touch the full-variant pair.
 - **TC-09-31** — Embedded fonts are readable. `pdffonts` on the PDF `render_report` writes for an album with Latin, Arabic and Hebrew text prints no `Embedded font file may be invalid` line. A second case renders the same album with `Cantarell` forced to the front of the stack and expects that line, so the check is shown to catch a bad font. Both are skipped where `pdffonts` is absent; the second also where `fc-match Cantarell` does not resolve to `Cantarell-VF.otf`. The check sees only the fonts installed where it runs (MUSI-0390).
+- **TC-09-32** — Print is light, screen is dark. The first page of the report rendered for print (WeasyPrint's default media) has a median pixel brightness, and a page-margin pixel brightness, of at least 230 out of 255; the same HTML rendered with `media_type="screen"` has a median of at most 40. Skipped where `pdftoppm` is absent (MUSI-0393).
 
 (Visual regression — pixel-diff PDF vs golden — stays manual / opt-in. Not part of the TC contract because pixel-exact comparison is brittle.)
 

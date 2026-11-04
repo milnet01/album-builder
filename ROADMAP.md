@@ -434,10 +434,12 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: ux.
   Source: in-session-2026-10-15 MUSI-0378 Windows check.
 
-- 📋 [MUSI-0393] **The printed report goes on a white background.**
+- ✅ [MUSI-0393] **The printed report goes on a white background.**
   Owner decision 2026-11-04: the PDF and printouts use a white
   background; the on-screen report view stays dark. Today it prints
   dark on purpose (Spec 09). Needs a Spec 09 amendment.
+  Shipped 2026-11-04: the template's print block switches to light
+  colours; Spec 09 §Track listing amended, TC-09-32 added.
   **Layman:** Printing the album report uses white paper colours, saving ink; the on-screen view stays dark.
   Kind: enhancement.
   Source: user-request-2026-11-04.

@@ -26,6 +26,7 @@ from album_builder.services.report import (
     _resolve_columns,
     _truncate_lyrics,
     render_html,
+    render_pdf_from_html,
     render_report,
     version_string,
 )
@@ -522,3 +523,42 @@ def test_TC_09_31_check_catches_cantarell(tmp_path, monkeypatch):
     monkeypatch.setattr(report_module, "render_html", _cantarell_first)
     stderr = _pdffonts_stderr(_render_multiscript_report(tmp_path))
     assert _BAD_FONT_LINE in stderr
+
+
+def _first_page_brightness(pdf_bytes: bytes, tmp_path: Path) -> tuple[int, int]:
+    """(median, top-left corner) grey level of page 1; the corner is page margin."""
+    from PIL import Image
+
+    pdf = tmp_path / "page.pdf"
+    pdf.write_bytes(pdf_bytes)
+    subprocess.run(
+        ["pdftoppm", "-r", "30", "-f", "1", "-l", "1", "-png", "-singlefile",
+         str(pdf), str(tmp_path / "page")],
+        check=True,
+    )
+    with Image.open(tmp_path / "page.png") as img:
+        page = img.convert("L")
+        corner = page.getpixel((1, 1))
+        grey = sorted(page.getdata())
+    return grey[len(grey) // 2], corner
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(shutil.which("pdftoppm") is None, reason="pdftoppm not installed")
+def test_TC_09_32_print_is_light_screen_is_dark(tmp_path):
+    # Spec: TC-09-32
+    from weasyprint import HTML
+
+    paths = _seed_paths(tmp_path, 2)
+    library = _FakeLibrary({
+        p: _make_track(p, title=f"Song {i}", lyrics_text="a line\nanother line")
+        for i, p in enumerate(paths)
+    })
+    html = render_html(_make_album(paths, name="Paper"), library, today=date(2026, 11, 4))
+    printed, printed_margin = _first_page_brightness(render_pdf_from_html(html), tmp_path)
+    screen, _ = _first_page_brightness(
+        HTML(string=html, media_type="screen").write_pdf(), tmp_path,
+    )
+    assert printed >= 230, f"printed page median brightness {printed}"
+    assert printed_margin >= 230, f"printed page margin brightness {printed_margin}"
+    assert screen <= 40, f"screen page median brightness {screen}"
