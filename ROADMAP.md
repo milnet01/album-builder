@@ -62,6 +62,11 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   messaged (mailbox id 145).
   Decided (owner, 2026-11-04): cut 1.0.0 first, then start Phase MP-1
   (session continuity) ahead of Flatpak and OBS.
+  Phase MP-1 spec: docs/specs/26-session-continuity.md, accepted
+  2026-11-04 after two cold review loops (the cap): 15 findings fixed,
+  none deferred. The second loop's 6 fixes were read by no reviewer, so
+  the build is their check. Loop log:
+  docs/reviews/26-session-continuity-loop-log.md.
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 

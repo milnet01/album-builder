@@ -1,7 +1,7 @@
 <!-- ants-spec-format: 1 -->
 # 26 — Session continuity: pick up where you left off
 
-**Status:** spec draft (2026-11-04).
+**Status:** accepted (2026-11-04).
 **Kind:** implement.
 **Source:** ROADMAP MUSI-0356 Phase MP-1 (user request 2026-07-25; owner decisions 2026-11-04).
 **Depends on:** 03, 06, 10, 14, 15, 18. **Amends:** 00, 06, 10.
@@ -112,7 +112,7 @@ class Player:
     def resume_point(self) -> float | None: ...  # the held point, or None
 ```
 
-`Player.set_source(..., start_seconds=s)` holds a **resume point**. The first play of that source starts at `s`, and then the point is gone. A `seek()` before that play moves the resume point. Any later `set_source` drops it. Wherever the point is read (`resume_point()`, `position()`, the first play), it is `0` when `duration() > 0` and `s > duration() - 5.0` (a song that had nearly finished starts again). Before play, the player is `STOPPED` and `position()` reports the resume point. The point is applied with `QMediaPlayer.setPosition` when the media reaches `LoadedMedia` (§6). That emits `position_changed`, which the now-playing scrubber and the lyrics line follow, so they show where play will start.
+`Player.set_source(..., start_seconds=s)` holds a **resume point**. Every `set_source` of a path holds one, `0.0` included; `set_source(None)` holds none. The first play of that source starts at `s`. The point is dropped once play has started with the media loaded, not at the `play()` call. A `seek()` before that play moves the resume point. Any later `set_source` replaces it. A `start_seconds` within 5 s of the end (`duration() > 0` and `s > duration() - 5.0`) reads as `0` (a song that had nearly finished starts again); a point moved by `seek()` is kept. Before play, the player is `STOPPED` and `position()` reports the resume point. The point is applied with `QMediaPlayer.setPosition` when the media reaches `LoadedMedia` (§6). That emits `position_changed`, which the now-playing scrubber and the lyrics line follow, so they show where play will start.
 
 ### 4.3 Restore at launch (`MainWindow.__init__`)
 
@@ -120,13 +120,13 @@ Replaces the last-played block. In order:
 
 1. Map each `entries` path to a `Track` in `library_watcher.library()`. Drop the entries with no match and remap `play_order` without them, keeping its relative order.
 2. If the current entry survived, it stays current at `position_seconds`. If not, the current becomes the next surviving slot after it in play order, else the last surviving slot, at position `0`.
-3. If no entry survived, or the stored queue was invalid or `null`, fall back to `last_played_track_path` (TC-06-11). If it maps to a library track, the queue becomes that one track, at `position_seconds`. If not, nothing is restored and step 4 is skipped.
+3. If no entry survived, or the stored queue was invalid or `null`, fall back to `last_played_track_path` (TC-06-11). If it maps to a library track, the queue becomes that one track, at `position_seconds`. If not, the queue is empty, and step 4 still loads shuffle and repeat.
 4. `PlaybackController.restore(...)` loads the queue. Nothing calls `Player.play()`.
 5. Select the tab named by `last_tab`. If `window.maximized`, show maximised.
 
 Restoring through the controller means `current_changed` drives the now-playing cards, lyrics sync and ReplayGain, the same path auto-advance uses, instead of the hand-made calls the current block makes.
 
-Spec 06's preview-without-play rule is unchanged: the player is `STOPPED` on launch, so a row-body click still previews another song, and the resume point stays with the loaded one. Spec 06's "row button on a `STOPPED` active source restarts from 0" rule gains one exception: while `Player.resume_point()` is not `None`, `PlaybackController.preview` of the loaded track calls `Player.play()` instead of reloading it, so it resumes from the resume point.
+Spec 06's preview-without-play rule is unchanged: the player is `STOPPED` on launch, so a row-body click still previews another song, and the resume point stays with the loaded one. Spec 06's "row button on a `STOPPED` active source restarts from 0" rule gains one exception: while the player is `STOPPED` and `Player.resume_point()` is not `None`, `PlaybackController.preview` of the loaded track calls `Player.play()` instead of reloading it, so it resumes from the resume point.
 
 ### 4.4 Saving
 
@@ -161,7 +161,7 @@ None of these can run yet; every surface below is created by this spec. Each *Te
   *Breaks when:* a partial replace happens before validation.
 
 - **INV-6** (TC-26-06) — Missing songs at launch follow §4.3 steps 1–3: dropped entries, relative order kept, current moves to the next surviving slot (else the last) at position 0, and no survivors falls back to the single-track restore.
-  *Test:* `tests/ui/test_TC_26_session_restore.py::test_missing_tracks`, four cases: current survives, current missing mid-order, current missing at the end, none survive. The current-survives case keeps `position_seconds` (isolates "position kept" from "position reset").
+  *Test:* `tests/ui/test_TC_26_session_restore.py::test_missing_tracks`, four cases: current survives, current missing mid-order, current missing at the end, none survive. The current-survives case keeps `position_seconds` (isolates "position kept" from "position reset"). The none-survive case saves `shuffle: true` and `repeat: "all"` and asserts both still load.
   *Breaks when:* a missing song aborts the restore, or the current jumps to slot 0.
 
 - **INV-7** (TC-26-07) — After launch with a saved session, `Player.state()` is `STOPPED`, `Player.source()` is the current track, `Player.play()` was not called, and Up Next shows the restored play order with the current slot highlighted.
@@ -185,7 +185,7 @@ None of these can run yet; every surface below is created by this spec. Each *Te
   *Breaks when:* the position is read after `Player.stop()`.
 
 - **INV-12** (TC-26-12) — While `PLAYING`, state is saved at least once per `POSITION_SAVE_INTERVAL_MS`; while `PAUSED` the interval timer is stopped.
-  *Test:* `tests/ui/test_TC_26_session_restore.py::test_periodic_save`, with the constant patched to 50 ms.
+  *Test:* `tests/ui/test_TC_26_session_restore.py::test_periodic_save`, with the constant patched to 400 ms (above the 250 ms debounce it restarts, which a shorter tick would keep from firing).
   *Breaks when:* the timer never starts, or keeps writing while paused.
 
 - **INV-13** (TC-26-13) — After the queue ends naturally (repeat off), the saved `position_seconds` is 0.
