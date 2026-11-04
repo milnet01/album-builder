@@ -173,6 +173,7 @@
  "Track duration": "Duración de la pista",
  "Track library": "Biblioteca de pistas",
  "Track not in library: {path}": "La pista no está en la biblioteca: {path}",
+ "Track file not found: {path}": "No se encontró el archivo de la pista: {path}",
  "Tracks": "Pistas",
  "Undo Remove Song": "Deshacer quitar canción",
  "Unexpected error during approve:\n\n{error_type}: {error}\n\nFull traceback printed to terminal/journal.": "Error inesperado al aprobar:\n\n{error_type}: {error}\n\nEl detalle completo del error está en el terminal o en el registro del sistema.",

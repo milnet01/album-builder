@@ -178,6 +178,26 @@ def test_invalid_media_status_emits_error_and_error_state(qtbot, tmp_path) -> No
     assert "decode" in error_msgs[0].lower()
 
 
+# Spec: TC-06-05
+# MUSI-0397: a missing file made Qt fire errorOccurred ("Could not open
+# file", no path) and then InvalidMedia, so the user got two toasts and the
+# first did not name the file. One toast per failure, naming the path.
+def test_missing_file_reports_once_with_path(qtbot, tmp_path) -> None:
+    from PyQt6.QtMultimedia import QMediaPlayer
+
+    p = Player()
+    p._source = tmp_path / "does-not-exist.wav"
+    errors: list[str] = []
+    p.error.connect(errors.append)
+
+    p._on_error(QMediaPlayer.Error.ResourceError, "Could not open file")
+    p._on_media_status(QMediaPlayer.MediaStatus.InvalidMedia)
+
+    assert len(errors) == 1, errors
+    assert str(p._source) in errors[0]
+    assert p.state() == PlayerState.ERROR
+
+
 # Indie-review L3-H2: Player must distinguish natural end-of-track from
 # user-stop. STOPPED alone is ambiguous; downstream consumers (lyrics
 # tracker, ui) need a separate `ended` pulse to drive end-of-track UX.

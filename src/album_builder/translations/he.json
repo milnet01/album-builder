@@ -173,6 +173,7 @@
  "Track duration": "משך הרצועה",
  "Track library": "ספריית רצועות",
  "Track not in library: {path}": "הרצועה אינה בספרייה: {path}",
+ "Track file not found: {path}": "קובץ הרצועה לא נמצא: {path}",
  "Tracks": "רצועות",
  "Undo Remove Song": "ביטול הסרת השיר",
  "Unexpected error during approve:\n\n{error_type}: {error}\n\nFull traceback printed to terminal/journal.": "שגיאה לא צפויה במהלך האישור:\n\n{error_type}: {error}\n\nפרטי השגיאה המלאים מופיעים במסוף או ביומן המערכת.",

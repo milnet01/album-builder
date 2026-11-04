@@ -173,6 +173,7 @@
  "Track duration": "Durée de la piste",
  "Track library": "Bibliothèque de pistes",
  "Track not in library: {path}": "Piste absente de la bibliothèque : {path}",
+ "Track file not found: {path}": "Fichier de piste introuvable : {path}",
  "Tracks": "Pistes",
  "Undo Remove Song": "Annuler le retrait du morceau",
  "Unexpected error during approve:\n\n{error_type}: {error}\n\nFull traceback printed to terminal/journal.": "Erreur inattendue pendant la validation :\n\n{error_type} : {error}\n\nLe détail complet de l'erreur figure dans le terminal ou le journal.",

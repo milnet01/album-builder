@@ -173,6 +173,7 @@
  "Track duration": "مدة المقطع",
  "Track library": "مكتبة المقاطع",
  "Track not in library: {path}": "المقطع غير موجود في المكتبة: {path}",
+ "Track file not found: {path}": "ملف المقطع غير موجود: {path}",
  "Tracks": "المقاطع",
  "Undo Remove Song": "تراجع عن إزالة الأغنية",
  "Unexpected error during approve:\n\n{error_type}: {error}\n\nFull traceback printed to terminal/journal.": "خطأ غير متوقع أثناء الاعتماد:\n\n{error_type}: {error}\n\nتفاصيل الخطأ الكاملة في الطرفية أو سجل النظام.",

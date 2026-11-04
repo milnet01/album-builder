@@ -173,6 +173,7 @@
  "Track duration": "Snitduur",
  "Track library": "Snitbiblioteek",
  "Track not in library: {path}": "Snit nie in die biblioteek nie: {path}",
+ "Track file not found: {path}": "Snitlêer nie gevind nie: {path}",
  "Tracks": "Snitte",
  "Undo Remove Song": "Ontdoen verwydering van liedjie",
  "Unexpected error during approve:\n\n{error_type}: {error}\n\nFull traceback printed to terminal/journal.": "Onverwagte fout tydens goedkeuring:\n\n{error_type}: {error}\n\nDie volledige foutbesonderhede is in die terminaal of joernaal.",

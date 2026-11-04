@@ -18,6 +18,10 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
   maximised window are remembered too. If a song in the queue has been
   moved or deleted, it is skipped and the rest of the queue still loads.
 
+### Fixed
+
+- **Playing a track whose file has gone missing now shows one clear message, "Track file not found", with where the file should be. Before, you got two pop-ups and the first didn't say which file.** (MUSI-0397)
+
 ## [1.0.0] - 2026-11-04
 
 **Theme:** Every sign of success proven

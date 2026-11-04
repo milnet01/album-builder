@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: MUSI=396 -->
+<!-- ants-roadmap-id-high-water: MUSI=397 -->
 
 # Album Builder — Roadmap
 
@@ -141,13 +141,17 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Source: user-decision-2026-11-04.
   Lanes: packaging.
 
-- 📋 [MUSI-0395] **Two real-audio player tests fail on a pytest-qt check, not on the player.**
+- ✅ [MUSI-0395] **Two real-audio player tests fail on a pytest-qt check, not on the player.**
   With AB_INTEGRATION_AUDIO=1, tests/services/test_player.py::test_missing_source_emits_error
   and ::test_set_source_clears_error_state fail with "waitUntil() callback
   must return None, True or False, returned []". Seen 2026-11-05 on main at
   b4c0e4d (code untouched) as well as with Spec 26. The callback returns a
   list; wrapping it in bool() is the likely fix. CI skips these tests, so
   nothing else caught it.
+  Fixed 2026-11-05: both callbacks wrapped in bool().
+  test_set_source_clears_error_state then passed;
+  test_missing_source_emits_error exposed a real double-error bug, fixed
+  as MUSI-0397.
   **Layman:** Two of the by-hand audio tests break before they test anything, so they no longer check what they were written for.
   Kind: test.
   Source: found-2026-11-05-building-spec-26.
@@ -170,6 +174,16 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   **Layman:** When the computer is very busy, one lyrics test reports an error that has nothing to do with the code it tests.
   Kind: investigate.
   Source: found-2026-11-05-building-spec-26.
+
+- ✅ [MUSI-0397] **A missing track file showed two error pop-ups, and the first did not name the file.**
+  Qt fires errorOccurred ("Could not open file", no path) and then
+  InvalidMedia for a missing file; Player emitted an error for each. Now
+  _on_error names the path (Spec 06 §Errors' "Track file not found:
+  <path>") and the InvalidMedia branch stays quiet when the source is
+  already in ERROR. Unit test: test_missing_file_reports_once_with_path.
+  **Layman:** Pressing play on a track whose file is gone now shows one message, "Track file not found", with the file's location.
+  Kind: fix.
+  Source: found-2026-11-05-fixing-MUSI-0395.
 
 ## 1.0.0 — Every sign of success proven
 

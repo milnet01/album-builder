@@ -173,6 +173,7 @@
  "Track duration": "Duração da faixa",
  "Track library": "Biblioteca de faixas",
  "Track not in library: {path}": "Faixa fora da biblioteca: {path}",
+ "Track file not found: {path}": "Arquivo da faixa não encontrado: {path}",
  "Tracks": "Faixas",
  "Undo Remove Song": "Desfazer remoção da música",
  "Unexpected error during approve:\n\n{error_type}: {error}\n\nFull traceback printed to terminal/journal.": "Erro inesperado ao aprovar:\n\n{error_type}: {error}\n\nO detalhe completo do erro está no terminal ou no registro do sistema.",

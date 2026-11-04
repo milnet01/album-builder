@@ -383,10 +383,14 @@ class Player(QObject):
             self._state = PlayerState.ERROR
             path_str = str(self._source) if self._source else "<no source>"
             logger.warning("Player invalid media: Could not decode %s", path_str)
-            self._emit_error(
-                QMediaPlayer.Error.FormatError,
-                tr("Could not decode {path}", path=path_str),
-            )
+            # Already ERROR means errorOccurred reported this source's
+            # failure first (a missing file fires both); a second toast
+            # for the same failure is noise. MUSI-0397.
+            if prior != PlayerState.ERROR:
+                self._emit_error(
+                    QMediaPlayer.Error.FormatError,
+                    tr("Could not decode {path}", path=path_str),
+                )
             if self._state != prior:
                 self.state_changed.emit(self._state)
 
@@ -404,6 +408,10 @@ class Player(QObject):
         self._state = PlayerState.ERROR
         msg = message or str(error)
         logger.warning("Player error: %s (%s)", msg, error)
+        # Qt's message for a missing file ("Could not open file") names no
+        # path; Spec 06 §Errors promises one that does. MUSI-0397.
+        if self._source is not None and not self._source.exists():
+            msg = tr("Track file not found: {path}", path=str(self._source))
         self._emit_error(error, msg)
         if self._state != prior:
             self.state_changed.emit(self._state)
