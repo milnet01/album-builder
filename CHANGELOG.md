@@ -8,6 +8,16 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+### Added
+
+- **The player picks up where you left off** (MUSI-0356)
+  Close Album Builder and open it again, and your song is back at the
+  spot where you stopped. It waits for you to press play. The play
+  queue comes back in the same order, so Next and Previous carry on
+  through the same list. Shuffle, repeat, the tab you had open and a
+  maximised window are remembered too. If a song in the queue has been
+  moved or deleted, it is skipped and the rest of the queue still loads.
+
 ## [1.0.0] - 2026-11-04
 
 **Theme:** Every sign of success proven

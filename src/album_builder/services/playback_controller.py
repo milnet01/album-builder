@@ -22,7 +22,7 @@ from collections.abc import Iterable, Sequence
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from album_builder.domain.play_queue import PlayQueue, RepeatMode
+from album_builder.domain.play_queue import PlayQueue, QueueSnapshot, RepeatMode
 from album_builder.domain.track import Track
 from album_builder.services.player import Player, PlayerState
 
@@ -64,7 +64,31 @@ class PlaybackController(QObject):
     def repeat_mode(self) -> RepeatMode:
         return self._queue.repeat_mode()
 
+    def snapshot(self) -> QueueSnapshot:
+        return self._queue.snapshot()
+
     # ---- Commands ----------------------------------------------------
+
+    def restore(
+        self, snapshot: QueueSnapshot, tracks: Sequence[Track], *, position_seconds: float
+    ) -> None:
+        """Load a saved session without playing (Spec 26 §4.3). `tracks` are the
+        library tracks for `snapshot.entries`, in the same order. Raises
+        ValueError, changing nothing, on an invalid snapshot. Emits
+        queue_changed, current_changed, shuffle_changed and repeat_changed once
+        each, so every surface follows the same path auto-advance uses."""
+        self._queue.restore(
+            tracks, snapshot.play_order, snapshot.current,
+            shuffle=snapshot.shuffle, repeat=snapshot.repeat,
+        )
+        current = self._queue.current()
+        if current is not None:
+            self._player.set_source(current.path, start_seconds=position_seconds)
+        self.queue_changed.emit(self._queue.play_order())
+        self._loaded = current
+        self.current_changed.emit(current)
+        self.shuffle_changed.emit(snapshot.shuffle)
+        self.repeat_changed.emit(snapshot.repeat)
 
     def play_tracks(self, tracks: Sequence[Track], *, start_index: int = 0) -> None:
         materialized = list(tracks)
@@ -122,11 +146,18 @@ class PlaybackController(QObject):
         # active source AND the player is PLAYING/PAUSED; otherwise reload (covers
         # cross-row, nothing active, STOPPED-active past-the-end, ERROR-active -
         # ERROR needs a reload because only set_source clears it).
-        if track.path == self._player.source() and self._player.state() in (
-            PlayerState.PLAYING,
-            PlayerState.PAUSED,
-        ):
+        is_active = track.path == self._player.source()
+        state = self._player.state()
+        if is_active and state in (PlayerState.PLAYING, PlayerState.PAUSED):
             self._player.toggle()
+        elif (
+            is_active
+            and state == PlayerState.STOPPED
+            and self._player.resume_point() is not None
+        ):
+            # Spec 26 §4.3: the restored song has not played yet; reloading it
+            # would drop the resume point, so play it from there instead.
+            self._player.play()
         else:
             self.play_tracks([track])
 

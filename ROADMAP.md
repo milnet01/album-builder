@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: MUSI=394 -->
+<!-- ants-roadmap-id-high-water: MUSI=396 -->
 
 # Album Builder — Roadmap
 
@@ -74,6 +74,15 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Spec 15's "Default tab on launch" line. INV-8 needs a run by hand
   with AB_INTEGRATION_AUDIO=1; INV-15 (maximised) needs a check by
   hand on KDE and on Windows (ssh wintest).
+  Progress (2026-11-05), Phase MP-1: BUILT to Spec 26
+  (docs/specs/26-session-continuity.md). The song resumes paused at its
+  spot; queue, shuffle, repeat, last tab and maximised window restore.
+  TC-26-01..16 locked. TC-26-08 run by hand with AB_INTEGRATION_AUDIO=1
+  on 2026-11-05: all three routes (Play, PlayPause, row button) pass.
+  Still owed before release: INV-15 by hand on KDE and on Windows (ssh
+  wintest), un-maximising back to the saved size. Specs 00, 06, 10, 15
+  and 21 amended in the same commit (Spec 21 was missing from Spec 26
+  §11's list).
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 
@@ -131,6 +140,36 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: package.
   Source: user-decision-2026-11-04.
   Lanes: packaging.
+
+- 📋 [MUSI-0395] **Two real-audio player tests fail on a pytest-qt check, not on the player.**
+  With AB_INTEGRATION_AUDIO=1, tests/services/test_player.py::test_missing_source_emits_error
+  and ::test_set_source_clears_error_state fail with "waitUntil() callback
+  must return None, True or False, returned []". Seen 2026-11-05 on main at
+  b4c0e4d (code untouched) as well as with Spec 26. The callback returns a
+  list; wrapping it in bool() is the likely fix. CI skips these tests, so
+  nothing else caught it.
+  **Layman:** Two of the by-hand audio tests break before they test anything, so they no longer check what they were written for.
+  Kind: test.
+  Source: found-2026-11-05-building-spec-26.
+
+- 📋 [MUSI-0396] **Under heavy machine load, a lyrics-alignment test errors on a stray worker signal.**
+  2026-11-05, load average 30 to 60 (other jobs on the machine): the
+  full suite reports an ERROR at setup of
+  tests/services/test_alignment_service.py::test_cancel_for_unknown_path_is_noop,
+  "TypeError: () missing 1 required positional argument: '_path'", from a
+  lambda in services/alignment_service.py's worker wiring. It happens on
+  main at b4c0e4d, before Spec 26: 3 of 3 full runs in a clean checkout.
+  Under lighter load the suite passed (1006 passed on 2026-11-04).
+  Hypothesis, unconfirmed: a worker signal from an earlier test reaches
+  this one.
+  Separate, and fixed in the Spec 26 commit: two full runs aborted with
+  "Fatal Python error: Aborted" during garbage collection in the same
+  area. Spec 26's new unit tests loaded real files into a Player and
+  never released it; they now keep the backend out (no abort in the
+  next runs).
+  **Layman:** When the computer is very busy, one lyrics test reports an error that has nothing to do with the code it tests.
+  Kind: investigate.
+  Source: found-2026-11-05-building-spec-26.
 
 ## 1.0.0 — Every sign of success proven
 

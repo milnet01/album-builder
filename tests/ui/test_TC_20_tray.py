@@ -119,7 +119,7 @@ def test_main_window_constructs_and_tears_down_mpris(main_window, monkeypatch) -
     unreg: list = []
     monkeypatch.setattr(main_window._mpris, "unregister", lambda: unreg.append(True))
     saves: list = []
-    monkeypatch.setattr(main_window, "_save_state_now", lambda: saves.append(True))
+    monkeypatch.setattr(main_window, "_save_state_now", lambda *_a: saves.append(True))
 
     main_window.close()
     assert unreg == [True]       # MPRIS torn down

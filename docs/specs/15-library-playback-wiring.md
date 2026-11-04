@@ -1,6 +1,6 @@
 # 15 — Library-wide playback wiring (services + ui)
 
-**Status:** Reviewed - ready to implement (Phase B of the music-player epic) · **Last updated:** 2026-06-30 · **Depends on:** 00, 01, 05, 06, 07, 10, 13, 14 · **Blocks:** music-player Phases C-G
+**Status:** Reviewed - ready to implement (Phase B of the music-player epic) · **Last updated:** 2026-11-05 · **Depends on:** 00, 01, 05, 06, 07, 10, 13, 14 · **Blocks:** music-player Phases C-G
 
 To be implemented in `src/album_builder/services/playback_controller.py` (the
 orchestrator), `src/album_builder/ui/queue_pane.py` (the Up Next list), plus
@@ -483,8 +483,8 @@ It is not wired to the controller.
   (Toast still overlays the central widget; it surfaces above whichever tab is
   shown).
 - Default tab on launch is "Album Builder" (curation is still the primary
-  workflow in Phase B). Persisting the last-active tab is deferred (Spec 10
-  amendment, Phase D/E).
+  workflow in Phase B). Since Spec 26, launch opens the last-active tab
+  instead; "Album Builder" stays the default when none is saved.
 
 ### Mode toggles
 

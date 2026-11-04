@@ -1,6 +1,6 @@
 # 00 — Album Builder: App Overview
 
-**Status:** Implemented (v0.6.1) · **Last updated:** 2026-05-18 · **Owner:** ants
+**Status:** Implemented (v0.6.1) · **Last updated:** 2026-11-05 · **Owner:** ants
 
 ## Purpose
 
@@ -186,7 +186,7 @@ The asymmetry is intentional, not historical drift.
 - **Startup time:** under 1 second on a warm cache to a usable window.
 - **Memory:** under 300 MB resident with library loaded, excluding Whisper model.
 - **Responsiveness:** no operation in the UI thread blocks for more than 100 ms; long work runs in QThread workers.
-- **Crash recovery:** the canonical state on disk is always valid. An ungraceful exit never loses the album definition (atomic JSON writes per Spec 10). **Play position is not persisted in v1 — at all** (Spec 06): a clean quit and a kill produce the same restart behavior, namely the last-played track loaded paused at zero. (`last_position_seconds` is on the v2 roadmap.)
+- **Crash recovery:** the canonical state on disk is always valid. An ungraceful exit never loses the album definition (atomic JSON writes per Spec 10). The listening session — song, position, queue, shuffle and repeat — is saved on quit and every 10 s while playing (Spec 26 §4.4), so a crash loses at most 10 s of position.
 - **Data integrity:** Album Builder never writes to source audio files. The app's writes are confined to `Albums/`, `*.lrc` sidecars next to audio, and `.album-builder/`.
 - **Offline:** the app starts and runs offline. The only network use is the one-time Whisper model download (with explicit user prompt before triggering).
 

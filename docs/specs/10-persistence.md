@@ -1,6 +1,6 @@
 # 10 — Persistence & Live Save
 
-**Status:** Implemented (Phase 1 + 2 + 4 + v0.6.1 two-variant atomic-pair amendment) · **Last updated:** 2026-05-18 · **Depends on:** 00 · **Used by:** 02, 03, 04, 05, 06, 07, 08, 09 · **Canonical for:** every JSON schema in this app (`album.json`, `state.json`, `settings.json`) + the atomic-pair invariant for multi-file transactions
+**Status:** Implemented (Phase 1 + 2 + 4 + v0.6.1 two-variant atomic-pair amendment) · **Last updated:** 2026-11-05 · **Depends on:** 00 · **Used by:** 02, 03, 04, 05, 06, 07, 08, 09 · **Canonical for:** every JSON schema in this app (`album.json`, `state.json`, `settings.json`) + the atomic-pair invariant for multi-file transactions
 
 ## Purpose
 
@@ -225,9 +225,21 @@ Spec 03 owns the *meaning* of `current_album_id` (album switcher state); Spec 06
 {
   "current_album_id": "8a36b2e0-7d4f-4d0c-9b27-1c5f1e8a44ca",
   "last_played_track_path": "/abs/path/to/track.mpeg",
+  "last_tab": "player",
+  "playback": {
+    "position_seconds": 83.4,
+    "queue": {
+      "current": 0,
+      "entries": ["/abs/path/to/track.mpeg", "/abs/path/to/other.mpeg"],
+      "play_order": [0, 1]
+    },
+    "repeat": "off",
+    "shuffle": false
+  },
   "schema_version": 1,
   "window": {
     "height": 900,
+    "maximized": false,
     "splitter_sizes": [5, 3, 5],
     "width": 1400,
     "x": 100,
@@ -244,8 +256,14 @@ Spec 03 owns the *meaning* of `current_album_id` (album switcher state); Spec 06
 | `window.width` / `window.height` | int | `>= 100` (clamped on load) |
 | `window.x` / `window.y` | int | Any integer (the WM may move the window off-screen; OS clamps on apply) |
 | `window.splitter_sizes` | array<int> | Length 3, all `>= 0`. **Stored as relative ratios, not absolute pixels** — Qt normalises across the splitter's actual width, so the same `[5, 3, 5]` works on any display size (Phase 1 Tier 3 fix). |
+| `window.maximized` | bool | When `true`, `width` / `height` / `x` / `y` hold the normal (un-maximised) geometry |
+| `last_tab` | string | `"builder"` or `"player"` |
+| `playback.position_seconds` | number | `>= 0`, one decimal place on write |
+| `playback.shuffle` | bool | |
+| `playback.repeat` | string | `"off"`, `"one"` or `"all"` |
+| `playback.queue` | object \| null | `entries` (absolute paths, duplicates allowed), `play_order` (a permutation of `range(len(entries))`), `current` (a slot in `play_order`); `null` for an empty queue |
 
-**Position is not persisted.** Spec 06 confirms: "the now-playing pane re-loads on app restart, paused at zero." A future schema bump may add `last_position_seconds`; v1 has none.
+**The listening session** (`last_tab`, `playback`, `window.maximized`) is Spec 26's. Every field is optional and self-heals alone, except `playback.queue`, which is discarded whole when any of its fields is invalid; Spec 26 §4.1 holds the rules. They need no schema bump (Spec 26 §14).
 
 Self-heal on load: any field of the wrong type → fall back to the default for that field; log warning. Corrupt JSON → fall back to the entire default `AppState()`. (See Spec 03 for switcher fallback rules when `current_album_id` references a deleted album.)
 

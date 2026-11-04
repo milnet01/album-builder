@@ -59,11 +59,10 @@ class ReplayGainService(QObject):
         self._controller = controller
         self._enabled = settings.enabled
         self._mode = settings.mode
-        # Cached current track. Fed by current_changed AND the MainWindow
-        # last-played restore path (which bypasses the controller, so
-        # controller.current_track() is None at startup - a live query would
-        # mis-level). At construction it starts None: nothing is applied (the
-        # Player's default factor 1.0 stands) until the first on_track_changed.
+        # Cached current track, fed by current_changed (the Spec 26 launch
+        # restore emits it too). At construction it starts None: nothing is
+        # applied (the Player's default factor 1.0 stands) until the first
+        # on_track_changed.
         self._current: Track | None = None
         controller.current_changed.connect(self.on_track_changed)
 
@@ -74,8 +73,7 @@ class ReplayGainService(QObject):
         return self._mode
 
     def on_track_changed(self, track: Track | None) -> None:
-        """The current_changed slot AND the public entry the restore path calls:
-        cache the track and re-level."""
+        """The current_changed slot: cache the track and re-level."""
         self._current = track
         self._apply()
 

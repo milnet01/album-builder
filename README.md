@@ -41,7 +41,9 @@ See [`CHANGELOG.md`](CHANGELOG.md) for what changed in each release.
 - **Shows what is already used.** A badge marks songs that are already
   on an approved album, so you don't use one twice by accident.
 - **Plays music.** A separate player tab plays your whole library, with
-  a play queue, shuffle, repeat and saved playlists.
+  a play queue, shuffle, repeat and saved playlists. Close the app and
+  open it again, and it picks up where you left off: the same song at
+  the same spot, the same queue, waiting for you to press play.
 - **Shows lyrics in time with the song.** Lyrics files (`.lrc`) scroll
   along as the song plays. The app can also line up plain lyrics with
   the song automatically; that part is an optional extra (see below).

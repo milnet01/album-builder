@@ -1,7 +1,7 @@
 <!-- ants-spec-format: 1 -->
 # 26 — Session continuity: pick up where you left off
 
-**Status:** accepted (2026-11-04).
+**Status:** implemented (2026-11-05); accepted 2026-11-04.
 **Kind:** implement.
 **Source:** ROADMAP MUSI-0356 Phase MP-1 (user request 2026-07-25; owner decisions 2026-11-04).
 **Depends on:** 03, 06, 10, 14, 15, 18. **Amends:** 00, 06, 10.
@@ -120,7 +120,7 @@ Replaces the last-played block. In order:
 
 1. Map each `entries` path to a `Track` in `library_watcher.library()`. Drop the entries with no match and remap `play_order` without them, keeping its relative order.
 2. If the current entry survived, it stays current at `position_seconds`. If not, the current becomes the next surviving slot after it in play order, else the last surviving slot, at position `0`.
-3. If no entry survived, or the stored queue was invalid or `null`, fall back to `last_played_track_path` (TC-06-11). If it maps to a library track, the queue becomes that one track, at `position_seconds`. If not, the queue is empty, and step 4 still loads shuffle and repeat.
+3. If no entry survived, or the stored queue was invalid or `null`, fall back to `last_played_track_path` (TC-06-11). If it maps to a library track, the queue becomes that one track, at `position_seconds`. If not, the queue is empty, and step 4 still loads shuffle and repeat. A queue `PlayQueue.restore` rejects counts as invalid; that includes shuffle off with a play order other than the natural one, which Spec 14 never produces.
 4. `PlaybackController.restore(...)` loads the queue. Nothing calls `Player.play()`.
 5. Select the tab named by `last_tab`. If `window.maximized`, show maximised.
 
@@ -138,7 +138,7 @@ Spec 06's preview-without-play rule is unchanged: the player is `STOPPED` on lau
 
 ## 5. Invariants
 
-None of these can run yet; every surface below is created by this spec. Each *Test:* names the rule its fixture isolates.
+Each *Test:* names the rule its fixture isolates.
 
 - **INV-1** (TC-26-01) — `save_state` then `load_state` of an `AppState` carrying every §4.1 field returns equal values, and the written keys are sorted.
   *Test:* `tests/persistence/test_TC_26_state_playback.py::test_round_trip`.

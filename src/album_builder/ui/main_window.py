@@ -37,6 +37,7 @@ from PyQt6.QtWidgets import (
 from album_builder import i18n
 from album_builder.domain.album import AlbumStatus
 from album_builder.domain.library import SUPPORTED_EXTENSIONS
+from album_builder.domain.play_queue import QueueSnapshot
 from album_builder.domain.track import Track
 from album_builder.i18n import tr
 from album_builder.persistence.lrc_io import read_lrc
@@ -51,7 +52,7 @@ from album_builder.persistence.settings import (
     write_tracks_folder,
     write_ui,
 )
-from album_builder.persistence.state_io import AppState, WindowState, save_state
+from album_builder.persistence.state_io import TAB_NAMES, AppState, WindowState, save_state
 from album_builder.services.add_music import AddMusicResult, AddMusicWorker
 from album_builder.services.album_store import (
     AlbumStore,
@@ -94,6 +95,10 @@ logger = logging.getLogger(__name__)
 # stable small integer for round-trip identity; matches the spec example
 # `[5, 3, 5]` (sum 13) but is otherwise arbitrary.
 SPLITTER_RATIO_TOTAL = 13
+
+# Spec 26 §4.4: while playing, state.json is saved this often, so a crash loses
+# at most this much of the listening position. Read at each timer start.
+POSITION_SAVE_INTERVAL_MS = 10_000
 
 
 def _redact_home(value: object) -> str:
@@ -283,6 +288,11 @@ class MainWindow(QMainWindow):
         )
         self.tabs.addTab(self._player_pane, tr("Player"))
         outer.addWidget(self.tabs, stretch=1)
+        # Spec 26: state.json names the last tab, never its index, so a
+        # reordering cannot open the wrong one.
+        self._tab_by_name = dict(
+            zip(TAB_NAMES, (curation, self._player_pane), strict=True)
+        )
 
         # Spec 18 now-playing surfaces: the curation pane and the Player pane
         # both render the current track + lyrics. MainWindow fans updates to
@@ -404,8 +414,8 @@ class MainWindow(QMainWindow):
         )
 
         # Spec 21 (Phase F): ReplayGain volume normalization. Built before the
-        # last-played restore branch below (which dereferences it) and before the
-        # menu build (which reads its state). Parented to self. Persistence lives
+        # session restore below (whose current_changed levels the restored song)
+        # and before the menu build (which reads its state). Parented to self. Persistence lives
         # in the menu handlers (guarded), not the service - mirroring _apply_theme.
         self._replaygain_settings = read_replaygain()
         self._replaygain = ReplayGainService(
@@ -415,23 +425,18 @@ class MainWindow(QMainWindow):
         # Spec 00 keyboard shortcuts (closes indie-review Theme E).
         self._wire_shortcuts()
 
-        # Restore last-played track from state.json (Spec 06 TC-06-11).
-        if state.last_played_track_path:
-            last = Path(state.last_played_track_path)
-            track = next(
-                (t for t in library_watcher.library().tracks if t.path == last),
-                None,
-            )
-            if track is not None:
-                self._player.set_source(track.path)
-                self._set_track_all(track)
-                # Spec 21: the restore path bypasses the controller, so
-                # current_changed never fires for it - level the restored track
-                # explicitly so it plays levelled from the first play.
-                self._replaygain.on_track_changed(track)
-                # Spec 07 cache-hit at startup: if the LRC is fresh, show
-                # the lyrics paused at zero alongside the track.
-                self._sync_lyrics_for_track(track)
+        # Spec 26 §4.3: restore the listening session, paused. It goes through
+        # the controller, so current_changed drives the now-playing cards,
+        # lyrics and ReplayGain exactly as auto-advance does.
+        self._restore_session(state)
+        self._wire_session_saves()
+        self.tabs.setCurrentWidget(self._tab_by_name[state.last_tab])
+        # Spec 26: the normal geometry to save while maximised when Qt has none
+        # to report (a window maximised from launch, before any un-maximise,
+        # can read back an invalid normalGeometry()).
+        self._launch_geometry = self.geometry()
+        if state.window.maximized:
+            self.setWindowState(self.windowState() | Qt.WindowState.WindowMaximized)
 
         # Spec 06 TC-06-26: at construction time the player is already in
         # whatever state set_source left it (STOPPED on a fresh app start).
@@ -1290,6 +1295,95 @@ class MainWindow(QMainWindow):
         self.queue_pane.set_queue(play_order)
         self.queue_pane.set_current(self._controller.current_position())
 
+    # ---- Session continuity (Spec 26) --------------------------------
+
+    def _restore_session(self, state: AppState) -> None:
+        """Load the saved queue into the controller without playing (§4.3).
+        Tries the saved queue, then the single last-played song (TC-06-11),
+        then an empty queue; shuffle and repeat load in every case."""
+        by_path = {t.path: t for t in self._library_watcher.library().tracks}
+        for snap, tracks, position in self._session_candidates(state, by_path):
+            try:
+                self._controller.restore(snap, tracks, position_seconds=position)
+            except ValueError as exc:
+                logger.warning("state.json: saved queue not restored (%s)", exc)
+                continue
+            return
+
+    @staticmethod
+    def _session_candidates(state: AppState, by_path: dict[Path, Track]):
+        """Yield (snapshot, tracks, position) to restore, best first (§4.3)."""
+        saved = state.playback
+        shuffle, repeat = saved.shuffle, saved.repeat
+        # Step 1: drop entries the library no longer has; remap play order to
+        # the survivors, keeping its relative order.
+        kept = [i for i, p in enumerate(saved.entries) if p in by_path]
+        if kept:
+            new_index = {old: new for new, old in enumerate(kept)}
+            order = [new_index[i] for i in saved.play_order if i in new_index]
+            # Step 2: the current slot if it survived, else the next surviving
+            # slot after it in play order, else the last surviving slot.
+            position = 0.0
+            later = [
+                new_index[i] for i in saved.play_order[saved.current:] if i in new_index
+            ]
+            if saved.play_order[saved.current] in new_index:
+                position = state.position_seconds
+            current = order.index(later[0]) if later else len(order) - 1
+            tracks = [by_path[saved.entries[i]] for i in kept]
+            yield (
+                QueueSnapshot(
+                    tuple(t.path for t in tracks), tuple(order), current,
+                    shuffle=shuffle, repeat=repeat,
+                ),
+                tracks,
+                position,
+            )
+        # Step 3: the single last-played song, at the saved position.
+        last = by_path.get(state.last_played_track_path)
+        if last is not None:
+            yield (
+                QueueSnapshot((last.path,), (0,), 0, shuffle=shuffle, repeat=repeat),
+                [last],
+                state.position_seconds,
+            )
+        yield QueueSnapshot((), (), -1, shuffle=shuffle, repeat=repeat), [], 0.0
+
+    def _wire_session_saves(self) -> None:
+        """Spec 26 §4.4: save on every session change, and every
+        POSITION_SAVE_INTERVAL_MS while playing."""
+        self._position_save_timer = QTimer(self)
+        self._position_save_timer.timeout.connect(self._state_save_timer.start)
+        self._player.state_changed.connect(self._on_state_changed_for_saves)
+        self._player.seeked.connect(lambda _s: self._state_save_timer.start())
+        for signal in (
+            self._controller.queue_changed,
+            self._controller.current_changed,
+            self._controller.shuffle_changed,
+            self._controller.repeat_changed,
+            self.tabs.currentChanged,
+        ):
+            signal.connect(lambda *_: self._state_save_timer.start())
+
+    def _on_state_changed_for_saves(self, state: PlayerState) -> None:
+        if state == PlayerState.PLAYING:
+            self._position_save_timer.start(POSITION_SAVE_INTERVAL_MS)
+            return
+        self._position_save_timer.stop()
+        if state == PlayerState.PAUSED:
+            self._state_save_timer.start()
+
+    def _session_position(self) -> float:
+        """The position to save. After the queue ends on its own the backend
+        stays at the song's end, so a STOPPED player with no resume point
+        saves 0 rather than resuming at the very end (§4.4)."""
+        if (
+            self._player.state() == PlayerState.STOPPED
+            and self._player.resume_point() is None
+        ):
+            return 0.0
+        return self._player.position()
+
     def _sync_lyrics_for_track(self, track: Track) -> None:
         """Spec 07: cache hit → READY + load LRC + tracker takes over;
         cache miss → status from compute_status; auto-align if opt-in.
@@ -1458,6 +1552,10 @@ class MainWindow(QMainWindow):
         # ms tick mid-teardown can't race the synchronous _save_state_now
         # below (and write a stale partial state into state.json).
         self._state_save_timer.stop()
+        self._position_save_timer.stop()
+        # Spec 26 TC-26-11: read the listening position before Player.stop()
+        # below resets it to 0.
+        position = self._session_position()
         # Flush all debounced writes before exit (Spec 10). Each step is
         # wrapped so a raise from one (e.g. ENOSPC mid-flush) does not skip
         # the other - window geometry must persist even if the per-album
@@ -1501,7 +1599,7 @@ class MainWindow(QMainWindow):
             logger.exception("AlbumStore.flush() failed during closeEvent")
             failures.append(f"album-store flush: {_redact_home(exc)}")
         try:
-            self._save_state_now()
+            self._save_state_now(position)
         except Exception as exc:
             logger.exception("save_state_now() failed during closeEvent")
             failures.append(f"save_state: {_redact_home(exc)}")
@@ -1513,7 +1611,9 @@ class MainWindow(QMainWindow):
             )
         super().closeEvent(e)
 
-    def _save_state_now(self) -> None:
+    def _save_state_now(self, position: float | None = None) -> None:
+        """Write state.json. `position` is the listening position when the
+        caller read it already (quit reads it before stopping the player)."""
         # Spec 10 state.json: splitter_sizes are RATIOS, not pixels.
         # QSplitter.sizes() returns pixels; QSplitter.setSizes() interprets
         # any positive ints as ratios and rescales to the actual pane width
@@ -1522,9 +1622,27 @@ class MainWindow(QMainWindow):
         # would otherwise drift between screens.
         pixels = self.splitter.sizes()
         ratios = _hamilton_ratios(pixels, SPLITTER_RATIO_TOTAL)
+        # Spec 26: a maximised window keeps the size it returns to when
+        # un-maximised, not the full-screen size.
+        maximized = self.isMaximized()
+        geom = self.geometry()
+        if maximized:
+            geom = self.normalGeometry()
+            if not geom.isValid():
+                geom = self._launch_geometry
         self._state.window = WindowState(
-            width=self.width(), height=self.height(),
-            x=self.x(), y=self.y(),
+            width=geom.width(), height=geom.height(),
+            x=geom.x() if maximized else self.x(),
+            y=geom.y() if maximized else self.y(),
             splitter_sizes=ratios,
+            maximized=maximized,
+        )
+        self._state.playback = self._controller.snapshot()
+        self._state.position_seconds = (
+            self._session_position() if position is None else position
+        )
+        current_tab = self.tabs.currentWidget()
+        self._state.last_tab = next(
+            name for name, w in self._tab_by_name.items() if w is current_tab
         )
         save_state(self._project_root, self._state)

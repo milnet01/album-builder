@@ -1,6 +1,6 @@
 # 21 - ReplayGain volume normalization (opt-in loudness levelling)
 
-**Status:** Implemented (Phase F of the music-player epic) - **Last updated:** 2026-09-25 - **Depends on:** 00, 01, 06, 10, 15, 18, 19 - **References (does not extend):** 20 - **Blocks:** none
+**Status:** Implemented (Phase F of the music-player epic) - **Last updated:** 2026-11-05 - **Depends on:** 00, 01, 06, 10, 15, 18, 19 - **References (does not extend):** 20 - **Blocks:** none
 
 > **Cold-eyes loop log (2026-07-18):** 3 loops, 3 independent reviewers per loop
 > (feasibility/PyQt6+mutagen, cross-spec-drift, completeness/testability lenses), all
@@ -180,14 +180,11 @@ back to today's behavior (no offset; the track plays at the user's set volume).
   guarded `write_replaygain` (mirroring how Spec 19 persists in `_apply_theme`, not in
   the theme service).
   - `_current: Track | None` - the last track the service was told about, updated by
-    `on_track_changed`. **Why cached, not queried live:** the restored last-played track
-    (Spec 06) is loaded via `Player.set_source` and **bypasses `PlaybackController`**, so
-    `controller.current_track()` returns `None` at startup (the queue is empty) - a live
-    query would mis-level it. The cache is fed by both the `current_changed` slot and the
-    MainWindow restore path (below), so it is correct in both.
-  - `on_track_changed(track: Track | None) -> None` - the `current_changed` slot **and**
-    the public entry the MainWindow last-played restore path calls: set `_current = track`
-    and `_apply()`.
+    `on_track_changed`. Since Spec 26 the launch restore goes through
+    `PlaybackController.restore`, which emits `current_changed`, so this slot alone
+    feeds the cache.
+  - `on_track_changed(track: Track | None) -> None` - the `current_changed` slot: set
+    `_current = track` and `_apply()`.
   - `set_enabled(on: bool) -> None` / `set_mode(mode: str) -> None` - update the runtime
     state and `_apply()` (re-level the cached `_current` immediately). **Neither
     persists** - the menu handler writes settings, guarded.
@@ -241,12 +238,8 @@ dies with `MainWindow`. Keep the read `ReplayGainSettings` on `self` (e.g.
 `self._replaygain_settings`) the way the theme code keeps `self._ui_settings`, so the
 menu handler can preserve-and-rewrite it.
 
-**Restore-path re-level.** The existing last-played restore block (`main_window.py`,
-the `if state.last_played_track_path:` branch) loads the track via
-`self._player.set_source(...)` and **bypasses the controller**, so `current_changed`
-never fires for it. Add one call - `self._replaygain.on_track_changed(track)` - in that
-branch (after `set_source`) so the restored track is levelled from the first play, not
-just after the user navigates to another track.
+**Restore-path re-level.** The launch restore (Spec 26 §4.3) emits `current_changed`,
+so the restored track is levelled from the first play with no separate call.
 
 **Playback menu** (mirrors the Spec 19 `View -> Theme` menu structure). A new top-level
 **Playback** menu, inserted **after View and before Help** in `_build_menu_bar`, with a
@@ -278,9 +271,8 @@ immediately for the current track, via the setter's re-apply).
 ### One factor per loaded track
 
 `ReplayGainService` recomputes the factor on every `on_track_changed` - fed by the
-controller's `current_changed` **and** the MainWindow last-played restore path (which
-bypasses the controller) - so each track carries its own offset, including the first
-restored track. It also re-applies against the cached current track when the user
+controller's `current_changed`, which the launch restore also emits (Spec 26) - so each
+track carries its own offset, including the first restored track. It also re-applies against the cached current track when the user
 toggles the setting or flips the mode. The factor is *not* recomputed on seek, pause, or
 position change; only on a track change or a setting change.
 
@@ -435,7 +427,7 @@ playback).
   update `enabled()` / `mode()`. The service performs **no** persistence (persistence is
   the menu handler's job, TC-21-07).
 - **TC-21-07** - restore-path re-level: with `enabled=True` and a controller whose
-  `current_track()` is `None` (empty queue, mirroring the startup restore),
+  `current_track()` is `None` (empty queue),
   `service.on_track_changed(restored_track_with_gain)` drives
   `player.set_replaygain_factor` with the restored track's factor - proving the cache,
   not a live `controller.current_track()` query, is the source (which would mis-level to

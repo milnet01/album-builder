@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from uuid import UUID
 
+from album_builder.domain.play_queue import QueueSnapshot, RepeatMode
 from album_builder.persistence.atomic_io import atomic_write_text
 from album_builder.persistence.schema import (
     SchemaTooNewError,
@@ -38,6 +40,14 @@ class WindowState:
     x: int = 100
     y: int = 80
     splitter_sizes: list[int] = field(default_factory=lambda: [5, 3, 5])
+    # Spec 26: with this true, width/height/x/y hold the normal geometry.
+    maximized: bool = False
+
+
+# Spec 26 §4.1: the tab names state.json may hold; the first is the default.
+TAB_NAMES = ("builder", "player")
+
+EMPTY_QUEUE = QueueSnapshot((), (), -1, shuffle=False, repeat=RepeatMode.OFF)
 
 
 @dataclass
@@ -45,6 +55,12 @@ class AppState:
     current_album_id: UUID | None = None
     last_played_track_path: Path | None = None
     window: WindowState = field(default_factory=WindowState)
+    # Spec 26 session continuity. `playback` carries the queue with shuffle and
+    # repeat; an empty one is saved as "queue": null. `position_seconds` is the
+    # spot in its current track.
+    last_tab: str = TAB_NAMES[0]
+    playback: QueueSnapshot = EMPTY_QUEUE
+    position_seconds: float = 0.0
 
 
 MIGRATIONS: dict[int, Callable[[dict], dict]] = {}
@@ -114,7 +130,105 @@ def _coerce_window(value: object) -> WindowState:
             logger.warning(
                 "state.json: window.splitter_sizes=%r invalid; defaulting", raw,
             )
+    if "maximized" in value:
+        if isinstance(value["maximized"], bool):
+            out.maximized = value["maximized"]
+        else:
+            logger.warning(
+                "state.json: window.maximized=%r is not bool; defaulting", value["maximized"],
+            )
     return out
+
+
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _coerce_last_tab(value: object) -> str:
+    if value is None:
+        return TAB_NAMES[0]
+    if value in TAB_NAMES:
+        return value  # type: ignore[return-value]
+    logger.warning("state.json: last_tab=%r unknown; defaulting", value)
+    return TAB_NAMES[0]
+
+
+def _coerce_position(value: object) -> float:
+    if (
+        isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value >= 0
+    ):
+        return float(value)
+    logger.warning("state.json: playback.position_seconds=%r invalid; defaulting", value)
+    return 0.0
+
+
+def _coerce_queue(
+    value: object, *, shuffle: bool, repeat: RepeatMode,
+) -> QueueSnapshot:
+    """All-or-nothing (Spec 26 §4.1): the three fields only mean something
+    together, so any bad one discards the whole queue."""
+    empty = QueueSnapshot((), (), -1, shuffle=shuffle, repeat=repeat)
+    if value is None:
+        return empty
+    entries = value.get("entries") if isinstance(value, dict) else None
+    order = value.get("play_order") if isinstance(value, dict) else None
+    current = value.get("current") if isinstance(value, dict) else None
+    valid = (
+        isinstance(entries, list)
+        and all(isinstance(e, str) for e in entries)
+        and isinstance(order, list)
+        and all(_is_int(i) for i in order)
+        and sorted(order) == list(range(len(entries)))
+        and _is_int(current)
+        and 0 <= current < len(entries)
+    )
+    if not valid:
+        logger.warning("state.json: playback.queue=%r invalid; discarding the queue", value)
+        return empty
+    # Spec 10 §Paths: a relative path self-heals to its absolute form.
+    paths = tuple(
+        p if p.is_absolute() else p.resolve() for p in (Path(e) for e in entries)
+    )
+    return QueueSnapshot(paths, tuple(order), current, shuffle=shuffle, repeat=repeat)
+
+
+def _coerce_playback(value: object) -> tuple[QueueSnapshot, float]:
+    if value is None:
+        return EMPTY_QUEUE, 0.0
+    if not isinstance(value, dict):
+        logger.warning("state.json: playback=%r is not an object; defaulting", value)
+        return EMPTY_QUEUE, 0.0
+    shuffle = value.get("shuffle", False)
+    if not isinstance(shuffle, bool):
+        logger.warning("state.json: playback.shuffle=%r is not bool; defaulting", shuffle)
+        shuffle = False
+    try:
+        repeat = RepeatMode(value.get("repeat", RepeatMode.OFF.value))
+    except ValueError:
+        logger.warning("state.json: playback.repeat=%r unknown; defaulting", value.get("repeat"))
+        repeat = RepeatMode.OFF
+    position = _coerce_position(value.get("position_seconds", 0.0))
+    return _coerce_queue(value.get("queue"), shuffle=shuffle, repeat=repeat), position
+
+
+def _playback_json(state: AppState) -> dict:
+    snap = state.playback
+    queue = None
+    if snap.entries:
+        queue = {
+            "current": snap.current,
+            "entries": [str(p) for p in snap.entries],
+            "play_order": list(snap.play_order),
+        }
+    return {
+        "position_seconds": round(state.position_seconds, 1),
+        "queue": queue,
+        "repeat": snap.repeat.value,
+        "shuffle": snap.shuffle,
+    }
 
 
 def load_state(project_root: Path) -> AppState:
@@ -147,10 +261,14 @@ def load_state(project_root: Path) -> AppState:
         logger.warning("%s: top-level value is not an object; defaulting", path)
         return AppState()
 
+    playback, position = _coerce_playback(data.get("playback"))
     state = AppState(
         current_album_id=_coerce_uuid(data.get("current_album_id")),
         last_played_track_path=_coerce_path(data.get("last_played_track_path")),
         window=_coerce_window(data.get("window")),
+        last_tab=_coerce_last_tab(data.get("last_tab")),
+        playback=playback,
+        position_seconds=position,
     )
 
     # L2-H3: Spec 10 §79 mandates `<file>.v<old>.bak` on schema migration.
@@ -197,6 +315,8 @@ def save_state(project_root: Path, state: AppState) -> None:
                 str(state.last_played_track_path) if state.last_played_track_path else None
             ),
             "window": asdict(state.window),
+            "last_tab": state.last_tab,
+            "playback": _playback_json(state),
         },
         indent=2,
         sort_keys=True,

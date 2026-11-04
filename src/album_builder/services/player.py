@@ -26,6 +26,17 @@ logger = logging.getLogger(__name__)
 # later) surfacing to the toast layer. (Indie-review L3-M3.)
 _ERROR_DEDUPE_WINDOW_S = 0.05
 
+# Spec 26 §4.2: a saved resume point this close to the end restarts the song,
+# so a nearly finished song does not resume and end at once.
+_RESUME_END_MARGIN_S = 5.0
+
+# Media statuses at which the backend keeps a setPosition (Spec 26 §6).
+_LOADED_STATUSES = (
+    QMediaPlayer.MediaStatus.LoadedMedia,
+    QMediaPlayer.MediaStatus.BufferingMedia,
+    QMediaPlayer.MediaStatus.BufferedMedia,
+)
+
 
 def _noop(*_args: object) -> None:
     pass
@@ -90,6 +101,15 @@ class Player(QObject):
         self._player.setAudioOutput(self._output)
         self._source: Path | None = None
         self._duration_seconds = 0.0
+        # Spec 26 resume point: where the first play of this source starts.
+        # None once play has started with the media loaded, or with no source.
+        self._resume: float | None = None
+        # True when seek() moved the point; such a point skips the near-end
+        # restart rule (the user chose it).
+        self._resume_seeked = False
+        # True once the duration reported belongs to the current source, so
+        # the near-end rule never judges a point against the previous song.
+        self._duration_known = False
         self._state = PlayerState.STOPPED
         # Spec 21: user volume (0-100) is the source of truth; the applied
         # QAudioOutput level is the composite user_volume/100 * replaygain_factor.
@@ -112,15 +132,21 @@ class Player(QObject):
 
     # ---- Public API -------------------------------------------------
 
-    def set_source(self, path: Path | None) -> None:
+    def set_source(self, path: Path | None, *, start_seconds: float = 0.0) -> None:
         """Load `path` as the active source, or clear if `None` (L3-M1).
 
         Qt's spelling for "clear the source" is `setSource(QUrl())`; we
         forward that here so callers don't have to know the QtMultimedia
         idiom. Passing None used to raise `TypeError` from `Path(None)` —
         a footgun for any controller pattern that nulls the source on
-        track-clear."""
+        track-clear.
+
+        Spec 26: a path holds a resume point at `start_seconds` (0.0 by
+        default); the first play of this source starts there."""
         self._source = Path(path) if path is not None else None
+        self._resume = max(0.0, float(start_seconds)) if path is not None else None
+        self._resume_seeked = False
+        self._duration_known = False
         # Reset error state: a fresh source is the controller's signal
         # that the previous failure has been acknowledged.
         if self._state == PlayerState.ERROR:
@@ -137,7 +163,23 @@ class Player(QObject):
     def source(self) -> Path | None:
         return self._source
 
+    def resume_point(self) -> float | None:
+        """The held resume point in seconds, or None (Spec 26 §4.2)."""
+        if self._resume is None:
+            return None
+        if (
+            not self._resume_seeked
+            and self._duration_known
+            and self._duration_seconds > 0
+            and self._resume > self._duration_seconds - _RESUME_END_MARGIN_S
+        ):
+            return 0.0
+        return self._resume
+
     def play(self) -> None:
+        # Spec 26 §6: apply the resume point again here in case the backend
+        # dropped the one set at LoadedMedia.
+        self._apply_resume_point()
         self._player.play()
 
     def pause(self) -> None:
@@ -165,6 +207,10 @@ class Player(QObject):
         if self._duration_seconds > 0:
             seconds = min(seconds, self._duration_seconds - 1.0)
         seconds = max(0.0, seconds)
+        if self._resume is not None:
+            # Spec 26: a seek before the first play moves the resume point.
+            self._resume = seconds
+            self._resume_seeked = True
         self._player.setPosition(int(seconds * 1000))
         # Spec 20: pulse the clamped landing so the MPRIS Seeked signal fires
         # on discontinuous jumps. Emitted unconditionally on a seek() call
@@ -173,6 +219,11 @@ class Player(QObject):
         self.seeked.emit(seconds)
 
     def position(self) -> float:
+        # Spec 26: before the first play the resume point is the position, even
+        # while the backend still reports 0 during loading.
+        point = self.resume_point()
+        if point is not None:
+            return point
         return self._player.position() / 1000.0
 
     def duration(self) -> float:
@@ -201,6 +252,25 @@ class Player(QObject):
         sets it here rather than poking the private field. Parallels
         `_set_state_for_test`; production never calls it; emits no signal."""
         self._duration_seconds = float(seconds)
+        self._duration_known = True
+
+    def _apply_resume_point(self) -> None:
+        """Hand a held, non-zero resume point to the backend; it keeps a
+        setPosition only once the media has loaded (Spec 26 §6)."""
+        point = self.resume_point()
+        if point and self._player.mediaStatus() in _LOADED_STATUSES:
+            self._player.setPosition(int(point * 1000))
+
+    def _drop_resume_point_if_started(self) -> None:
+        """Spec 26: the point is spent once play has started on loaded media,
+        not at the play() call."""
+        if (
+            self._resume is not None
+            and self._state == PlayerState.PLAYING
+            and self._player.mediaStatus() in _LOADED_STATUSES
+        ):
+            self._resume = None
+            self._resume_seeked = False
 
     def set_volume(self, vol: int) -> None:
         # Spec 18 INV-18-1 / Spec 21: the two volume sliders echo back into
@@ -264,6 +334,8 @@ class Player(QObject):
 
     def _on_duration_changed(self, ms: int) -> None:
         self._duration_seconds = ms / 1000.0
+        if ms > 0:
+            self._duration_known = True
         self.duration_changed.emit(self._duration_seconds)
 
     def _on_playback_state(self, qstate: QMediaPlayer.PlaybackState) -> None:
@@ -286,12 +358,19 @@ class Player(QObject):
                 # drop into a wrong _state. Hold prior; the buffering /
                 # error pulse comes via _on_media_status / _on_error.
                 pass
+        self._drop_resume_point_if_started()
         if self._state != prior:
             self.state_changed.emit(self._state)
 
     def _on_media_status(self, status: QMediaPlayer.MediaStatus) -> None:
         is_buffering = status == QMediaPlayer.MediaStatus.BufferingMedia
         self.buffering_changed.emit(is_buffering)
+
+        if status == QMediaPlayer.MediaStatus.LoadedMedia:
+            # Spec 26 §4.2: the backend's positionChanged moves the scrubber
+            # and lyrics line to where play will start.
+            self._apply_resume_point()
+        self._drop_resume_point_if_started()
 
         # Qt 6.11's FFmpeg backend frequently delivers "decoder cannot open
         # this file" via InvalidMedia without a corresponding errorOccurred,

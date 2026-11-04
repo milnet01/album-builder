@@ -34,9 +34,13 @@ class FakePlayer(QObject):
         self._source: Path | None = None
         self._state = PlayerState.STOPPED
         self.set_source_calls: list[Path | None] = []
+        self.play_calls = 0
+        # Spec 26 resume point: held by set_source, spent by play.
+        self._resume: float | None = None
 
-    def set_source(self, path: Path | None) -> None:
+    def set_source(self, path: Path | None, *, start_seconds: float = 0.0) -> None:
         self._source = Path(path) if path is not None else None
+        self._resume = start_seconds if path is not None else None
         self.set_source_calls.append(self._source)
         if self._state == PlayerState.ERROR:  # mirror Player: fresh source clears ERROR
             self._state = PlayerState.STOPPED
@@ -45,7 +49,12 @@ class FakePlayer(QObject):
     def source(self) -> Path | None:
         return self._source
 
+    def resume_point(self) -> float | None:
+        return self._resume
+
     def play(self) -> None:
+        self.play_calls += 1
+        self._resume = None
         self._state = PlayerState.PLAYING
         self.state_changed.emit(self._state)
 

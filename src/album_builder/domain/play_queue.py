@@ -15,8 +15,10 @@ indices are remapped so each deck slot keeps referencing the same entry.
 from __future__ import annotations
 
 import random
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 
 from album_builder.domain.track import Track
 
@@ -25,6 +27,18 @@ class RepeatMode(Enum):
     OFF = "off"
     ONE = "one"
     ALL = "all"
+
+
+@dataclass(frozen=True)
+class QueueSnapshot:
+    """The queue's saved form (Spec 26 §4.2). `play_order` holds natural indices
+    into `entries`; `current` is the deck slot, -1 only for an empty queue."""
+
+    entries: tuple[Path, ...]
+    play_order: tuple[int, ...]
+    current: int
+    shuffle: bool
+    repeat: RepeatMode
 
 
 class PlayQueue:
@@ -162,6 +176,50 @@ class PlayQueue:
         self._entries = []
         self._deck = []
         self._cursor = -1
+
+    # -- session save / restore (Spec 26) ------------------------------------
+
+    def snapshot(self) -> QueueSnapshot:
+        return QueueSnapshot(
+            entries=tuple(t.path for t in self._entries),
+            play_order=tuple(self._deck),
+            current=self._cursor,
+            shuffle=self._shuffle,
+            repeat=self._repeat,
+        )
+
+    def restore(
+        self,
+        tracks: Sequence[Track],
+        play_order: Sequence[int],
+        current: int,
+        *,
+        shuffle: bool,
+        repeat: RepeatMode,
+    ) -> None:
+        """Replace entries, deck, cursor and modes with a saved session.
+
+        Atomic: validates everything first and raises ValueError, changing
+        nothing, on an invalid triple. Never consults the rng, so a saved
+        shuffled order comes back exactly. Shuffle off requires the natural
+        order, the deck Spec 14 keeps whenever shuffle is off."""
+        entries = list(tracks)
+        deck = list(play_order)
+        n = len(entries)
+        if sorted(deck) != list(range(n)):
+            raise ValueError(f"play_order {deck} is not a permutation of range({n})")
+        if n == 0:
+            if current != -1:
+                raise ValueError(f"current {current} invalid for an empty queue")
+        elif not 0 <= current < n:
+            raise ValueError(f"current {current} out of range [0, {n})")
+        if not shuffle and deck != list(range(n)):
+            raise ValueError("shuffle off requires the natural play order")
+        self._entries = entries
+        self._deck = deck
+        self._cursor = current
+        self._shuffle = shuffle
+        self._repeat = repeat
 
     # -- navigation ---------------------------------------------------------
 
