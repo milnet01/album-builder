@@ -102,3 +102,22 @@ def test_shortcuts_registered(main_window) -> None:
         "Left", "Right", "Shift+Left", "Shift+Right", "M",
     }
     assert expected.issubset(keys), f"missing: {expected - keys}"
+
+
+# Spec: TC-01-25
+def test_ctrl_f_focuses_current_tabs_search(main_window, qtbot) -> None:
+    """Ctrl+F puts the cursor in the visible tab's library search box with its
+    text selected, so typing replaces the old search."""
+    from PyQt6.QtGui import QShortcut
+
+    assert "Ctrl+F" in {s.key().toString() for s in main_window.findChildren(QShortcut)}
+    main_window.show()
+    qtbot.waitExposed(main_window)
+    for tab, pane in zip(
+        main_window._tab_by_name.values(), main_window._library_panes, strict=True,
+    ):
+        main_window.tabs.setCurrentWidget(tab)
+        pane.search_box.setText("old")
+        main_window._focus_search()
+        qtbot.waitUntil(pane.search_box.hasFocus, timeout=2000)
+        assert pane.search_box.selectedText() == "old"

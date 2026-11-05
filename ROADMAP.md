@@ -91,6 +91,12 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Waiting-on: user (release MP-1 now as 1.1.0? Recommendation: yes. It
   is built, CI-green and checked by hand on KDE and Windows, and a
   release publishes to users, so it waits for you, 2026-11-05).
+  Progress (2026-11-05), Phase MP-3: search and click-to-sort already
+  existed (Spec 01). Added Ctrl+F to focus the current tab's search box
+  (TC-01-25; Ctrl+F rather than the bullet's "/ or Ctrl+L", being the
+  usual find key, and free). Still open in MP-3: date-added sort,
+  jump-to-letter, group-by-artist/album. Play-count sort waits on MP-4's
+  play counts.
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 

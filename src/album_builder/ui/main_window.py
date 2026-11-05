@@ -1137,6 +1137,7 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+N"), self, activated=self._on_new_album)
         QShortcut(QKeySequence("Ctrl+Q"), self, activated=self.close)
         QShortcut(QKeySequence("Ctrl+Z"), self, activated=self._ctrl_z_pressed)
+        QShortcut(QKeySequence("Ctrl+F"), self, activated=self._focus_search)
         QShortcut(QKeySequence("F1"), self, activated=self._show_help)
         QShortcut(QKeySequence("Space"), self, activated=self._space_pressed)
         QShortcut(QKeySequence("Left"), self, activated=lambda: self._seek_relative(-5))
@@ -1182,6 +1183,16 @@ class MainWindow(QMainWindow):
         # on every TransportBar; no imperative per-bar re-sync needed.
         self._player.set_muted(not self._player.muted())
 
+    def _focus_search(self) -> None:
+        """Spec 01 TC-01-25: Ctrl+F puts the cursor in the visible tab's
+        library search box, text selected so typing replaces it."""
+        tab = self.tabs.currentWidget()
+        for name, pane in zip(TAB_NAMES, self._library_panes, strict=True):
+            if self._tab_by_name[name] is tab:
+                pane.search_box.setFocus(Qt.FocusReason.ShortcutFocusReason)
+                pane.search_box.selectAll()
+                return
+
     def _show_help(self) -> None:
         QMessageBox.information(
             self,
@@ -1189,6 +1200,7 @@ class MainWindow(QMainWindow):
             tr(
                 "Ctrl+N — New album\n"
                 "Ctrl+Z — Undo removing a song\n"
+                "Ctrl+F — Search the library\n"
                 "Ctrl+Q — Quit\n"
                 "F1 — This help\n"
                 "Space — Play / pause\n"

@@ -54,7 +54,7 @@
  "Couldn't save music folder: {error}": "Kon nie die musiekvouer stoor nie: {error}",
  "Couldn't save theme choice: {error}": "Kon nie die tema stoor nie: {error}",
  "Cross-album reuse count": "Gebruik in ander albums",
- "Ctrl+N — New album\nCtrl+Z — Undo removing a song\nCtrl+Q — Quit\nF1 — This help\nSpace — Play / pause\nLeft / Right — Seek -5 s / +5 s\nShift+Left / Right — Seek -30 s / +30 s\nM — Mute / unmute\n\nTransport shortcuts are suppressed while typing in a text field.": "Ctrl+N — Nuwe album\nCtrl+Z — Ontdoen die verwydering van 'n liedjie\nCtrl+Q — Verlaat\nF1 — Hierdie hulp\nSpasie — Speel / pouseer\nLinks / Regs — Spring -5 s / +5 s\nShift+Links / Regs — Spring -30 s / +30 s\nM — Demp / ontdemp\n\nSpeelkortpaaie werk nie terwyl jy in 'n teksveld tik nie.",
+ "Ctrl+N — New album\nCtrl+Z — Undo removing a song\nCtrl+F — Search the library\nCtrl+Q — Quit\nF1 — This help\nSpace — Play / pause\nLeft / Right — Seek -5 s / +5 s\nShift+Left / Right — Seek -30 s / +30 s\nM — Mute / unmute\n\nTransport shortcuts are suppressed while typing in a text field.": "Ctrl+N — Nuwe album\nCtrl+Z — Ontdoen die verwydering van 'n liedjie\nCtrl+F — Soek in die biblioteek\nCtrl+Q — Verlaat\nF1 — Hierdie hulp\nSpasie — Speel / pouseer\nLinks / Regs — Spring -5 s / +5 s\nShift+Links / Regs — Spring -30 s / +30 s\nM — Demp / ontdemp\n\nSpeelkortpaaie werk nie terwyl jy in 'n teksveld tik nie.",
  "Current playback time": "Huidige speeltyd",
  "Dark Colourful": "Donker kleurvol",
  "Dark Ember": "Donker gloed",

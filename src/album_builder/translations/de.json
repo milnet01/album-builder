@@ -54,7 +54,7 @@
  "Couldn't save music folder: {error}": "Musikordner konnte nicht gespeichert werden: {error}",
  "Couldn't save theme choice: {error}": "Design konnte nicht gespeichert werden: {error}",
  "Cross-album reuse count": "Verwendung in anderen Alben",
- "Ctrl+N — New album\nCtrl+Z — Undo removing a song\nCtrl+Q — Quit\nF1 — This help\nSpace — Play / pause\nLeft / Right — Seek -5 s / +5 s\nShift+Left / Right — Seek -30 s / +30 s\nM — Mute / unmute\n\nTransport shortcuts are suppressed while typing in a text field.": "Strg+N — Neues Album\nStrg+Z — Entfernen eines Titels rückgängig machen\nStrg+Q — Beenden\nF1 — Diese Hilfe\nLeertaste — Wiedergabe / Pause\nLinks / Rechts — Springen -5 s / +5 s\nUmschalt+Links / Rechts — Springen -30 s / +30 s\nM — Stumm / laut\n\nWiedergabe-Tastenkürzel sind beim Tippen in einem Textfeld deaktiviert.",
+ "Ctrl+N — New album\nCtrl+Z — Undo removing a song\nCtrl+F — Search the library\nCtrl+Q — Quit\nF1 — This help\nSpace — Play / pause\nLeft / Right — Seek -5 s / +5 s\nShift+Left / Right — Seek -30 s / +30 s\nM — Mute / unmute\n\nTransport shortcuts are suppressed while typing in a text field.": "Strg+N — Neues Album\nStrg+Z — Entfernen eines Titels rückgängig machen\nStrg+F — Bibliothek durchsuchen\nStrg+Q — Beenden\nF1 — Diese Hilfe\nLeertaste — Wiedergabe / Pause\nLinks / Rechts — Springen -5 s / +5 s\nUmschalt+Links / Rechts — Springen -30 s / +30 s\nM — Stumm / laut\n\nWiedergabe-Tastenkürzel sind beim Tippen in einem Textfeld deaktiviert.",
  "Current playback time": "Aktuelle Wiedergabezeit",
  "Dark Colourful": "Dunkel bunt",
  "Dark Ember": "Dunkel Glut",

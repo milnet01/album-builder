@@ -10,6 +10,11 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Added
 
+- **Press Ctrl+F to search your music** (MUSI-0356)
+  Ctrl+F puts the cursor in the search box of the tab you are on, with
+  the old search selected, so you can type a new one straight away.
+  F1 lists it with the other shortcuts.
+
 - **The player picks up where you left off** (MUSI-0356)
   Close Album Builder and open it again, and your song is back at the
   spot where you stopped. It waits for you to press play. The play

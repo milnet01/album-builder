@@ -10,7 +10,7 @@ Discover the audio files in `Tracks/`, parse their metadata, and present a live,
 
 - On app start, the library pane lists every supported audio file under `Tracks/` (recursive: no — flat scan only, v1).
 - Each row shows: title, artist, album, composer, duration. Cover thumbnail is loaded lazily for the now-playing pane (not the library row, to keep the list compact).
-- A search box at the top of the library pane filters rows by case-insensitive substring match against title, artist, album_artist, composer, and album.
+- A search box at the top of the library pane filters rows by case-insensitive substring match against title, artist, album_artist, composer, and album. Ctrl+F puts the cursor in the visible tab's search box with its text selected (TC-01-25).
 - Column headers are click-to-sort (Title, Artist, Album, Composer, Duration). Default sort: Title ascending. Clicking the same header toggles direction.
 - *(Phase 2)* New files dropped into `Tracks/` appear within ~2 seconds without restarting; the removal half - marking files **missing**, greying them out and excluding them from search - remains **deferred** (TC-01-P2-03/04), so a removed file currently just disappears on the next scan.
 - Duration is shown as `m:ss` for under an hour, `h:mm:ss` otherwise.
@@ -201,6 +201,7 @@ The watcher mechanism (TC-01-P2-01, TC-01-P2-02) ships in Phase 2 via the `Libra
 - **TC-01-22** — `LibraryPane.set_library` with an empty library shows the empty state (message naming the folder, a button emitting `choose_folder_requested`) and hides the table; a non-empty library shows the table again.
 - **TC-01-23** — File > Choose Music Folder...: a picked folder is saved and both library panes show its contents; a cancelled picker saves nothing and leaves the panes as they were.
 - **TC-01-24** — Approve, unapprove, re-export, rename, delete, restore and lyrics alignment leave every song file in the music folder byte-identical, same name and modification time. The only files added beside a song are its lyrics sidecars (`<stem>.lrc`, `<stem>.lrc.bak`) — Spec 00 § Data integrity. Test: `tests/services/test_TC_01_24_source_files_untouched.py`.
+- **TC-01-25** — Ctrl+F puts keyboard focus in the current tab's library search box (the curation tab's or the Player tab's) and selects its text. Test: `tests/ui/test_keyboard_shortcuts.py::test_ctrl_f_focuses_current_tabs_search`.
 - **TC-01-P2-04** — `Library.search()` excludes `is_missing` tracks by default; opt-in via `include_missing=True`. *(deferred — requires search-filter parameter; tracked for a later phase)*
 
 ### Coverage map (Phase 1)

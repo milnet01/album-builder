@@ -136,6 +136,7 @@ Shortcuts are global to the main window. They are **suppressed when focus is in 
 | M | Mute / unmute | 06 | Yes | ✓ v0.3.0 |
 | Ctrl+N | New album | 03 | No (modal opens regardless of focus) | ✓ v0.3.0 |
 | Ctrl+Z | Undo the last song removal | 04 | Yes | ✓ Unreleased |
+| Ctrl+F | Search the library (focus the current tab's search box) | 01 | No | ✓ Unreleased |
 | Ctrl+Q | Quit (with debounced-save flush per Spec 10) | 12 | No | ✓ v0.3.0 |
 | F1 | Keyboard help dialog | 00 | No | ✓ v0.3.0 |
 

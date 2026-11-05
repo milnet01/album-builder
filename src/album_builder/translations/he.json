@@ -54,7 +54,7 @@
  "Couldn't save music folder: {error}": "לא ניתן לשמור את תיקיית המוזיקה: {error}",
  "Couldn't save theme choice: {error}": "לא ניתן לשמור את ערכת הנושא: {error}",
  "Cross-album reuse count": "מספר השימושים באלבומים אחרים",
- "Ctrl+N — New album\nCtrl+Z — Undo removing a song\nCtrl+Q — Quit\nF1 — This help\nSpace — Play / pause\nLeft / Right — Seek -5 s / +5 s\nShift+Left / Right — Seek -30 s / +30 s\nM — Mute / unmute\n\nTransport shortcuts are suppressed while typing in a text field.": "‏Ctrl+N — אלבום חדש\nCtrl+Z — ביטול הסרת שיר\nCtrl+Q — יציאה\nF1 — עזרה זו\nרווח — השמעה / השהיה\nשמאלה / ימינה — דילוג ‎-5 ש׳ / ‎+5 ש׳\nShift+שמאלה / ימינה — דילוג ‎-30 ש׳ / ‎+30 ש׳\nM — השתקה / ביטול השתקה\n\nקיצורי ההשמעה מושבתים בזמן הקלדה בשדה טקסט.",
+ "Ctrl+N — New album\nCtrl+Z — Undo removing a song\nCtrl+F — Search the library\nCtrl+Q — Quit\nF1 — This help\nSpace — Play / pause\nLeft / Right — Seek -5 s / +5 s\nShift+Left / Right — Seek -30 s / +30 s\nM — Mute / unmute\n\nTransport shortcuts are suppressed while typing in a text field.": "‏Ctrl+N — אלבום חדש\nCtrl+Z — ביטול הסרת שיר\nCtrl+F — חיפוש בספרייה\nCtrl+Q — יציאה\nF1 — עזרה זו\nרווח — השמעה / השהיה\nשמאלה / ימינה — דילוג ‎-5 ש׳ / ‎+5 ש׳\nShift+שמאלה / ימינה — דילוג ‎-30 ש׳ / ‎+30 ש׳\nM — השתקה / ביטול השתקה\n\nקיצורי ההשמעה מושבתים בזמן הקלדה בשדה טקסט.",
  "Current playback time": "זמן ההשמעה הנוכחי",
  "Dark Colourful": "כהה צבעוני",
  "Dark Ember": "כהה גחלים",

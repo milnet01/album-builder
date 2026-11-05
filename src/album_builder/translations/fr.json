@@ -54,7 +54,7 @@
  "Couldn't save music folder: {error}": "Impossible d'enregistrer le dossier de musique : {error}",
  "Couldn't save theme choice: {error}": "Impossible d'enregistrer le thème : {error}",
  "Cross-album reuse count": "Utilisation dans d'autres albums",
- "Ctrl+N — New album\nCtrl+Z — Undo removing a song\nCtrl+Q — Quit\nF1 — This help\nSpace — Play / pause\nLeft / Right — Seek -5 s / +5 s\nShift+Left / Right — Seek -30 s / +30 s\nM — Mute / unmute\n\nTransport shortcuts are suppressed while typing in a text field.": "Ctrl+N — Nouvel album\nCtrl+Z — Annuler le retrait d'un morceau\nCtrl+Q — Quitter\nF1 — Cette aide\nEspace — Lecture / pause\nGauche / Droite — Reculer / avancer de 5 s\nMaj+Gauche / Droite — Reculer / avancer de 30 s\nM — Couper / rétablir le son\n\nLes raccourcis de lecture sont désactivés pendant la saisie dans un champ de texte.",
+ "Ctrl+N — New album\nCtrl+Z — Undo removing a song\nCtrl+F — Search the library\nCtrl+Q — Quit\nF1 — This help\nSpace — Play / pause\nLeft / Right — Seek -5 s / +5 s\nShift+Left / Right — Seek -30 s / +30 s\nM — Mute / unmute\n\nTransport shortcuts are suppressed while typing in a text field.": "Ctrl+N — Nouvel album\nCtrl+Z — Annuler le retrait d'un morceau\nCtrl+F — Rechercher dans la bibliothèque\nCtrl+Q — Quitter\nF1 — Cette aide\nEspace — Lecture / pause\nGauche / Droite — Reculer / avancer de 5 s\nMaj+Gauche / Droite — Reculer / avancer de 30 s\nM — Couper / rétablir le son\n\nLes raccourcis de lecture sont désactivés pendant la saisie dans un champ de texte.",
  "Current playback time": "Position de lecture actuelle",
  "Dark Colourful": "Sombre coloré",
  "Dark Ember": "Sombre braise",
