@@ -10,6 +10,8 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Added
 
+- **Songs in the current album show a purple strip down the left of the library; songs whose file is missing show an orange one.** (MUSI-0403)
+
 - **Press Ctrl+F to search your music** (MUSI-0356)
   Ctrl+F puts the cursor in the search box of the tab you are on, with
   the old search selected, so you can type a new one straight away.
@@ -23,7 +25,23 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
   maximised window are remembered too. If a song in the queue has been
   moved or deleted, it is skipped and the rest of the queue still loads.
 
+### Changed
+
+- **Files saved in your home folder no longer make the app re-read every song when your music is in ~/Music. Closing the app during a duplicate check is now quick. (MUSI-0400, MUSI-0403)**
+
 ### Fixed
+
+- **Renaming an album to a name ending in a date (like "Demo - 2026-11-05") no longer closes the app. You get a clear message instead.** (MUSI-0399)
+
+- **Deleting the album you are on now switches cleanly to another album, instead of leaving the screen half empty.** (MUSI-0403)
+
+- **Moving or deleting songs in your music folder while the app is open no longer closes it. If a song can't be read, the app tells you which.** (MUSI-0400)
+
+- **After adding songs to an empty queue, pressing Play (or Space, or the tray or keyboard media key) now plays them.** (MUSI-0401)
+
+- **Small arrow buttons no longer get squashed after you click them.** (MUSI-0403)
+
+- **A damaged settings or album file no longer stops the app starting. A damaged playlists file is backed up and reported instead of loading nonsense. (MUSI-0398, MUSI-0402)**
 
 - **Opening Album Builder a second time brings the open window forward more reliably.**
   If the "bring the window forward" request arrived in pieces, the app could ignore it.

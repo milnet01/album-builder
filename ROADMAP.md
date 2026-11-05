@@ -269,44 +269,71 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
 Findings from seven outside reviews, each checked against the code. Ledger:
 docs/reviews/close-findings-2026-11-05.md.
 
-- 📋 [MUSI-0398] **Saving data: a damaged state file no longer stops the app starting; persistence tidy-ups.**
+- ✅ [MUSI-0398] **Saving data: a damaged state file no longer stops the app starting; persistence tidy-ups.**
   Group SD in the ledger: SD1, SD2, SD3, SD6, SD7, SD16.
+  Done 2026-11-05, commit 841d79c. Ledger group SD.
   **Layman:** If a settings file gets damaged, the app starts with defaults instead of crashing every launch.
   Kind: review-fix.
   Source: deepseek-review-2026-11-05.
 
-- 📋 [MUSI-0399] **Albums: renaming to a name ending in a date no longer closes the app; approval tidy-ups.**
+- ✅ [MUSI-0399] **Albums: renaming to a name ending in a date no longer closes the app; approval tidy-ups.**
   Group AP in the ledger: the rename crash, AP1.1-1.4, 1.6, 2.6, 3.4-3.6, SC-A7.
+  Done 2026-11-05, commit 25fed80. Ledger group AP.
   **Layman:** Typing an album name that ends in a date now shows a message instead of closing the app.
   Kind: review-fix.
   Source: deepseek-review-2026-11-05.
 
-- 📋 [MUSI-0400] **Library: songs moved or deleted while the app is open no longer close it; home-folder changes no longer trigger a rescan.**
+- ✅ [MUSI-0400] **Library: songs moved or deleted while the app is open no longer close it; home-folder changes no longer trigger a rescan.**
   Group LB in the ledger: LB1b, LB4a, LB2a (Spec 01 fix), LB1a.
+  Done 2026-11-05, commit 5fd0029. Ledger group LB.
   **Layman:** Moving songs around in your music folder while the app is open is now safe, and unrelated files in your home folder no longer make the app re-read every song.
   Kind: review-fix.
   Source: deepseek-review-2026-11-05.
 
-- 📋 [MUSI-0401] **Playback: Play starts the queue when nothing was loaded; playback tidy-ups.**
+- ✅ [MUSI-0401] **Playback: Play starts the queue when nothing was loaded; playback tidy-ups.**
   Group PB in the ledger: PB4 (Spec 15 amendment), PB1, PB3, PB5, PB13-15, PB17.
+  Done 2026-11-05, commit fdc2eff. Ledger group PB; Spec 15 TC-15-35.
   **Layman:** After adding songs to an empty queue, pressing Play now plays them.
   Kind: review-fix.
   Source: deepseek-review-2026-11-05.
 
-- 📋 [MUSI-0402] **Playlists and desktop: hand-edited playlist files are checked; tray and media-control tidy-ups.**
+- ✅ [MUSI-0402] **Playlists and desktop: hand-edited playlist files are checked; tray and media-control tidy-ups.**
   Group PL in the ledger: PL9/10/26, PL1, PL2, PL5, PL7, PL13, PL23, PL28. PL38 (Windows tray click) needs a Windows check.
+  Done 2026-11-05, commit 07852cc. Ledger group PL; PL38 split to
+  MUSI-0405.
   **Layman:** A damaged playlists file is backed up and reported instead of loading nonsense.
   Kind: review-fix.
   Source: deepseek-review-2026-11-05.
 
-- 📋 [MUSI-0403] **Screens: deleting the current album shows another one; arrow buttons stay unclipped after a click; UI tidy-ups.**
+- ✅ [MUSI-0403] **Screens: deleting the current album shows another one; arrow buttons stay unclipped after a click; UI tidy-ups.**
   Group SC in the ledger: SC-A1, SC-A4, SC-A3 (needs an owner decision on Spec 11 TC-11-06/07), SC1.2-1.4, 3.5, 4.1, 4.4, 4.5, B2, D5, E6.
+  Done 2026-11-05, commits d4eee81 and 63a4847 (row strips, owner chose
+  to build them). Ledger group SC.
   **Layman:** Deleting the album you are on now switches to another album cleanly, and small arrow buttons no longer get clipped after you click them.
   Kind: review-fix.
   Source: deepseek-review-2026-11-05.
 
-- 📋 [MUSI-0404] **Lyrics: timing matches your lyric words to the words heard; one alignment at a time.**
+- 🚧 [MUSI-0404] **Lyrics: timing matches your lyric words to the words heard; one alignment at a time.**
   Group LY in the ledger: LY-A1 and LY-B4 (Spec 07 amendments), A3, A4, A6, A8, A10.
+  2026-11-05 part 1 done (fe70554): domain/lyric_timing.py (heard_words,
+  line_start_times, NothingHeard) +
+  tests/domain/test_TC_07_18_lyric_timing.py, green, NOT yet wired.
+  Remaining, in order: (1) AlignmentWorker._do_alignment: replace
+  _segments_to_lyrics with heard_words + line_start_times; NothingHeard
+  -> failed.emit(tr(plain message)) so no READY with all lines at 0:00
+  (A3); del the models + gc.collect() after use (owner: free RAM after
+  each song); rewrite the _segments_to_lyrics tests in
+  tests/services/test_alignment_worker.py (they pin the old index
+  pairing). (2) B4: AlignmentService runs one worker at a time; later
+  requests wait in a FIFO with a new AlignmentStatus QUEUED shown as
+  "waiting..." (ASCII in code); status_label gets a case _ fallback and
+  its test builds params from list(AlignmentStatus) (A10). (3) A4:
+  LyricsTracker.set_lyrics seeds from player.position(), not 0.0. (4)
+  A6: interruption check before write_lrc, and ignore signals from a
+  cancelled worker. (5) A8: lrc_io backup via os.replace, not
+  shutil.move. (6) Amend Spec 07: pipeline text (word matching), new
+  TC-07-18/19 (written into the tests already) and TC-07-20 (queue),
+  status list. New UI strings need all seven catalogs.
   **Layman:** Lyric lines now light up at the right moment even when the singing does not split the way your lines do, and aligning several songs no longer uses huge amounts of memory.
   Kind: review-fix.
   Source: deepseek-review-2026-11-05.

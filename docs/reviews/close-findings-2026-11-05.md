@@ -117,7 +117,7 @@ Finding ids are the feedback file's own numbering, prefixed by group.
 
 | finding | verified | disposition | was → now |
 |---|---|---|---|
-| LY-A1 lines paired with transcript segments by index | yes, `_segments_to_lyrics` | | |
+| LY-A1 lines paired with transcript segments by index | yes, `_segments_to_lyrics` | in progress | part 1: `domain/lyric_timing.py` + tests (fe70554), not yet wired; rest listed on MUSI-0404 |
 | LY-B4 no limit on concurrent alignments | yes, per-path dedupe only | | |
 | LY-A3 zero segments still reports READY | yes | | |
 | LY-A4 `set_lyrics` resets position to 0 | yes | | |
@@ -134,7 +134,7 @@ Finding ids are the feedback file's own numbering, prefixed by group.
 ## Run-level
 
 - cited_by:
-- swept:
+- swept: per-group full pytest + ruff; specs 01, 10, 11, 15, 17, 20 amended where fixes changed them; LY group not yet swept.
 - collateral:
 - surfaced:
 - out_of_scope:
