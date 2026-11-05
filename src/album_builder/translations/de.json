@@ -212,5 +212,5 @@
  "Couldn't rename the album folder: {error}": "Albumordner konnte nicht umbenannt werden: {error}",
  "Couldn't read your music folder: {error}": "Dein Musikordner konnte nicht gelesen werden: {error}",
  "LRC: waiting...": "LRC: wartet...",
- "No singing was heard in this song, so the lyrics could not be timed.": "In diesem Song war kein Gesang zu hören, daher konnte der Text nicht synchronisiert werden."
+ "No singing was heard in this song, so the lyrics could not be timed.": "In diesem Titel war kein Gesang zu hören, daher konnte der Liedtext nicht synchronisiert werden."
 }
