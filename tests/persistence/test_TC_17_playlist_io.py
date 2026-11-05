@@ -99,3 +99,21 @@ def test_dangling_path_survives_round_trip(tmp_path: Path) -> None:
     save_playlists(tmp_path, [Playlist(id="x", name="P", track_paths=[ghost])])
     loaded = load_playlists(tmp_path)
     assert loaded[0].track_paths == [ghost]  # not pruned
+
+
+# Spec: TC-17-09 - a hand-edited file whose fields have the wrong types, or
+# that lost its "playlists" list, raises instead of loading garbage that the
+# next save would write back (MUSI-0402, review PL9/10/26). The message
+# names the bad entry.
+@pytest.mark.parametrize("body", [
+    {"schema_version": 1},                                   # key missing
+    {"schema_version": 1, "playlists": None},
+    {"schema_version": 1, "playlists": [["x"]]},
+    {"schema_version": 1, "playlists": [{"id": "a", "name": 42, "track_paths": []}]},
+    {"schema_version": 1, "playlists": [{"id": "a", "name": "P", "track_paths": "abc"}]},
+    {"schema_version": 1, "playlists": [{"id": "a", "name": "P", "track_paths": [7]}]},
+])
+def test_malformed_entries_raise(tmp_path: Path, body: dict) -> None:
+    _write(tmp_path, json.dumps(body))
+    with pytest.raises(UnreadableSchemaError, match="playlist"):
+        load_playlists(tmp_path)

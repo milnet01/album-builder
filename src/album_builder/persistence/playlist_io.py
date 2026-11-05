@@ -58,16 +58,26 @@ def load_playlists(project_root: Path) -> list[Playlist]:
     if isinstance(from_version, int) and data.get("schema_version") != from_version:
         write_migration_bak(path, raw_bytes, from_version)
 
+    entries = data.get("playlists")
+    if not isinstance(entries, list):
+        raise UnreadableSchemaError("playlists.json: 'playlists' is missing or not a list")
     playlists: list[Playlist] = []
-    try:
-        for entry in data.get("playlists", []):
-            raw_paths = [Path(s) for s in entry.get("track_paths", [])]
-            healed = [p if p.is_absolute() else p.absolute() for p in raw_paths]
-            playlists.append(
-                Playlist(id=entry["id"], name=entry["name"], track_paths=healed)
-            )
-    except (KeyError, TypeError, AttributeError) as exc:
-        raise UnreadableSchemaError(f"playlists.json: malformed entry ({exc})") from exc
+    for i, entry in enumerate(entries):
+        # Check every field's type: a wrong type would otherwise load as
+        # garbage (a string iterated into one path per character) and be
+        # written back on the next save.
+        paths = entry.get("track_paths", []) if isinstance(entry, dict) else None
+        if not (
+            isinstance(entry, dict)
+            and isinstance(entry.get("id"), str)
+            and isinstance(entry.get("name"), str)
+            and isinstance(paths, list)
+            and all(isinstance(s, str) for s in paths)
+        ):
+            raise UnreadableSchemaError(f"playlists.json: playlist {i} is malformed")
+        raw_paths = [Path(s) for s in paths]
+        healed = [p if p.is_absolute() else p.absolute() for p in raw_paths]
+        playlists.append(Playlist(id=entry["id"], name=entry["name"], track_paths=healed))
     return playlists
 
 

@@ -471,3 +471,26 @@ def test_metadata_wire_signatures_over_real_bus(qtbot) -> None:
     assert "int64" in out                       # mpris:length -> x
     assert "object path" in out                 # mpris:trackid -> o
     assert "array [" in out and "string" in out  # xesam:artist -> as
+
+
+# Spec: TC-20-11 - a cover-art write that fails leaves no temp file behind
+# (the file was created by mkstemp before the write raised; review PL1).
+def test_cover_art_failed_write_leaves_no_temp_file(tmp_path, monkeypatch) -> None:
+    import tempfile
+
+    from album_builder.services import mpris as mpris_mod
+
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+
+    def failing_fdopen(fd, mode):
+        os.close(fd)
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(mpris_mod.os, "fdopen", failing_fdopen)
+    svc = _service()
+    svc.available = False
+    svc._controller.current_changed.emit(
+        _track(cover_data=b"\x89PNG\r\n\x1a\n", cover_mime="image/png")
+    )
+    assert svc._art_url is None
+    assert list(tmp_path.iterdir()) == []

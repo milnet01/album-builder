@@ -29,6 +29,7 @@ a live bus 2026-07-18).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import tempfile
@@ -186,7 +187,7 @@ class MediaPlayer2Adaptor(QDBusAbstractAdaptor):
     """Root `org.mpris.MediaPlayer2` interface - app identity + Raise/Quit."""
 
     def __init__(
-        self, host: QObject, raise_window: Callable[[], None], app: QApplication
+        self, host: QObject, raise_window: Callable[[], None], app: QApplication | None
     ) -> None:
         super().__init__(host)
         # Supplied by the ui, so services never import ui (docs/design.md).
@@ -199,7 +200,8 @@ class MediaPlayer2Adaptor(QDBusAbstractAdaptor):
 
     @pyqtSlot()
     def Quit(self) -> None:
-        self._app.quit()
+        if self._app:
+            self._app.quit()
 
     @pyqtProperty(bool)
     def CanQuit(self) -> bool:
@@ -506,14 +508,12 @@ class MprisService(QObject):
         # Refresh art first (bumps the trackid counter), then broadcast Metadata
         # + the Can* flags that depend on having a current track.
         self._refresh_art(track)
-        current = self._controller.current_track() is not None
+        current = track is not None
         self._emit_properties_changed(
             _PLAYER_IFACE,
             {
                 "Metadata": _metadata_variant_map(
-                    track_metadata(
-                        self._controller.current_track(), self._art_url, self._track_no
-                    )
+                    track_metadata(track, self._art_url, self._track_no)
                 ),
                 "CanGoNext": len(self._controller.play_order()) > 0,
                 "CanGoPrevious": len(self._controller.play_order()) > 0,
@@ -533,8 +533,9 @@ class MprisService(QObject):
         if track is not None:
             self._track_no += 1
         self._clear_art()
-        if track is None or not getattr(track, "cover_data", None):
+        if track is None or not track.cover_data:
             return
+        path: str | None = None
         try:
             fd, path = tempfile.mkstemp(
                 prefix="album-builder-cover-", suffix=_cover_suffix(track.cover_mime)
@@ -543,6 +544,9 @@ class MprisService(QObject):
                 fh.write(track.cover_data)
         except OSError as exc:
             logger.warning("MPRIS: could not write cover-art temp file: %s", exc)
+            if path is not None:  # mkstemp made it; do not leave it behind
+                with contextlib.suppress(OSError):
+                    os.unlink(path)
             return
         self._art_path = path
         self._art_url = "file://" + path

@@ -40,10 +40,7 @@ class DebouncedWriter(QObject):
         # key the writer has ever seen. The next schedule() for `key`
         # reconstructs a fresh QTimer; cost is one QTimer ctor per quiet
         # window per key, which is well below the 250 ms idle floor.
-        timer = self._timers.pop(key, None)
-        if timer is not None:
-            timer.stop()
-            timer.deleteLater()
+        self._dispose_timer(key)
         if fn is None:
             return
         try:
@@ -63,11 +60,15 @@ class DebouncedWriter(QObject):
         the queued ``save_album(folder, album)`` would otherwise fire into
         the trashed location after the move (L5-M3).
         """
+        self._dispose_timer(key)
+        self._pending.pop(key, None)
+
+    def _dispose_timer(self, key: Hashable) -> None:
+        """Stop and drop `key`'s timer, if any (shared by fire and cancel)."""
         timer = self._timers.pop(key, None)
         if timer is not None:
             timer.stop()
             timer.deleteLater()
-        self._pending.pop(key, None)
 
     def flush_all(self) -> None:
         for key, timer in list(self._timers.items()):

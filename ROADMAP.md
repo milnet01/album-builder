@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: MUSI=404 -->
+<!-- ants-roadmap-id-high-water: MUSI=405 -->
 
 # Album Builder — Roadmap
 
@@ -310,6 +310,12 @@ docs/reviews/close-findings-2026-11-05.md.
   **Layman:** Lyric lines now light up at the right moment even when the singing does not split the way your lines do, and aligning several songs no longer uses huge amounts of memory.
   Kind: review-fix.
   Source: deepseek-review-2026-11-05.
+
+- 📋 [MUSI-0405] **Check that a left-click on the tray icon hides the window on Windows.**
+  Spec 20 hides the window on a tray left-click only when it is "visible and active" (tray.py _toggle_window, isActiveWindow()). On Windows a click in the notification area usually takes focus from the app first, so the window may never count as active and never hide. TC-20-13 mocks isActiveWindow, so the suite cannot show this. Check on the Windows test machine (ssh wintest), then on KDE. Not fixed blind: the obvious fix (ignore activity) changes Spec 20's rule.
+  **Layman:** On Windows, clicking the tray icon may never hide the window; this needs a real Windows check.
+  Kind: investigate.
+  Source: deepseek-review-2026-11-05 (PL38).
 
 ## 1.0.0 — Every sign of success proven
 

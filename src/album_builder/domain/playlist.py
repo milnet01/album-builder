@@ -29,18 +29,12 @@ class Playlist:
         (TC-17-01/02). Display names may collide across playlists - identity is
         the id, never the name.
         """
-        clean = name.strip()
-        if not clean:
-            raise ValueError("playlist name must be non-empty")
-        return cls(id=uuid4().hex, name=clean, track_paths=[])
+        return cls(id=uuid4().hex, name=_clean_name(name), track_paths=[])
 
     def rename(self, name: str) -> None:
         """Set the display name, stripping; empty-after-strip raises `ValueError`
         (TC-17-02)."""
-        clean = name.strip()
-        if not clean:
-            raise ValueError("playlist name must be non-empty")
-        self.name = clean
+        self.name = _clean_name(name)
 
     def append(self, path: Path) -> None:
         """Append a track reference. Duplicates are allowed (TC-17-03)."""
@@ -69,3 +63,11 @@ class Playlist:
             return
         entry = self.track_paths.pop(from_index)
         self.track_paths.insert(to_index, entry)
+
+
+def _clean_name(name: str) -> str:
+    """`name` stripped; empty after stripping raises ValueError (TC-17-02)."""
+    clean = name.strip()
+    if not clean:
+        raise ValueError("playlist name must be non-empty")
+    return clean

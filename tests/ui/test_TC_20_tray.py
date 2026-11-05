@@ -124,3 +124,15 @@ def test_main_window_constructs_and_tears_down_mpris(main_window, monkeypatch) -
     main_window.close()
     assert unreg == [True]       # MPRIS torn down
     assert saves == [True]       # existing state-save still runs
+
+
+# Spec: TC-20-12 - with no app icon (not installed, no dev asset) the tray
+# still shows an icon: a built-in one, not a second theme lookup that has
+# already failed (review PL13).
+def test_tray_icon_never_blank(qtbot, monkeypatch) -> None:
+    from PyQt6.QtGui import QIcon
+
+    _force_tray_available(monkeypatch, True)
+    monkeypatch.setattr(QIcon, "fromTheme", staticmethod(lambda *a: QIcon()))
+    tray = TrayIcon(Player(), MagicMock(), MagicMock(), QIcon())
+    assert not tray.icon().isNull()

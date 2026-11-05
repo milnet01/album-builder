@@ -557,7 +557,10 @@ tests build real widgets under the offscreen QPA and monkeypatch
   `CURRENT_SCHEMA_VERSION` raises `SchemaTooNewError`; a missing/non-int
   `schema_version` raises `UnreadableSchemaError`; a non-JSON file raises
   `json.JSONDecodeError`; a valid-JSON non-object (e.g. `[]`) raises
-  `UnreadableSchemaError`.
+  `UnreadableSchemaError`. So does a missing or non-list `playlists`, or an
+  entry whose `id` / `name` is not a string or whose `track_paths` is not a list
+  of strings; the message names the entry's position (amended 2026-11-05,
+  MUSI-0402).
 - **TC-17-10** - a playlist entry whose path does not exist on disk survives a
   `save_playlists`/`load_playlists` round-trip unchanged (dangling entries are
   not pruned by persistence).

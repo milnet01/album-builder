@@ -10,7 +10,7 @@ system tray exists.
 from __future__ import annotations
 
 from PyQt6.QtGui import QAction, QIcon
-from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
+from PyQt6.QtWidgets import QApplication, QMenu, QStyle, QSystemTrayIcon
 
 from album_builder.i18n import tr
 from album_builder.services.player import Player, PlayerState
@@ -29,8 +29,11 @@ class TrayIcon(QSystemTrayIcon):
         self._controller = controller
         self._window = window
 
-        self.setIcon(icon if icon is not None and not icon.isNull()
-                     else QIcon.fromTheme("album-builder"))
+        # resolve_app_icon already tried the theme and the dev asset; when
+        # both failed, a built-in icon keeps the tray entry visible.
+        if icon is None or icon.isNull():
+            icon = QApplication.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay)
+        self.setIcon(icon)
 
         menu = QMenu()
         self._play_pause = QAction(self._play_pause_label(), menu)

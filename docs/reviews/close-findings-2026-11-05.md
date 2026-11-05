@@ -78,13 +78,13 @@ Finding ids are the feedback file's own numbering, prefixed by group.
 
 | finding | verified | disposition | was → now |
 |---|---|---|---|
-| PL9 + 10 + 26 hand-edited `playlists.json` loads garbage and is written back | yes, no field type checks; missing key reads as empty | | |
-| PL1 MPRIS cover temp file leaks on a failed write | yes | | |
-| PL13 tray `fromTheme` fallback repeats a lookup that already failed | yes | | |
-| PL23 `_clean_name` duplicated in `playlist.py` | yes | | |
-| PL28 `_dispose` duplicated in `debounce.py` | yes | | |
-| PL2, 5, 7 | consistency: `getattr` on a dataclass field; ignored `track` arg; `Quit` unguarded | | |
-| PL38 tray left-click may never hide on Windows | unverified; needs a Windows run | | |
+| PL9 + 10 + 26 hand-edited `playlists.json` loads garbage and is written back | yes, no field type checks; missing key reads as empty | fixed | every field type-checked; a missing/non-list `playlists` raises; message names the entry; TC-17-09 amended; red: garbage loaded |
+| PL1 MPRIS cover temp file leaks on a failed write | yes | fixed | unlinked on failure; red: file left behind |
+| PL13 tray `fromTheme` fallback repeats a lookup that already failed | yes | fixed | built-in icon fallback; red: blank icon |
+| PL23 `_clean_name` duplicated in `playlist.py` | yes | fixed | one `_clean_name`; existing TC-17-01/02 tests cover it |
+| PL28 `_dispose` duplicated in `debounce.py` | yes | fixed | one `_dispose_timer`; existing debounce tests cover it |
+| PL2, 5, 7 | consistency: `getattr` on a dataclass field; ignored `track` arg; `Quit` unguarded | fixed | direct field read; uses `track`; `Quit` guarded and typed `QApplication \| None` |
+| PL38 tray left-click may never hide on Windows | unverified; needs a Windows run | queued | MUSI-0405: needs a Windows measurement; the blind fix changes Spec 20 |
 | PL3, 4, 33, 35, 16, 27, 31 | already handled | dismissed | |
 | PL8, 12 | deliberate: Spec 20 | dismissed | |
 | PL15 | premature index; adds a sync hazard | dismissed | |
