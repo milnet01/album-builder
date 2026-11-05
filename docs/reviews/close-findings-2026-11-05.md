@@ -96,7 +96,7 @@ Finding ids are the feedback file's own numbering, prefixed by group.
 |---|---|---|---|
 | SC-A1 deleting the current album leaves a half-blank screen | yes, `store.current_album_id` is never set by the UI | fixed | the window keeps the store's current id in step; red: switcher None after delete |
 | SC-A4 `QPushButton:focus` padding undoes glyph-button padding | yes, equal specificity, later rule wins; measured by render: focused arrow a sliver | fixed | glyph focus rule keeps padding 0; pixel test; red: 10 vs 41 bright pixels |
-| SC-A3 `[accent=...]` QSS rules match nothing; TC-11-06/07 unimplemented | yes, no `accent` property set in `src/` | | |
+| SC-A3 `[accent=...]` QSS rules match nothing; TC-11-06/07 unimplemented | yes, no `accent` property set in `src/`; QSS cannot select an item by a data role | fixed | owner chose to build them (2026-11-05): `RowAccentDelegate` paints fade + 2 px strip; accent answered once for all columns but Used; dead QSS removed; Spec 11 amended; seen in a render; red: no strip |
 | SC1.2 alignment-failure toast names no song | yes | fixed | toast names the song; catalog key replaced in all seven |
 | SC1.3 duplicate scan cannot be interrupted; close waits | yes | fixed | `should_stop` polled per file; close requests interruption; red: report emitted |
 | SC1.4 dead `isinstance` | yes | fixed | removed; no red run: dead code |

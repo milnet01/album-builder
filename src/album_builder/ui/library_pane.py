@@ -17,7 +17,7 @@ from PyQt6.QtCore import (
     Qt,
     pyqtSignal,
 )
-from PyQt6.QtGui import QBrush, QColor, QFont, QPainter
+from PyQt6.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter
 from PyQt6.QtWidgets import (
     QFrame,
     QHeaderView,
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 # Mirror of `MISSING_ROLE` / `TITLE_ROLE` in album_order_pane.py: per-pane
 # user-role offsets above Qt.ItemDataRole.UserRole, named so callers don't
 # need to know the offset arithmetic. ACCENT_ROLE returns "primary" /
-# "warning" / None for the QSS attribute selector at paint time.
+# "warning" / None for RowAccentDelegate (Spec 11 row strips).
 ACCENT_ROLE = Qt.ItemDataRole.UserRole + 2
 
 
@@ -256,6 +256,14 @@ class TrackTableModel(QAbstractTableModel):
         attr = COLUMNS[index.column()][1]
         is_approved = self._album_status == AlbumStatus.APPROVED
 
+        if role == ACCENT_ROLE:
+            # Spec 11 row strips: every cell of an in-album row reports its
+            # accent, so RowAccentDelegate paints the whole row. The Used
+            # column stays out (Spec 13: it keeps its own badge).
+            if attr == "_used" or track.path not in self._selected_paths:
+                return None
+            return "warning" if track.is_missing else "primary"
+
         if attr == "_play":
             # Spec 06 per-row preview-play. TC-06-19: the row whose track
             # is the active source AND state == PLAYING shows the PAUSE
@@ -297,10 +305,6 @@ class TrackTableModel(QAbstractTableModel):
             if role == Qt.ItemDataRole.UserRole:
                 # Sort key for the toggle column - keep selected rows together.
                 return (selected, track.path.name.casefold())
-            if role == ACCENT_ROLE:
-                if selected:
-                    return "warning" if track.is_missing else "primary"
-                return None
             return None
 
         # Spec 13 §Behavior rules: explicit early-return discipline for
@@ -335,16 +339,7 @@ class TrackTableModel(QAbstractTableModel):
                     track.path, exclude=self._current_album_id,
                 )
                 return _build_usage_tooltip(ids, usage.store)
-            if role == ACCENT_ROLE:
-                return None  # Used column doesn't participate in accent strip
             return None  # any other role: explicit None, never fall through
-
-        # Non-toggle column ACCENT_ROLE surfaces accent so the whole row
-        # picks it up via the QSS attribute selector at paint time.
-        if role == ACCENT_ROLE:
-            if track.path in self._selected_paths:
-                return "warning" if track.is_missing else "primary"
-            return None
 
         value = getattr(track, attr)
         if role == Qt.ItemDataRole.DisplayRole:
@@ -405,7 +400,67 @@ def _column_index(name: str) -> int:
     return next(i for i, c in enumerate(COLUMNS) if c[1] == name)
 
 
-class UsageBadgeDelegate(QStyledItemDelegate):
+class RowAccentDelegate(QStyledItemDelegate):
+    """Paints Spec 11's row strips (TC-11-06 / TC-11-07) for rows whose
+    ACCENT_ROLE is "primary" (in the current album) or "warning" (in the
+    album, file missing): a 90deg fade from the accent at 15% to transparent
+    across the row, and a 2 px left strip on the row's first visible cell.
+    QSS cannot select a table item by a custom role, so this is painted.
+    Otherwise it paints exactly as the default delegate does."""
+
+    STRIP_PX = 2
+    FADE_ALPHA = 0.15
+
+    def __init__(self, parent: QObject | None = None, *, palette: Palette | None = None):
+        super().__init__(parent)
+        self._palette = palette or Palette.dark_colourful()
+
+    def set_palette(self, palette: Palette) -> None:
+        self._palette = palette
+
+    def _accent_colours(self, index: QModelIndex) -> tuple[QColor, QColor] | None:
+        """(fade colour, strip colour) for the row, or None if it has none."""
+        accent = index.data(ACCENT_ROLE)
+        if accent == "primary":
+            return QColor(self._palette.accent_primary_1), QColor(self._palette.accent_primary_2)
+        if accent == "warning":
+            return QColor(self._palette.warning), QColor(self._palette.warning)
+        return None
+
+    def paint_accent_fade(self, painter: QPainter, option: QStyleOptionViewItem,
+                          index: QModelIndex) -> None:
+        colours = self._accent_colours(index)
+        if colours is None:
+            return
+        fade = QColor(colours[0])
+        fade.setAlphaF(self.FADE_ALPHA)
+        clear = QColor(fade)
+        clear.setAlphaF(0.0)
+        # Gradient in viewport coordinates, so it runs across the whole row
+        # rather than restarting in every cell.
+        width = option.widget.width() if option.widget is not None else option.rect.right()
+        gradient = QLinearGradient(0, 0, max(width, 1), 0)
+        gradient.setColorAt(0.0, fade)
+        gradient.setColorAt(1.0, clear)
+        painter.fillRect(option.rect, QBrush(gradient))
+
+    def paint_accent_strip(self, painter: QPainter, option: QStyleOptionViewItem,
+                           index: QModelIndex) -> None:
+        colours = self._accent_colours(index)
+        if colours is None or option.rect.left() > 0:
+            return  # only the cell at the row's left edge carries the strip
+        strip = QRectF(option.rect.left(), option.rect.top(),
+                       self.STRIP_PX, option.rect.height())
+        painter.fillRect(strip, colours[1])
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem,
+              index: QModelIndex) -> None:
+        self.paint_accent_fade(painter, option, index)
+        super().paint(painter, option, index)
+        self.paint_accent_strip(painter, option, index)
+
+
+class UsageBadgeDelegate(RowAccentDelegate):
     """Paints the cross-album popularity badge for the Used column.
 
     Spec 13 §The badge: filled rounded-rectangle pill with the integer
@@ -425,15 +480,6 @@ class UsageBadgeDelegate(QStyledItemDelegate):
     _PILL_FONT_SIZE_PX = 11
     _PILL_FONT_WEIGHT = 600
 
-    def __init__(
-        self,
-        parent: QObject | None = None,
-        *,
-        palette: Palette | None = None,
-    ) -> None:
-        super().__init__(parent)
-        self._palette = palette or Palette.dark_colourful()
-
     def paint(
         self,
         painter: QPainter,
@@ -444,6 +490,7 @@ class UsageBadgeDelegate(QStyledItemDelegate):
         if not text:
             super().paint(painter, option, index)
             return
+        self.paint_accent_fade(painter, option, index)
 
         fill_colour = QColor(self._palette.accent_primary_1)
         text_colour = QColor("#ffffff")
@@ -557,13 +604,18 @@ class LibraryPane(QFrame):
         self.table.setColumnWidth(_column_index("album"), 160)
         self.table.setColumnWidth(_column_index("duration_seconds"), 70)
         self.table.setColumnWidth(toggle_col, 30)
-        # Spec 13 §The badge: column-scoped delegate attachment.
-        # Never setItemDelegate (which would repaint other cells).
+        # Spec 13 §The badge: column-scoped delegate attachment, so the badge
+        # painter never reaches other cells (the table-wide RowAccentDelegate
+        # below paints those).
         used_col = _column_index("_used")
         # Spec 19: keep a handle so set_palette can recolour the badge on a
         # theme switch (the fill is painted imperatively from the palette).
         self._usage_delegate = UsageBadgeDelegate(self.table)
         self.table.setItemDelegateForColumn(used_col, self._usage_delegate)
+        # Spec 11 TC-11-06/07: every other cell gets the row-strip painter,
+        # which otherwise paints as the default delegate does.
+        self._row_delegate = RowAccentDelegate(self.table)
+        self.table.setItemDelegate(self._row_delegate)
         self.table.setColumnWidth(used_col, 40)
         self.table.setMinimumWidth(300)  # fits a 1280 px screen (MUSI-0381)
         # Spec 01: default sort is Title ascending.
@@ -628,7 +680,8 @@ class LibraryPane(QFrame):
         """Spec 19: adopt a new theme palette. The usage-badge fill is painted
         imperatively from the palette, so update the delegate and repaint (the
         rest of the pane follows the global stylesheet swap)."""
-        self._usage_delegate._palette = palette
+        self._usage_delegate.set_palette(palette)
+        self._row_delegate.set_palette(palette)
         self.table.viewport().update()
 
     def set_playlists(self, playlists) -> None:
