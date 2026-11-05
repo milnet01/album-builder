@@ -58,7 +58,7 @@ Linux-only. There is no artifact a Windows user can run:
   PyQt app with finicky native libraries: faster startup, easier to debug, and to
   the user still "unzip, double-click." True single-file is rejected for this first
   Windows release (§8); it can be revisited once the bundle is proven.
-- **Build host: a GitHub `windows-latest` runner** (user, 2026-07-28). PyInstaller
+- **Build host: a GitHub `windows-2025` runner** (user, 2026-07-28; pinned from `windows-latest`, which GitHub moves without a commit, user 2026-11-05). PyInstaller
   cannot cross-compile - it freezes the interpreter of the OS it runs on - so a
   Windows `.exe` must be built on Windows. **This is the key difference from
   Spec 23:** the AppImage builds inside a pinned `ubuntu:22.04` container, so a
@@ -87,7 +87,7 @@ Linux-only. There is no artifact a Windows user can run:
 - **WhisperX/torch stays out of the bundle** (same as Dist-2). The build installs
   only `requirements.txt`; the heavy ML stack remains an optional `pip` extra.
 - **GTK native stack sourced from MSYS2 on the runner** (default; the
-  implementation may substitute `gvsbuild`). `windows-latest` ships MSYS2, so the
+  implementation may substitute `gvsbuild`). `windows-2025` ships MSYS2, so the
   build installs the `mingw-w64-x86_64` Pango/GObject/HarfBuzz/fontconfig packages
   and collects their DLL closure into the bundle. The exact DLL list is resolved at
   build time on the runner and proven by `--selftest` - this spec does **not**
@@ -107,7 +107,7 @@ Linux-only. There is no artifact a Windows user can run:
 
 ### 4.1 Build pipeline - `packaging/build-windows.ps1`
 
-A single PowerShell script (PowerShell is the `windows-latest` default shell), run
+A single PowerShell script (PowerShell is the `windows-2025` default shell), run
 on the runner by `windows.yml` (§4.5), producing
 `dist/AlbumBuilder-<version>-windows-x64.zip`. It cannot be run on the Linux dev
 machine (§3). Ordered stages:
@@ -234,7 +234,7 @@ phase adds **no** new flags:
   with no display.
 - `--selftest` renders a trivial HTML to PDF via WeasyPrint and is the Windows
   liveness probe for the §4.2 DLL bundle - identical in role to its AppImage use
-  (Spec 23 INV-23-2). Because `windows-latest` has no system GTK stack, a green
+  (Spec 23 INV-23-2). Because `windows-2025` has no system GTK stack, a green
   `--selftest` on the runner proves the DLLs are genuinely bundled, not borrowed
   (the Windows analogue of Spec 23's clean-container run).
 - `--selftest` also round-trips an atomic save (Spec 23 INV-23-11). On Windows
@@ -260,7 +260,7 @@ permissions:
 
 jobs:
   windows:
-    runs-on: windows-latest
+    runs-on: windows-2025
 ```
 
 Steps: checkout; run `packaging/build-windows.ps1`; then verification on the runner
@@ -383,7 +383,7 @@ tried first and did not restore stdout under PowerShell output capture.)
   a moving reference, so a changed upstream silently enters an artifact users run
   unsigned.
 - **INV-24-11** - The bundle can save a file the way the app saves its data.
-  *Test:* `AlbumBuilder.exe --selftest` exits 0 on `windows-latest`; its save half
+  *Test:* `AlbumBuilder.exe --selftest` exits 0 on `windows-2025`; its save half
   (Spec 23 INV-23-11) fails it when `atomic_write_text` raises. *Breaks when:* the
   atomic-write path raises on Windows, as MUSI-0379's `os.O_DIRECTORY` did.
 
@@ -502,7 +502,7 @@ is the leg CI cannot cover (§3) and gates "shipped".
 
 - **New build-time tooling (not runtime deps):** PyInstaller (pinned, INV-24-10) and
   the MSYS2 GTK packages, both on the runner only; no addition to `requirements.txt`.
-- **New build host:** a `windows-latest` GitHub runner. No local prerequisite is
+- **New build host:** a `windows-2025` GitHub runner. No local prerequisite is
   added for Linux developers, who cannot build this artifact regardless (§3).
 - **Artifact size budget:** target a few hundred MB (Qt + Python + the GTK DLL
   closure dominate). Keeping WhisperX/torch out (§3, INV-24-5) is the named cap on
@@ -520,7 +520,7 @@ is the leg CI cannot cover (§3) and gates "shipped".
 | Rule | What catches a breach |
 |------|----------------------|
 | INV-24-1 | `windows.yml` `--version` against the built `.exe` (CI-only; needs a Windows runner) |
-| INV-24-2 | `windows.yml` `--selftest` on `windows-latest` (no system GTK, so a pass proves the bundle) + a DLL-presence check over `dist\AlbumBuilder\` (CI-only) |
+| INV-24-2 | `windows.yml` `--selftest` on `windows-2025` (no system GTK, so a pass proves the bundle) + a DLL-presence check over `dist\AlbumBuilder\` (CI-only) |
 | INV-24-3 | `windows.yml` filename-vs-`--version` assertion + a static grep that stage 1 reads `version.py` (CI-only) |
 | INV-24-4 | `windows.yml` `pyproject.toml`-absence check over the built folder (CI-only) |
 | INV-24-5 | `windows.yml` `torch`/`whisperx`-absence check over the built folder (CI-only) |
@@ -529,7 +529,7 @@ is the leg CI cannot cover (§3) and gates "shipped".
 | INV-24-8 | **nothing automated** - proven only by an actual tagged release; the workflow file is the static artifact a cold reader checks |
 | INV-24-9 | **nothing mechanical** - the parity is structural (like `ci.yml` -> `local-CI.sh`); a cold reader confirms `windows.yml` only calls `build-windows.ps1` |
 | INV-24-10 | **nothing mechanical** - a cold reader (or a future CI lint) confirms PyInstaller and the action carry fixed versions in `build-windows.ps1` / `windows.yml` |
-| INV-24-11 | `windows.yml` `--selftest` on `windows-latest` (the save half, Spec 23 INV-23-11) + `tests/persistence/test_TC_24_04_atomic_write_without_o_directory.py` (TC-24-04) |
+| INV-24-11 | `windows.yml` `--selftest` on `windows-2025` (the save half, Spec 23 INV-23-11) + `tests/persistence/test_TC_24_04_atomic_write_without_o_directory.py` (TC-24-04) |
 
 Eleven rows, **three** bolded `nothing` - the honest error budget (§0 of the format
 standard). All three are release-plumbing invariants with no per-run automated
@@ -541,7 +541,7 @@ catcher, the same class Spec 23 carried (its INV-23-8/9/10).
 
 - **`ROADMAP.md`** - flip Phase Dist-3 to shipped when implemented; annotate the
   epic's Dist-3 bullet where §3 refines it (one-folder zip not one-file; the
-  point-of-use HTML fallback; MSYS2-sourced GTK; the windows-latest-only build with
+  point-of-use HTML fallback; MSYS2-sourced GTK; the windows-2025-only build with
   no local reproducibility).
 - **`README.md`** - add a Windows entry to the Download section: the zip link,
   unzip-and-run, the SmartScreen click-through, and the Windows 10 64-bit floor.
@@ -577,3 +577,4 @@ catcher, the same class Spec 23 carried (its INV-23-8/9/10).
 | 4 | 2026-07-28 | 1 cold (re-gate of the Step-8 fold-back amendment) | 0 | 0 | 0 | 2 | **Polish-converged.** The cold lane confirmed the amended INV-24-7 + §7 note match the real tests (both updated recovery tests now carry a `pdf.tmp`; the 3 new TC-24 tests exist and lock their contracts; the §4.3(c) keep-branch matches `atomic_pair.py` Branch 2b before Branch 3). **LOW:** §5 mislabelled both updated tests "Spec 10" (TC-09-30 is Spec 09) -> "one Spec 10, one Spec 09"; §11 cited placeholder test-function names -> corrected to the real `test_TC_24_0N_*` names. No substantive findings; the amendment is coherent with the shipped code. |
 | impl | 2026-07-28 | implementation fold-back (Step 8, NOT a review loop) | - | - | - | - | **CI proved the exe must be console-subsystem.** The spec was silent on `console` mode; a windowed (`console=False`) build was the natural first choice for a GUI app - but on the `windows-latest` runner `AlbumBuilder.exe --version` raised `OSError` (EINVAL) writing to a dead stdout and the INV-24-1/3 smoke test read null (runs `30370758272`, `30373367197`). An in-app ctypes `AttachConsole` + `msvcrt.open_osfhandle` stream-reattach shim was tried and did *not* restore stdout under PowerShell output capture (run `30373367197`). Fixed by building `console=True` + `hide_console="hide-early"` (`packaging/album-builder.spec`) - the PyInstaller 6 dual GUI/CLI idiom: real capturable stdout, console window dismissed before Python starts on a GUI launch. §4.6 gains the decision + rationale. Verified: Windows dispatch build green end-to-end - build + static checks + `--version`/`--selftest` smoke test all pass (run `30373943934`). Re-gated at loop 5. |
 | 5 | 2026-07-28 | 1 cold (re-gate of the console-subsystem fold-back amendment) | 0 | 0 | 0 | 2 | **Polish-converged.** The cold lane verified §4.6's amendment byte-for-byte against `packaging/album-builder.spec` (`console=True` + `hide_console="hide-early"` + `EXE(icon=...)`), confirmed no other section (§4.1 stage 4, §4.4 smoke-test, the INVs) assumes a windowed/`console=False` build, and re-verified the §4.3(a/b/c) chain against `pyi_rth_weasyprint_dlls.py` / `report.py` / `atomic_pair.py` still holds. **LOW x2 (both pre-existing, not from the amendment):** §4.3(b) cited a stale `report.py` line 294 for `render_pdf_from_html` (now def 257 / call 308) -> dropped the bare line number (per the never-cite-line-numbers rule) and past-tensed the "today it renders unconditionally" baseline; §4.1 stage 4 said the icon is set via `--icon` but the build drives the checked-in spec's `EXE(icon=...)` -> corrected. **INFO (code-side, surfaced not fixed):** the runtime hook swallows `os.add_dll_directory` failures with `except OSError: pass`. No substantive findings; amendment coherent with the shipped code. |
+| amend | 2026-11-05 | owner amendment, NOT a review loop; no reviewer dispatched | - | - | - | - | **Runner pinned to `windows-2025`.** Ants MCP `ci_report` flagged `windows-latest` as moving with no commit (local-gate.md § 9, warm-containers row, condition 1). The owner chose the pin; `windows-2025` is the image `windows-latest` resolved to on the last build (`windows-2025-vs2026`), so behaviour is unchanged today. Every `windows-latest` mention became `windows-2025` except the 2026-07-28 `impl` row, which records history. |
