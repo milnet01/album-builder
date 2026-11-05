@@ -33,6 +33,9 @@
 > CRITICAL/HIGH/MEDIUM; residual findings were doc-precision polish (a stale 2-arg
 > signature in a prose listing; a `setAutoRelaySignals` rationale nit), fixed in-pass.
 > Accepted at polish convergence.
+> **impl (2026-11-05, MUSI-0405):** not a review loop; no reviewer dispatched. Owner's
+> fix for the Windows tray click: the tray hides a window that is active now or was
+> deactivated less than `RECENT_FOCUS_S` ago. Tray bullet and TC-20-13 amended.
 
 The A-G phase letters are defined in the **Fully-featured music player mode** epic
 bullet under `ROADMAP.md` heading `## Future / deferred`.
@@ -374,8 +377,15 @@ no shadow state of its own. Property reads pull live from those.
   **Next** (`controller.next`), **Previous** (`controller.previous`), a separator,
   **Show/Hide** (toggle `window` visibility + raise), **Quit** (`QApplication.quit`).
 - `activated` on `Trigger` (left-click) -> toggle the window (show + raise if hidden
-  or minimised; hide if visible and active). `Context` (right-click) shows the menu
-  (Qt default).
+  or minimised; hide if visible and *just active*). `Context` (right-click) shows the
+  menu (Qt default).
+- *Just active* means active now, or deactivated less than `RECENT_FOCUS_S` (2 s) ago.
+  The tray watches the window's `WindowDeactivate` events to know when. Reason: on
+  Windows the click takes focus from the app before `activated` fires, and with the
+  icon in the hidden-icons pop-up the `^` click before it does, so a plain
+  `isActiveWindow()` test never hides the window (MUSI-0405, confirmed on Windows 10
+  2026-11-05). A window left for another app more than 2 s earlier is raised, not
+  hidden.
 - Uses the app icon passed in by `MainWindow` (`self.windowIcon()`; `app.py` sets it
   application-wide via `QApplication.setWindowIcon` from `resolve_app_icon`, and
   `QWidget.windowIcon()` falls back to that app icon); falls back to a themed icon name
@@ -618,7 +628,8 @@ gate warns and the test skips. The audio and lyrics tiers in `test_player.py` an
   window's visibility. With tray **unavailable**, `available=False` and no menu/icon is
   built (no crash).
 - **TC-20-13** — Tray `activated(Trigger)` on a hidden window shows + raises it; on a
-  visible/active window hides it.
+  visible/active window hides it. A visible window deactivated less than
+  `RECENT_FOCUS_S` before the click is hidden; one deactivated longer ago is raised.
 - **TC-20-14** — `MainWindow` constructs `_mpris` and `_tray` (both present as
   attributes, each self-guarded), and `closeEvent` unregisters MPRIS + removes the art
   temp file (spy the teardown) without disturbing the existing state-save.

@@ -360,6 +360,15 @@ docs/reviews/close-findings-2026-11-05.md.
   held the foreground, and the icon click brought the app back. Not
   tested: an icon pinned to the taskbar. Still open: KDE, and the
   owner's choice of fix against Spec 20's rule.
+  2026-11-05, owner chose the fix: remember focus. If the window
+  was active just before the tray click took focus away, the click
+  hides it; if it was behind other windows, the click brings it to
+  front. Spec 20's rule and TC-20-13 are amended to match. KDE check
+  still owed.
+  2026-11-05: fix built (tray.py _was_just_active, RECENT_FOCUS_S = 2 s;
+  Spec 20 and TC-20-13 amended; regression test proven red first). Still
+  owed: a re-run of the unattended Windows tray test on a new windows.yml
+  build, and the KDE check.
   **Layman:** On Windows, clicking the tray icon never hides the window (checked on the Windows PC); how to fix it is the owner's call.
   Kind: investigate.
   Source: deepseek-review-2026-11-05 (PL38).

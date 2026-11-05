@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from PyQt6.QtWidgets import QApplication, QSystemTrayIcon
+from PyQt6.QtCore import QEvent
+from PyQt6.QtWidgets import QApplication, QSystemTrayIcon, QWidget
 
 import album_builder.ui.tray as tray_mod
 from album_builder.services.player import Player, PlayerState
@@ -104,6 +105,56 @@ def test_tray_left_click_toggles_window(qtbot, monkeypatch) -> None:
     bring.clear()
     tray.activated.emit(QSystemTrayIcon.ActivationReason.Context)
     assert bring == []
+
+
+class _ShownWindow(QWidget):
+    """A real widget that reports itself shown, not minimised, and not active.
+
+    On Windows the tray click takes focus from the app before Qt reports it,
+    so at click time the window is visible but no longer active (MUSI-0405).
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.hidden = False
+
+    def isVisible(self) -> bool:
+        return True
+
+    def isMinimized(self) -> bool:
+        return False
+
+    def isActiveWindow(self) -> bool:
+        return False
+
+    def hide(self) -> None:
+        self.hidden = True
+
+
+# Spec: TC-20-13 - "was active just before the click" (MUSI-0405)
+def test_tray_click_hides_window_that_just_lost_focus(qtbot, monkeypatch) -> None:
+    _force_tray_available(monkeypatch, True)
+    bring: list = []
+    monkeypatch.setattr(tray_mod, "bring_to_front", lambda w: bring.append(w))
+    now = [1000.0]
+    monkeypatch.setattr(tray_mod.time, "monotonic", lambda: now[0])
+    window = _ShownWindow()
+    tray = TrayIcon(Player(), MagicMock(), window, QApplication.instance().windowIcon())
+
+    # The click took focus from the window a moment ago -> hide it.
+    QApplication.sendEvent(window, QEvent(QEvent.Type.WindowDeactivate))
+    now[0] += 0.5
+    tray.activated.emit(QSystemTrayIcon.ActivationReason.Trigger)
+    assert window.hidden is True
+    assert bring == []
+
+    # Focus left long before the click (the user switched apps) -> raise it.
+    window.hidden = False
+    QApplication.sendEvent(window, QEvent(QEvent.Type.WindowDeactivate))
+    now[0] += tray_mod.RECENT_FOCUS_S + 1
+    tray.activated.emit(QSystemTrayIcon.ActivationReason.Trigger)
+    assert window.hidden is False
+    assert bring == [window]
 
 
 # ---- TC-20-14: MainWindow constructs + tears down the service ---------------

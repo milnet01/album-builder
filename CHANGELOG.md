@@ -36,6 +36,12 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Fixed
 
+- **On Windows, clicking the tray icon now hides the window again** (MUSI-0405)
+  Before, a click on the tray icon only ever brought the window forward on
+  Windows, because the click itself pulled focus away from the app. Now, if
+  the window was in front just before you clicked, the click hides it. If it
+  was behind other programs, the click still brings it forward.
+
 - **Synced lyrics light up at the right moment more often**
   Each lyric line is now timed by matching its words to the words the app
   hears in the song. Before, if the singing ran two of your lines together,
