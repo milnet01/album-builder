@@ -97,6 +97,17 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   usual find key, and free). Still open in MP-3: date-added sort,
   jump-to-letter, group-by-artist/album. Play-count sort waits on MP-4's
   play counts.
+  MP-3 check (2026-11-05): jump-to-letter already works. With the
+  library table focused, typing a letter moves to the first title
+  starting with it (Qt type-ahead; probed offscreen on the demo library:
+  "s" -> Slow Tide, "w" -> Walking Home Late).
+  Waiting-on: user (MP-3's last two pieces need a design call,
+  2026-11-05). (a) Sort by date added: Linux reports no "added" date,
+  only the file's last-change time, which a tag edit resets; and a new
+  column crowds the table MUSI-0392 just made fit small screens.
+  Recommendation: skip it, or offer it as a sort option with no column.
+  (b) Group by artist or album. Recommendation: wait for MP-4
+  (favourites, play counts), then design browsing as one piece.
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 
@@ -126,6 +137,16 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   always ask before installing; the AppImage uses its built-in zsync
   update information. Offline and verification answers are still open
   for the spec.
+  Waiting-on: user (the spec's two open questions, 2026-11-05).
+  (1) Offline: recommendation - the daily check fails quietly and tries
+  again next day; only a "Check for updates" you start yourself says it
+  could not reach GitHub. (2) Verifying a download before it replaces
+  the running copy: recommendation - each release publishes a checksum
+  file signed with a project key; the app carries the public key and
+  refuses a download whose signature or checksum does not match. Also
+  settled by Spec 27: a copy installed from the openSUSE package never
+  updates itself; zypper does that. The spec waits for these answers
+  because a wrong guess at a security boundary costs a full review loop.
   **Layman:** The app tells you when a newer version is out and can install it for you, so you never have to download it by hand.
   Kind: feature.
   Source: user-request-2026-10-10.
