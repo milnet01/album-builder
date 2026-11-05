@@ -3,6 +3,8 @@
 # verified green 2026-07-03.
 pytest>=8
 pytest-qt>=4.4
+# Runs the suite on several cores (local-CI.sh -n); measured 2026-11-05.
+pytest-xdist>=3.8
 ruff>=0.5
 # Spec 27: the TC-27 tests build a wheel with --no-build-isolation.
 setuptools>=77

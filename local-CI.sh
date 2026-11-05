@@ -93,14 +93,26 @@ echo "== pytest (full suite) =="
 # needs a session bus. dbus-run-session gives the suite a private one, so it
 # runs here instead of skipping: it is the only guard on the D-Bus type pins,
 # and a wrongly-typed Metadata return once aborted the process on client read.
+#
+# Tests run on 4 cores (pytest-xdist): 15 s -> 6 s locally, 10 of 10 repeat
+# runs green, about 230 MB for all four workers (2026-11-05). Four, not every
+# core, so a push leaves the machine usable; GitHub's runner has 4 too.
+# AB_TEST_WORKERS overrides. Without xdist every test still runs, serially.
+workers=()
+if "$PY" -c "import xdist" 2>/dev/null; then
+    workers=(-n "${AB_TEST_WORKERS:-4}")
+else
+    echo "local-CI: WARNING - pytest-xdist missing, so the suite runs on one"
+    echo "local-CI:   core (slower, same tests). It is in requirements-dev.txt."
+fi
 if command -v dbus-run-session >/dev/null 2>&1; then
     QT_QPA_PLATFORM=offscreen AB_INTEGRATION_DBUS=1 \
-        dbus-run-session -- "$PY" -m pytest
+        dbus-run-session -- "$PY" -m pytest "${workers[@]}"
 else
     echo "local-CI: WARNING - dbus-run-session not found, so the MPRIS"
     echo "local-CI:   wire-signature test will SKIP and the D-Bus type pins"
     echo "local-CI:   go unchecked. Install the dbus package to close this."
-    QT_QPA_PLATFORM=offscreen "$PY" -m pytest
+    QT_QPA_PLATFORM=offscreen "$PY" -m pytest "${workers[@]}"
 fi
 
 echo "== local-CI: PASSED =="
