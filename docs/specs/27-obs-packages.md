@@ -1,7 +1,7 @@
 <!-- ants-spec-format: 1 -->
 # 27 — openSUSE packages through the Open Build Service
 
-**Status:** accepted (2026-11-05); no review gate: cheap to redo, and nothing publishes before the owner approves (CLAUDE.md rule 14, doubt means no review).
+**Status:** implemented (2026-11-05); accepted 2026-11-05 with no review gate (cheap to redo; owner-gated publish). The first publish (obs-setup.sh, then obs-submit.sh) waits for the owner.
 **Kind:** package.
 **Source:** ROADMAP MUSI-0394 Phase Dist-5 (owner decision 2026-11-04: store listings after 1.0, each phase with its own spec).
 **Depends on:** 22, 23. **Amends:** none.
@@ -101,8 +101,10 @@ BuildRequires:  python3-platformdirs >= 4.11
 BuildRequires:  python3-Jinja2 >= 3.1
 BuildRequires:  python3-weasyprint >= 68
 BuildRequires:  python3-Pillow >= 11
+BuildRequires:  dejavu-fonts
 
 Requires:       hicolor-icon-theme
+Requires:       dejavu-fonts
 Requires:       python3-PyQt6 >= 6.6
 Requires:       qt6-multimedia
 Requires:       python3-mutagen >= 1.47
@@ -115,14 +117,15 @@ Requires:       python3-Pillow >= 11
 - `%build`: `%pyproject_wheel`. `%install`: `%pyproject_install`, then `install -Dm644` the three files of §4.2, generating the desktop file with `sed`.
 - `%check`: `appstream-util validate-relax --nonet` on the metainfo, `desktop-file-validate` on the desktop file, then `QT_QPA_PLATFORM=offscreen PYTHONPATH=%{buildroot}%{python3_sitelib} python3 -m album_builder --selftest`.
 - `%changelog` stays empty; `CHANGELOG.md` is the changelog, as in perch.
-- `qt6-multimedia` is required by name because Qt's FFmpeg audio plugin (`libffmpegmediaplugin.so`) is in that package (`zypper se --provides 'libffmpegmediaplugin.so()(64bit)'` → `qt6-multimedia`, 2026-11-05). Without it the app starts and plays nothing.
+- `qt6-multimedia` is required by name because Qt's FFmpeg audio plugin (`libffmpegmediaplugin.so`) is in that package (`zypper se --provides 'libffmpegmediaplugin.so()(64bit)'` → `qt6-multimedia`, 2026-11-05). Without it the app starts and plays nothing. On 2026-11-05 `python3-PyQt6` already pulled it in: a smoke run with this line removed still passed. The line guards against that changing.
+- `dejavu-fonts` is required because WeasyPrint 70 segfaults drawing text when no font is installed (measured 2026-11-05: `--selftest` in a bare Tumbleweed container, crash in `weasyprint/text/fonts.py::get_pango_font_hb_face` after "No fonts configured in FontConfig"). An OBS build root is that bare, so `%check` needs it too. DejaVu Sans is in the report template's font list.
 - Comments in scriptlets escape macros as `%%`; rpm expands a bare macro inside a comment (perch's spec records the failure).
 
 ### 4.4 Building and publishing — `packaging/obs/`
 
 - **`obs-setup.sh`** (idempotent): creates or updates the project `home:milnet:album-builder` with `osc meta prj`, one repository `openSUSE_Tumbleweed` (path `openSUSE:Factory/snapshot`, arch `x86_64`), publishing on. It never writes a credential; `osc` reads them from the keyring set in `~/.config/osc/oscrc`.
-- **`obs-submit.sh <X.Y.Z>`**: refuses unless tag `vX.Y.Z` exists locally and `pyproject.toml`'s version is `X.Y.Z`. In a scratch directory on a real disk it runs `git archive --prefix=album-builder-X.Y.Z/ vX.Y.Z` into `album-builder-X.Y.Z.tar.gz`, checks out the OBS package with `osc`, replaces the tarball and the spec (with `Version:` set to `X.Y.Z`), runs `osc addremove` and `osc commit -m "Update to X.Y.Z"`, then deletes the scratch. The tarball is made from the local tag, so nothing is downloaded. OBS builds the package and publishes it once it is green.
-- **`rpm-smoke.sh`**: runs inside a clean Tumbleweed environment. It builds the source tarball from the working tree, runs `rpmbuild -bb` against the spec (which runs `%check`), installs the built RPM with zypper from the distribution's own repositories only, then, as a non-root user, checks §5's installed-package invariants. `rpm-smoke-local.sh` runs it in `podman` with `registry.opensuse.org/opensuse/tumbleweed`; CI runs it in a job using the `opensuse/tumbleweed` container image.
+- **`obs-submit.sh <X.Y.Z>`**: refuses unless tag `vX.Y.Z` exists locally, `pyproject.toml` at that tag says `X.Y.Z`, and the tag holds `packaging/obs/album-builder.spec`. In a scratch directory on a real disk it runs `git archive --prefix=album-builder-X.Y.Z/ vX.Y.Z` into `album-builder-X.Y.Z.tar.gz`, checks out the OBS package with `osc`, replaces the tarball and the spec (the tag's copy, with `Version:` set to `X.Y.Z`), runs `osc addremove` and `osc commit -m "Update to X.Y.Z"`, then deletes the scratch. The tarball is made from the local tag, so nothing is downloaded. OBS builds the package and publishes it once it is green.
+- **`rpm-smoke.sh`**: runs on the host with `podman` or `docker`, in two containers from `registry.opensuse.org/opensuse/tumbleweed`. The first installs the spec's `BuildRequires`, builds the source tarball from the working tree (tracked files plus new unignored ones) and runs `rpmbuild -bb`, which runs `%check`. The second, fresh, installs the built RPM with zypper from the distribution's own repositories only, then checks §5's installed-package invariants as a non-root user. Installing where the build ran would hide a missing `Requires:`, because the build already installed the runtime set. The containers run with `--security-opt label=disable`: on an SELinux host (Tumbleweed) the container is otherwise denied the read-only checkout, and relabelling with `:Z` would rewrite the repository's labels. The same script runs locally and in CI.
 
 **No server-side `_service`.** perch measured two failures: a buildtime service pulls `obs-service-*` into the build root, where Fedora could not resolve its dependencies, and a `mode="manual"` `obs_scm` fails with "no .obsinfo file found" (perch ROADMAP). OneUp removed its tag webhook because it raced `osc commit` (`OneUp/packaging/obs/README.md`).
 
@@ -153,7 +156,7 @@ After `cut-release` publishes the GitHub release, run `packaging/obs/obs-submit.
   *Breaks when:* a release bumps the version without a `<release>` entry, or the file loses a required tag.
 
 - **INV-6** (TC-27-06) — On a clean Tumbleweed with only the distribution's repositories, the built RPM installs, `album-builder --version` prints the `pyproject.toml` version, and `album-builder --selftest` exits 0.
-  *Test:* `packaging/obs/rpm-smoke.sh`, run by the CI job and by `rpm-smoke-local.sh`.
+  *Test:* `packaging/obs/rpm-smoke.sh`, locally and in the CI job.
   *Breaks when:* a dependency name or floor does not resolve on Tumbleweed, or the console script is missing.
 
 - **INV-7** (TC-27-07) — In the installed package, Qt's media backend loads: `QMediaFormat().supportedFileFormats(QMediaFormat.ConversionMode.Decode)` is non-empty under `QT_QPA_PLATFORM=offscreen`.
@@ -179,6 +182,7 @@ After `cut-release` publishes the GitHub release, run `packaging/obs/obs-submit.
 - **`osc` is not logged in** → `osc` stops at the checkout step, before any upload; the script exits non-zero.
 - **OBS build fails after a submit** → nothing is published; the repository keeps serving the previous version. `osc results home:milnet:album-builder` shows why.
 - **`%check`'s self-test fails in the build root** → the build fails and nothing is published, which is the point of running it there.
+- **No font is installed** → WeasyPrint 70 segfaults rendering the report. `Requires: dejavu-fonts` prevents it; `%check`'s self-test fails the build if the font dependency is lost.
 - **WhisperX is absent** (always, in this package) → lyrics alignment reports its runtime missing, as in the AppImage (Spec 23 §3).
 - **A user installs both the RPM and the AppImage** → both read the same `settings.json` (Spec 22); they are the same program at possibly different versions, as with two AppImages.
 
@@ -187,7 +191,7 @@ After `cut-release` publishes the GitHub release, run `packaging/obs/obs-submit.
 | Test | Locks | Where it runs |
 |------|-------|---------------|
 | `tests/packaging/test_TC_27_packaging.py` | INV-1, INV-2, INV-3, INV-4, INV-5, INV-10 | `./local-CI.sh` and `ci.yml` (needs `setuptools` and `wheel` in `requirements-dev.txt`) |
-| `packaging/obs/rpm-smoke.sh` | INV-6, INV-7, INV-8, INV-9 | a new `rpm` job in `ci.yml` on `opensuse/tumbleweed`; by hand with `rpm-smoke-local.sh` |
+| `packaging/obs/rpm-smoke.sh` | INV-6, INV-7, INV-8, INV-9 | a new `rpm` job in `ci.yml`; by hand on any machine with podman or docker |
 
 Each test is seen failing first: INV-1 and INV-2 against today's `pyproject.toml` (§2 measured both gaps), INV-3, INV-4 and INV-5 by editing a floor, a version or the release entry, INV-6, INV-7, INV-8 and INV-9 by dropping the matching `Requires:`, `%files` or `install` line once, and INV-10 by removing a refusal.
 

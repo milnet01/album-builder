@@ -169,6 +169,14 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   no review gate (cheap to redo; nothing publishes before the owner
   approves). Tumbleweed only for now: Leap 16.0's weasyprint 65.1 and
   platformdirs 4.3.8 are below requirements.txt's floors.
+  Progress (2026-11-05), Dist-5: BUILT to Spec 27. pyproject.toml now
+  makes a complete wheel; packaging/obs/ holds the RPM recipe, metainfo,
+  obs-setup.sh, obs-submit.sh and rpm-smoke.sh (new CI job "rpm"). The
+  package installs and runs on a clean Tumbleweed container.
+  Waiting-on: user (first publish to OBS: run packaging/obs/obs-setup.sh,
+  then packaging/obs/obs-submit.sh X.Y.Z after the next release; the tag
+  must contain packaging/obs/, so 1.0.0 cannot be submitted.
+  Recommendation: yes, with the MP-1 release, 2026-11-05).
   **Layman:** List the app on Flathub and in openSUSE's package system, so people can install it from their app store.
   Kind: package.
   Source: user-decision-2026-11-04.

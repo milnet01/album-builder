@@ -32,3 +32,6 @@ Thumbs.db
 # Generated: AppImage build output, audit tool cache
 dist/
 .audit_cache/
+
+# Spec 27: packaging/obs/rpm-smoke.sh scratch (deleted when it exits)
+.rpm-smoke.*/

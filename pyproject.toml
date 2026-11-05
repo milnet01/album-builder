@@ -5,6 +5,26 @@ description = "Curate albums from a folder of audio recordings"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
+dynamic = ["dependencies"]
+
+[project.scripts]
+album-builder = "album_builder.app:run"
+
+# Spec 27: a complete wheel for the openSUSE package. The AppImage and
+# Windows builds copy src/ and do not use this.
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+# requirements.txt stays the one list of runtime dependencies.
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+album_builder = ["translations/*.json", "services/templates/*.j2"]
 
 [tool.ruff]
 line-length = 100

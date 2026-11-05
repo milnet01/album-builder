@@ -4,3 +4,6 @@
 pytest>=8
 pytest-qt>=4.4
 ruff>=0.5
+# Spec 27: the TC-27 tests build a wheel with --no-build-isolation.
+setuptools>=77
+wheel>=0.45

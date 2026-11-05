@@ -28,3 +28,11 @@ writes an HTML-only report instead of crashing approve (§4.3b), and
 `persistence/atomic_pair.py::scan_reports_dir` keeps a lone `.html` with no `.tmp`
 as a complete single-file report.
 
+
+`packaging/obs/` (Spec 27) is the openSUSE Tumbleweed package: a noarch RPM on the
+distribution's own Python libraries, built by OBS in `home:milnet:album-builder`.
+`rpm-smoke.sh` builds it and installs it in clean Tumbleweed containers (podman or
+docker; the `ci.yml` `rpm` job runs the same script). After each GitHub release,
+`obs-submit.sh X.Y.Z` uploads a `git archive` of the tag. Each release also bumps
+`Version:` in `album-builder.spec` and adds a `<release>` to
+`packaging/linux/io.github.milnet01.AlbumBuilder.metainfo.xml` (TC-27-04, TC-27-05).

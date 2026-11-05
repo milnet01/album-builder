@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata (Spec 27 §4.2). Software centres read this to list
+     the app. Each release adds its <release> entry first (Spec 27 INV-5). -->
+<component type="desktop-application">
+  <id>io.github.milnet01.AlbumBuilder</id>
+  <name>Album Builder</name>
+  <summary>Curate an album from a folder of songs</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="io.github.milnet01">
+    <name>Anthony Schemel</name>
+  </developer>
+  <launchable type="desktop-id">album-builder.desktop</launchable>
+  <description>
+    <p>
+      Album Builder helps you put an album together from a folder of songs.
+      Pick the tracks you want, drag them into order, listen through with the
+      lyrics scrolling along, and when you are happy, approve it.
+    </p>
+    <p>
+      Approving makes a ready-to-share album folder: a playlist, the tracks
+      numbered in order, and a printable report.
+    </p>
+  </description>
+  <screenshots>
+    <screenshot type="default">
+      <caption>The song library, the album's track order, and the song now playing</caption>
+      <image>https://raw.githubusercontent.com/milnet01/album-builder/main/docs/screenshots/album-builder-curate.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The Player tab with its own music library</caption>
+      <image>https://raw.githubusercontent.com/milnet01/album-builder/main/docs/screenshots/album-builder-player.png</image>
+    </screenshot>
+  </screenshots>
+  <url type="homepage">https://github.com/milnet01/album-builder</url>
+  <url type="bugtracker">https://github.com/milnet01/album-builder/issues</url>
+  <content_rating type="oars-1.1"/>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+  </categories>
+  <releases>
+    <release version="1.0.0" date="2026-11-04">
+      <description>
+        <p>You can undo removing a song from an album with Ctrl+Z. Album
+        reports print on white paper, keep their bold title, and the tick
+        column for adding songs sits next to the play button.</p>
+      </description>
+    </release>
+  </releases>
+</component>
