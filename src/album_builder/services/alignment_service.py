@@ -1,6 +1,7 @@
 """Alignment orchestration — Spec 07.
 
-Owns in-flight `AlignmentWorker` jobs keyed by audio path. Validates
+Runs one `AlignmentWorker` at a time; later requests wait in arrival
+order (TC-07-20), so only one song's models are in memory. Validates
 preconditions (lyrics present, audio long enough, LRC not already fresh)
 before constructing a worker; emits `status_changed` for the LyricsPanel
 status pill. Auto-align is opt-in (Spec 07 §Alignment job, default off).
@@ -9,6 +10,7 @@ status pill. Auto-align is opt-in (Spec 07 §Alignment job, default off).
 from __future__ import annotations
 
 import logging
+from collections import deque
 from collections.abc import Callable
 from pathlib import Path
 
@@ -96,7 +98,12 @@ class AlignmentService(QObject):
         # construction for the production wiring.
         self._settings = settings if settings is not None else read_alignment()
         self._worker_factory = worker_factory or _default_worker_factory
-        self._workers: dict[Path, AlignmentWorker] = {}
+        self._current: tuple[Path, AlignmentWorker] | None = None
+        self._waiting: deque[tuple[Path, str]] = deque()  # (path, lyrics text)
+        # Cancelled workers whose thread has not ended yet. Kept here because
+        # Qt's isInterruptionRequested() reads False once the thread ends,
+        # which is before its queued signals reach this thread.
+        self._cancelled: set[AlignmentWorker] = set()
 
     def settings(self) -> AlignmentSettings:
         return self._settings
@@ -112,10 +119,20 @@ class AlignmentService(QObject):
         self._settings = settings
 
     def is_running(self, track_path: Path) -> bool:
-        return track_path in self._workers
+        """True while `track_path` is aligning or waiting its turn."""
+        return self.live_status(track_path) is not None
+
+    def live_status(self, track_path: Path) -> AlignmentStatus | None:
+        """ALIGNING or QUEUED for a song in progress, else None; the
+        on-disk status (`compute_status`) applies then."""
+        if self._is_current(track_path) and self._current[1] not in self._cancelled:
+            return AlignmentStatus.ALIGNING
+        if self._is_waiting(track_path):
+            return AlignmentStatus.QUEUED
+        return None
 
     def start_alignment(self, track: Track) -> None:
-        """Spawn a worker for `track`, subject to the precondition checks.
+        """Align `track` now, or queue it behind the running one.
 
         Each rejection emits the corresponding `status_changed` so the
         LyricsPanel can update its pill text.
@@ -130,21 +147,13 @@ class AlignmentService(QObject):
         if track.duration_seconds < MIN_AUDIO_SECONDS:
             self.status_changed.emit(path, AlignmentStatus.AUDIO_TOO_SHORT)
             return
-        if path in self._workers:
-            # Idempotent — already running for this path.
+        if self.is_running(path):
+            return  # idempotent: already aligning or waiting
+        if self._current is not None:
+            self._waiting.append((path, track.lyrics_text))
+            self.status_changed.emit(path, AlignmentStatus.QUEUED)
             return
-
-        worker = self._worker_factory(path, track.lyrics_text, self._settings.model_size)
-        self._workers[path] = worker
-        worker.progress.connect(lambda p, _path=path: self.progress.emit(_path, p))
-        worker.finished_ok.connect(lambda lyrics, _path=path: self._on_finished(_path, lyrics))
-        worker.failed.connect(lambda msg, _path=path: self._on_failed(_path, msg))
-        worker.runtime_missing.connect(lambda _path=path: self.runtime_missing.emit(_path))
-        # Cleanup hook: drop the worker reference when the thread ends.
-        worker.finished.connect(lambda _path=path: self._workers.pop(_path, None))
-
-        self.status_changed.emit(path, AlignmentStatus.ALIGNING)
-        worker.start()
+        self._start_worker(path, track.lyrics_text)
 
     def auto_align_on_play(self, track: Track) -> None:
         """Honour `alignment.auto_align_on_play` from settings.
@@ -158,17 +167,60 @@ class AlignmentService(QObject):
         self.start_alignment(track)
 
     def cancel(self, track_path: Path) -> None:
-        worker = self._workers.get(track_path)
-        if worker is None:
+        if self._is_waiting(track_path):
+            self._waiting = deque(item for item in self._waiting if item[0] != track_path)
+        elif self._is_current(track_path):
+            # The worker exits via _AlignmentInterrupted; any result it still
+            # emits is ignored (`_live`), and the next song starts once its
+            # thread ends, so two models are never loaded at once.
+            self._cancelled.add(self._current[1])
+            self._current[1].requestInterruption()
+        else:
             return
-        worker.requestInterruption()
-        # The worker exits via _AlignmentInterrupted without firing
-        # finished_ok or failed, so the LyricsPanel's status pill would
-        # otherwise remain stuck at ALIGNING. Spec 07 §Errors mandates
-        # "status reverts to `not yet aligned`." L4-M5.
+        # Spec 07 §Errors: "status reverts to `not yet aligned`." L4-M5.
         self.status_changed.emit(track_path, AlignmentStatus.NOT_YET_ALIGNED)
 
     # ---- Internal ----------------------------------------------------
+
+    def _is_current(self, path: Path) -> bool:
+        return self._current is not None and self._current[0] == path
+
+    def _is_waiting(self, path: Path) -> bool:
+        return any(p == path for p, _ in self._waiting)
+
+    def _start_worker(self, path: Path, lyrics_text: str) -> None:
+        worker = self._worker_factory(path, lyrics_text, self._settings.model_size)
+        self._current = (path, worker)
+        worker.progress.connect(
+            lambda p, _path=path, _w=worker: self._live(_w) and self.progress.emit(_path, p)
+        )
+        worker.finished_ok.connect(
+            lambda lyrics, _path=path, _w=worker:
+            self._live(_w) and self._on_finished(_path, lyrics)
+        )
+        worker.failed.connect(
+            lambda msg, _path=path, _w=worker: self._live(_w) and self._on_failed(_path, msg)
+        )
+        worker.runtime_missing.connect(
+            lambda _path=path, _w=worker: self._live(_w) and self.runtime_missing.emit(_path)
+        )
+        worker.finished.connect(lambda _w=worker: self._on_thread_done(_w))
+        self.status_changed.emit(path, AlignmentStatus.ALIGNING)
+        worker.start()
+
+    def _live(self, worker: AlignmentWorker) -> bool:
+        """False once the worker was cancelled: a late result is dropped
+        (LY-A6) so it cannot overwrite the `not yet aligned` revert."""
+        return worker not in self._cancelled
+
+    def _on_thread_done(self, worker: AlignmentWorker) -> None:
+        # `finished` is the worker's last signal, so nothing more needs `_live`.
+        self._cancelled.discard(worker)
+        if self._current is not None and self._current[1] is worker:
+            self._current = None
+        if self._current is None and self._waiting:
+            path, lyrics_text = self._waiting.popleft()
+            self._start_worker(path, lyrics_text)
 
     def _on_finished(self, path: Path, lyrics: Lyrics) -> None:
         self.status_changed.emit(path, AlignmentStatus.READY)

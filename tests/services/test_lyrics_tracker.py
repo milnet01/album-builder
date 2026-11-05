@@ -9,13 +9,21 @@ from album_builder.services.lyrics_tracker import LyricsTracker
 
 
 class FakePlayer(QObject):
-    """Stand-in for `Player` — only the `position_changed` signal is used by
-    the tracker. Unit tests don't need QtMultimedia, so this avoids the
+    """Stand-in for `Player` — the tracker uses `position_changed` and
+    `position()`. Unit tests don't need QtMultimedia, so this avoids the
     integration-tier audio harness."""
 
     position_changed = pyqtSignal(float)
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._position = 0.0
+
+    def position(self) -> float:
+        return self._position
+
     def emit_position(self, t: float) -> None:
+        self._position = t
         self.position_changed.emit(t)
 
 
@@ -218,8 +226,19 @@ def test_tracker_set_lyrics_resets_last_position(qtbot):
     # _last_position=15.0 would pick a wrong line if not reset.
     emitted: list[int] = []
     tracker.current_line_changed.connect(emitted.append)
+    player._position = 0.0  # the switch loads the new track at 0:00, no tick yet
     tracker.set_lyrics(_lyrics(8.0, 20.0))
-    # After reset, last_position=0.0 -> active index is -1 (before line 0).
+    # The tracker reads the player (0.0), not the stale 15.0 -> index -1.
     assert tracker.current_index() == -1
     # Emit reflects the change from index 2 -> -1.
     assert emitted == [-1]
+
+
+# Spec: TC-07-11 - lyrics that arrive mid-song (an alignment finishing while
+# the song plays) start at the player's position, not at 0:00 (LY-A4).
+def test_set_lyrics_starts_at_player_position(qtbot):
+    player = FakePlayer()
+    tracker = LyricsTracker(player)
+    player.emit_position(7.0)
+    tracker.set_lyrics(_lyrics(0.0, 5.0, 10.0))
+    assert tracker.current_index() == 1

@@ -1450,6 +1450,9 @@ class MainWindow(QMainWindow):
             # The freshness check passed but the parse just failed — read_lrc
             # already moved the file to .bak; fall through to NOT_YET_ALIGNED.
             status = AlignmentStatus.NOT_YET_ALIGNED
+        # A song already aligning or waiting its turn shows that, not the
+        # on-disk "not yet aligned" (TC-07-20).
+        status = self._alignment.live_status(track.path) or status
         self._set_lyrics_status_all(status)
         if status == AlignmentStatus.NOT_YET_ALIGNED:
             # L8-M5: auto_align_on_play is gated on the

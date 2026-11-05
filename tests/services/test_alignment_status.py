@@ -66,18 +66,24 @@ def test_compute_status_ready_when_lrc_fresh(tmp_path):
     assert compute_status(track) == AlignmentStatus.READY
 
 
-# Spec: TC-07-06
-@pytest.mark.parametrize("status,expected_substring", [
-    (AlignmentStatus.NO_LYRICS_TEXT, "no lyrics text"),
-    (AlignmentStatus.NOT_YET_ALIGNED, "not yet aligned"),
-    (AlignmentStatus.READY, "ready"),
-    (AlignmentStatus.FAILED, "failed"),
-    (AlignmentStatus.AUDIO_TOO_SHORT, "too short"),
-])
-def test_status_label_each_state(status, expected_substring):
+_EXPECTED_LABEL = {
+    AlignmentStatus.NO_LYRICS_TEXT: "no lyrics text",
+    AlignmentStatus.NOT_YET_ALIGNED: "not yet aligned",
+    AlignmentStatus.QUEUED: "waiting",
+    AlignmentStatus.ALIGNING: "aligning",
+    AlignmentStatus.READY: "ready",
+    AlignmentStatus.FAILED: "failed",
+    AlignmentStatus.AUDIO_TOO_SHORT: "too short",
+}
+
+
+# Spec: TC-07-06 - built from the enum itself, so a new state without an
+# expected label fails here (LY-A10).
+@pytest.mark.parametrize("status", list(AlignmentStatus))
+def test_status_label_each_state(status):
     label = status_label(status)
     assert label.startswith("LRC: ")
-    assert expected_substring in label.lower()
+    assert _EXPECTED_LABEL[status] in label.lower()
 
 
 # Spec: TC-07-06

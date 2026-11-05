@@ -37,11 +37,11 @@ class LyricsTracker(QObject):
         only if the index changed (controller may set the same Lyrics twice
         on a no-op rescan).
 
-        Resets `_last_position` so a track switch doesn't carry the prior
-        track's clock into the new lyrics — otherwise the new track briefly
-        marks a wrong line until the player ticks (L4-M4)."""
+        Reads the player's position now rather than reusing the last tick,
+        so a track switch doesn't carry the prior track's clock (L4-M4) and
+        lyrics arriving mid-song don't start at 0:00 (LY-A4)."""
         self._lyrics = lyrics
-        self._last_position = 0.0
+        self._last_position = self._player.position()
         new_index = self._compute_index(self._last_position)
         if new_index != self._index:
             self._index = new_index

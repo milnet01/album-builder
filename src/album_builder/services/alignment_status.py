@@ -1,7 +1,7 @@
 """Alignment status enum + helpers — Spec 07 §status pill.
 
-`compute_status` covers the on-disk-derived states; the live ALIGNING /
-FAILED / AUDIO_TOO_SHORT states are owned by `AlignmentService`.
+`compute_status` covers the on-disk-derived states; the live QUEUED /
+ALIGNING / FAILED / AUDIO_TOO_SHORT states are owned by `AlignmentService`.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from album_builder.persistence.lrc_io import is_lrc_fresh
 class AlignmentStatus(Enum):
     NO_LYRICS_TEXT = auto()
     NOT_YET_ALIGNED = auto()
+    QUEUED = auto()  # waiting for the running alignment to end (TC-07-20)
     ALIGNING = auto()
     READY = auto()
     FAILED = auto()
@@ -30,7 +31,7 @@ class AlignmentStatus(Enum):
 def compute_status(track: Track) -> AlignmentStatus:
     """Derive the alignment status from on-disk + tag state.
 
-    `ALIGNING`, `FAILED`, and `AUDIO_TOO_SHORT` are runtime states owned by
+    `QUEUED`, `ALIGNING`, `FAILED`, and `AUDIO_TOO_SHORT` are runtime states owned by
     `AlignmentService`; this function never returns them. The service
     transitions through them and re-syncs to the on-disk-derived value
     (READY or NOT_YET_ALIGNED) on completion.
@@ -49,6 +50,8 @@ def status_label(status: AlignmentStatus, percent: int | None = None) -> str:
             return tr("LRC: no lyrics text")
         case AlignmentStatus.NOT_YET_ALIGNED:
             return tr("LRC: not yet aligned")
+        case AlignmentStatus.QUEUED:
+            return tr("LRC: waiting...")
         case AlignmentStatus.ALIGNING:
             if percent is None:
                 return tr("LRC: aligning...")
@@ -59,3 +62,6 @@ def status_label(status: AlignmentStatus, percent: int | None = None) -> str:
             return tr("LRC: alignment failed")
         case AlignmentStatus.AUDIO_TOO_SHORT:
             return tr("LRC: audio too short to align")
+        case _:
+            # A state added without a label still shows something (LY-A10).
+            return f"LRC: {status.name.lower().replace('_', ' ')}"

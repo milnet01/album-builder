@@ -9,7 +9,7 @@ worker regenerates.
 from __future__ import annotations
 
 import logging
-import shutil
+import os
 from pathlib import Path
 
 from album_builder.domain.lyrics import LRCParseError, Lyrics, format_lrc, parse_lrc
@@ -60,7 +60,7 @@ def read_lrc(audio_path: Path) -> Lyrics | None:
     except LRCParseError as exc:
         bak = lrc.with_suffix(".lrc.bak")
         try:
-            shutil.move(str(lrc), str(bak))
+            os.replace(lrc, bak)  # one atomic rename, overwriting any old .bak
             logger.info("Backed up malformed LRC: %s -> %s (%s)", lrc, bak, exc)
         except OSError as move_exc:
             logger.warning("Could not back up malformed LRC %s: %s", lrc, move_exc)

@@ -100,6 +100,25 @@ def test_read_lrc_overwrites_existing_bak(tmp_path):
     assert bak.read_text(encoding="utf-8") == "garbage\n"
 
 
+# Spec: TC-07-10 - the backup is one atomic rename (LY-A8). shutil.move
+# falls back to copy-then-delete where a rename over an existing file
+# fails (Windows), which a crash can leave half done.
+def test_read_lrc_backup_is_one_atomic_rename(tmp_path, monkeypatch):
+    import album_builder.persistence.lrc_io as lrc_io
+
+    audio = tmp_path / "song.mpeg"
+    audio.write_bytes(b"a")
+    (tmp_path / "song.lrc.bak").write_text("old backup", encoding="utf-8")
+    (tmp_path / "song.lrc").write_text("garbage\n", encoding="utf-8")
+    calls: list[tuple] = []
+    real_replace = os.replace
+    monkeypatch.setattr(
+        lrc_io.os, "replace", lambda a, b: (calls.append((a, b)), real_replace(a, b)),
+    )
+    read_lrc(audio)
+    assert [(Path(a).name, Path(b).name) for a, b in calls] == [("song.lrc", "song.lrc.bak")]
+
+
 def test_write_lrc_atomic_round_trip(tmp_path):
     audio = tmp_path / "song.mpeg"
     audio.write_bytes(b"a")

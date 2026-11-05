@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 import pytest
@@ -30,10 +31,15 @@ class FakeWorker(QThread):
         self.track_path = track_path
         self.lyrics_text = lyrics_text
         self.model_size = model_size
-        self.behavior = "succeed"  # or "fail" / "interrupt"
+        self.behavior = "succeed"  # or "fail" / "interrupt" / "block"
+        # "block": wait for release, then succeed even if cancelled meanwhile
+        # (a result that arrives late, after the user cancelled).
+        self.release = threading.Event()
 
     def run(self) -> None:
-        if self.isInterruptionRequested() or self.behavior == "interrupt":
+        if self.behavior == "block":
+            self.release.wait(5)
+        elif self.isInterruptionRequested() or self.behavior == "interrupt":
             return
         if self.behavior == "fail":
             self.failed.emit("synthetic failure")
@@ -62,6 +68,7 @@ def _workers_finished():
     yield
     workers, _created_workers[:] = list(_created_workers), []
     for w in workers:
+        w.release.set()
         assert w.wait(5000), "FakeWorker still running at teardown"
     QCoreApplication.processEvents()
 
@@ -390,3 +397,79 @@ def test_alignment_service_exposes_model_size() -> None:
     """The model_size property is what the UI passes to whisperx_models_cached."""
     svc = AlignmentService(settings=AlignmentSettings(model_size="medium.en"))
     assert svc.model_size == "medium.en"
+
+
+def _blocking_service(created: list[FakeWorker]) -> AlignmentService:
+    def factory(p, t, m):
+        w = FakeWorker(p, t, m)
+        w.behavior = "block"
+        created.append(w)
+        return w
+
+    return AlignmentService(settings=AlignmentSettings(), worker_factory=factory)
+
+
+# Spec: TC-07-20 - one alignment at a time; a second request waits, shown
+# as QUEUED, and starts when the first ends.
+def test_second_alignment_waits_for_the_first(qtbot, tmp_path):
+    a, b = tmp_path / "a.mpeg", tmp_path / "b.mpeg"
+    for f in (a, b):
+        f.write_bytes(b"a")
+    created: list[FakeWorker] = []
+    service = _blocking_service(created)
+    statuses: list = []
+    service.status_changed.connect(lambda p, s: statuses.append((p, s)))
+    service.start_alignment(_make_track(a, lyrics="hi"))
+    service.start_alignment(_make_track(b, lyrics="hi"))
+    assert [w.track_path for w in created] == [a]
+    assert statuses == [(a, AlignmentStatus.ALIGNING), (b, AlignmentStatus.QUEUED)]
+    assert service.live_status(a) == AlignmentStatus.ALIGNING
+    assert service.live_status(b) == AlignmentStatus.QUEUED
+    service.start_alignment(_make_track(b, lyrics="hi"))  # already waiting: no-op
+    assert statuses[-1] == (b, AlignmentStatus.QUEUED) and len(statuses) == 2
+
+    created[0].release.set()
+    qtbot.waitUntil(lambda: len(created) == 2, timeout=2000)
+    assert created[1].track_path == b
+    assert (b, AlignmentStatus.ALIGNING) in statuses
+    created[1].release.set()
+    qtbot.waitUntil(lambda: (b, AlignmentStatus.READY) in statuses, timeout=2000)
+
+
+# Spec: TC-07-20 - cancelling a waiting song drops it from the queue.
+def test_cancel_waiting_alignment_drops_it(qtbot, tmp_path):
+    a, b = tmp_path / "a.mpeg", tmp_path / "b.mpeg"
+    for f in (a, b):
+        f.write_bytes(b"a")
+    created: list[FakeWorker] = []
+    service = _blocking_service(created)
+    statuses: list = []
+    service.status_changed.connect(lambda p, s: statuses.append((p, s)))
+    service.start_alignment(_make_track(a, lyrics="hi"))
+    service.start_alignment(_make_track(b, lyrics="hi"))
+    service.cancel(b)
+    assert statuses[-1] == (b, AlignmentStatus.NOT_YET_ALIGNED)
+    assert service.live_status(b) is None
+    created[0].release.set()
+    qtbot.waitUntil(lambda: (a, AlignmentStatus.READY) in statuses, timeout=2000)
+    qtbot.wait(50)
+    assert [w.track_path for w in created] == [a]
+
+
+# Spec: TC-07-08 - a result arriving after cancel is ignored (LY-A6).
+def test_late_result_after_cancel_is_ignored(qtbot, tmp_path):
+    a = tmp_path / "a.mpeg"
+    a.write_bytes(b"a")
+    created: list[FakeWorker] = []
+    service = _blocking_service(created)
+    statuses: list = []
+    ready: list = []
+    service.status_changed.connect(lambda p, s: statuses.append((p, s)))
+    service.lyrics_ready.connect(lambda p, lr: ready.append(p))
+    service.start_alignment(_make_track(a, lyrics="hi"))
+    service.cancel(a)
+    created[0].release.set()
+    assert created[0].wait(2000)
+    QCoreApplication.processEvents()
+    assert ready == []
+    assert statuses[-1] == (a, AlignmentStatus.NOT_YET_ALIGNED)

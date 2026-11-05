@@ -277,6 +277,27 @@ def test_main_window_auto_align_off_by_default_does_not_start_worker(
     )
 
 
+# Spec: TC-07-20 - switching to a song that waits its turn shows "waiting",
+# not the on-disk "not yet aligned".
+def test_main_window_shows_waiting_for_a_queued_song(
+    qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,
+) -> None:
+    from album_builder.services.alignment_status import AlignmentStatus
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    store = AlbumStore(tmp_path / "Albums")
+    watcher = LibraryWatcher(tracks_dir)
+    track = next(iter(watcher.library().tracks))
+    win = MainWindow(store, watcher, AppState(), tmp_path)
+    qtbot.addWidget(win)
+    monkeypatch.setattr(
+        win._alignment, "live_status",
+        lambda p: AlignmentStatus.QUEUED if p == track.path else None,
+    )
+    win._on_preview_play(track.path)
+    assert "waiting" in win.now_playing_pane.lyrics_panel.status_label.text().lower()
+
+
 # Spec: TC-07-13 — opt-in auto_align_on_play → worker IS started on play.
 def test_main_window_auto_align_on_starts_worker(
     qtbot, tmp_path: Path, tracks_dir: Path, monkeypatch,

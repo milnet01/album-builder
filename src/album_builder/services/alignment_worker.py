@@ -1,4 +1,4 @@
-"""Forced-alignment worker — Spec 07 §Alignment job.
+"""Alignment worker — Spec 07 §Alignment job.
 
 Lazily imports WhisperX inside `run()` so the rest of the app starts
 without a ~3 GB PyTorch dependency in the venv. WhisperX is an optional
@@ -12,12 +12,14 @@ behind, so re-running is idempotent (Spec 07 TC-07-08).
 
 from __future__ import annotations
 
+import gc
 import logging
 import sys
 from pathlib import Path
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
+from album_builder.domain.lyric_timing import NothingHeard, heard_words, line_start_times
 from album_builder.domain.lyrics import LyricLine, Lyrics
 from album_builder.i18n import tr
 from album_builder.persistence.lrc_io import write_lrc
@@ -26,9 +28,9 @@ logger = logging.getLogger(__name__)
 
 
 class AlignmentWorker(QThread):
-    """QThread that produces a `Lyrics` from `(audio, lyrics_text)` via
-    WhisperX forced alignment, writes the sibling LRC, and emits one of
-    `finished_ok` / `failed` exactly once."""
+    """QThread that produces a `Lyrics` from `(audio, lyrics_text)` by
+    matching the lyric words to the words WhisperX hears, writes the
+    sibling LRC, and emits one of `finished_ok` / `failed` exactly once."""
 
     progress = pyqtSignal(int)         # 0..100
     finished_ok = pyqtSignal(object)   # Type: Lyrics
@@ -53,6 +55,12 @@ class AlignmentWorker(QThread):
     def run(self) -> None:
         try:
             lyrics = self._do_alignment()
+        except NothingHeard:
+            logger.info("AlignmentWorker: no words heard in %s", self._track_path)
+            self.failed.emit(tr(
+                "No singing was heard in this song, so the lyrics could not be timed."
+            ))
+            return
         except _AlignmentInterrupted:
             # Cancellation path — clean exit, no `.lrc`, no failed signal
             # (the controller treats cancellation as "back to NOT_YET_ALIGNED").
@@ -79,6 +87,8 @@ class AlignmentWorker(QThread):
             logger.exception("AlignmentWorker failed for %s", self._track_path)
             self.failed.emit(str(exc))
             return
+        if self.isInterruptionRequested():
+            return  # cancelled during the last step: write nothing (LY-A6)
         try:
             write_lrc(self._track_path, lyrics)
         except OSError as exc:
@@ -105,35 +115,44 @@ class AlignmentWorker(QThread):
         finally:
             self._check_interrupted()
 
-        # Stage 1: free transcription via faster-whisper to get segment timing
-        self.progress.emit(5)
-        device = "cpu"  # Spec 07: CUDA optional; CPU is the default budget
-        compute_type = "int8"
-        model = whisperx.load_model(self._model_size, device, compute_type=compute_type)
-        self._check_interrupted()
+        aligned = self._transcribe_and_align(whisperx)
+        return _timed_lyrics(self._lyrics_text, aligned, self._track_path)
 
-        audio = whisperx.load_audio(str(self._track_path))
-        self.progress.emit(20)
+    def _transcribe_and_align(self, whisperx) -> dict:
+        """Hear the song and time each word heard. Both models are dropped
+        and collected before returning, success or not, so a song's ~1 GB
+        is not held while the next one waits (owner decision 2026-11-05)."""
+        model = align_model = audio = None
+        try:
+            # Stage 1: transcription via faster-whisper
+            self.progress.emit(5)
+            device = "cpu"  # Spec 07: CUDA optional; CPU is the default budget
+            model = whisperx.load_model(self._model_size, device, compute_type="int8")
+            self._check_interrupted()
 
-        result = model.transcribe(audio, batch_size=8)
-        self._check_interrupted()
-        self.progress.emit(50)
+            audio = whisperx.load_audio(str(self._track_path))
+            self.progress.emit(20)
 
-        # Stage 2: wav2vec2 forced alignment of the known plain text against
-        # the segment-level timing
-        align_model, metadata = whisperx.load_align_model(
-            language_code=result.get("language", "en"), device=device
-        )
-        self._check_interrupted()
-        self.progress.emit(70)
+            result = model.transcribe(audio, batch_size=8)
+            self._check_interrupted()
+            self.progress.emit(50)
 
-        aligned = whisperx.align(
-            result["segments"], align_model, metadata, audio, device,
-            return_char_alignments=False,
-        )
-        self.progress.emit(90)
+            # Stage 2: wav2vec2 times each heard word
+            align_model, metadata = whisperx.load_align_model(
+                language_code=result.get("language", "en"), device=device
+            )
+            self._check_interrupted()
+            self.progress.emit(70)
 
-        return _segments_to_lyrics(self._lyrics_text, aligned, self._track_path)
+            aligned = whisperx.align(
+                result["segments"], align_model, metadata, audio, device,
+                return_char_alignments=False,
+            )
+            self.progress.emit(90)
+            return aligned
+        finally:
+            model = align_model = audio = None
+            gc.collect()
 
     def _check_interrupted(self) -> None:
         if self.isInterruptionRequested():
@@ -148,41 +167,18 @@ def _load_whisperx():
     return whisperx
 
 
-def _segments_to_lyrics(lyrics_text: str, aligned_result: dict, track_path: Path) -> Lyrics:
-    """Map WhisperX alignment output back to the user's plain lyrics text.
-
-    `aligned_result["segments"]` is an ordered list of segments with
-    `start`/`end` keys. We split the user's lyrics on newlines, drop empty
-    lines, and pair each non-empty line with the start time of the
-    matching segment by index. If WhisperX returned fewer segments than
-    lyric lines (alignment "ran out of audio"), trailing lines get the
-    last segment's end time.
-    """
-    segments = aligned_result.get("segments") or []
+def _timed_lyrics(lyrics_text: str, aligned_result: dict, track_path: Path) -> Lyrics:
+    """The user's non-blank lyric lines, each timed by matching its words
+    to the words heard (Spec 07 TC-07-18). Raises NothingHeard."""
     raw_lines = [ln.rstrip() for ln in lyrics_text.splitlines() if ln.strip()]
     if not raw_lines:
         return Lyrics(track_path=track_path)
-    # L4-M2: malformed alignment payloads may omit `end` on the last
-    # segment; `.get` keeps the fallback robust instead of KeyError'ing
-    # at the end of an otherwise-successful alignment.
-    fallback_end = float(segments[-1].get("end", 0.0)) if segments else 0.0
-    # L4-M1: silent mis-pairing on count mismatch is a debugging trap;
-    # log a single INFO line so the user can correlate "fewer LRC lines
-    # than I expected" with the actual segment count.
-    if len(segments) != len(raw_lines):
-        logger.info(
-            "alignment count mismatch: %d segment(s) vs %d lyric line(s) for %s; "
-            "trailing lines pinned to last-segment end (%.3fs)",
-            len(segments), len(raw_lines), track_path, fallback_end,
-        )
-    lines: list[LyricLine] = []
-    for i, text in enumerate(raw_lines):
-        if i < len(segments):
-            start = float(segments[i].get("start", 0.0))
-        else:
-            start = fallback_end
-        lines.append(LyricLine(time_seconds=start, text=text))
-    return Lyrics(lines=tuple(lines), track_path=track_path)
+    heard, end_time = heard_words(aligned_result)
+    starts = line_start_times(raw_lines, heard, end_time=end_time)
+    lines = tuple(
+        LyricLine(time_seconds=t, text=text) for t, text in zip(starts, raw_lines, strict=True)
+    )
+    return Lyrics(lines=lines, track_path=track_path)
 
 
 class _AlignmentInterrupted(Exception):

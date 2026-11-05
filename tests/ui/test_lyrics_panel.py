@@ -55,6 +55,7 @@ def test_status_label_each_state(qtbot, status, percent, expected_substring):
     [
         (AlignmentStatus.NO_LYRICS_TEXT, False),
         (AlignmentStatus.NOT_YET_ALIGNED, True),
+        (AlignmentStatus.QUEUED, False),
         (AlignmentStatus.ALIGNING, False),
         (AlignmentStatus.READY, False),
         (AlignmentStatus.FAILED, True),
