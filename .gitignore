@@ -35,3 +35,6 @@ dist/
 
 # Spec 27: packaging/obs/rpm-smoke.sh scratch (deleted when it exits)
 .rpm-smoke.*/
+
+# Outside reviewers' feedback files, kept locally for reference
+DeepSeek Feedback *.txt
