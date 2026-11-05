@@ -296,9 +296,15 @@ def _accept_raise(server: QLocalServer, window: QMainWindow) -> None:
     if sock is None:
         return
 
+    # The message can arrive in more than one read; judge it once the newline
+    # lands, or once the peer has sent more than a raise message could be.
+    buffer = bytearray()
+
     def on_ready_read() -> None:
-        message = sock.readAll().data().strip()
-        if message == RAISE_MESSAGE.strip():
+        buffer.extend(sock.readAll().data())
+        if b"\n" not in buffer and len(buffer) < len(RAISE_MESSAGE):
+            return
+        if buffer.strip() == RAISE_MESSAGE.strip():
             bring_to_front(window)
         sock.disconnectFromServer()
 
@@ -322,7 +328,7 @@ def _resolve_project_root() -> Path:
     configured = settings.read_albums_folder()
     if configured is not None:
         return configured.parent
-    if _running_from_source_tree() or os.environ.get(DEV_MODE_ENV) == "1":
+    if _in_dev_mode():
         return Path(__file__).resolve().parent.parent.parent
     print(
         "album-builder: no albums_folder configured in settings.json; using "
@@ -342,6 +348,12 @@ def _running_from_source_tree() -> bool:
     return candidate.exists()
 
 
+def _in_dev_mode() -> bool:
+    """Running from the dev tree: ``ALBUM_BUILDER_DEV_MODE=1`` or a source
+    checkout. One test, so the Albums/ and Tracks/ fallbacks always agree."""
+    return os.environ.get(DEV_MODE_ENV) == "1" or _running_from_source_tree()
+
+
 def _resolve_tracks_dir() -> Path:
     """Pick the tracks folder the library should scan.
 
@@ -353,14 +365,15 @@ def _resolve_tracks_dir() -> Path:
        installed user can never see the dev path. Trigger: either
        ``ALBUM_BUILDER_DEV_MODE`` is set or a ``pyproject.toml`` sits next
        to the running script.
-    3. ``./Tracks`` relative to the CWD — last-resort dev fallback.
+    3. ``./Tracks`` relative to the CWD — last-resort fallback, dev mode
+       only, so an installed user launched from any folder never scans it.
     4. ``~/Music`` — installed-user default; `Library.scan` returns an empty
        library if it doesn't exist, which is the right UX for a fresh install.
     """
     configured = settings.read_tracks_folder()
     if configured is not None:
         return configured
-    dev_mode = os.environ.get(DEV_MODE_ENV) == "1" or _running_from_source_tree()
+    dev_mode = _in_dev_mode()
     if dev_mode and _DEV_TREE_TRACKS_DIR.exists():
         print(
             f"album-builder: no settings.json found; using dev-tree path "
@@ -370,6 +383,6 @@ def _resolve_tracks_dir() -> Path:
         )
         return _DEV_TREE_TRACKS_DIR
     cwd_tracks = Path.cwd() / "Tracks"
-    if cwd_tracks.exists():
+    if dev_mode and cwd_tracks.exists():
         return cwd_tracks
     return USER_MUSIC_DIR

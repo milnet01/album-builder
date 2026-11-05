@@ -25,6 +25,14 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Fixed
 
+- **Opening Album Builder a second time brings the open window forward more reliably.**
+  If the "bring the window forward" request arrived in pieces, the app could ignore it.
+  It now waits for the whole request.
+
+- **The app no longer scans a stray `Tracks` folder by accident.**
+  If you had not chosen a music folder and started the app from a folder that held a
+  `Tracks` folder, the app scanned it. It now uses your `Music` folder, or the one you choose.
+
 - **Playing a track whose file has gone missing now shows one clear message, "Track file not found", with where the file should be. Before, you got two pop-ups and the first didn't say which file.** (MUSI-0397)
 
 ## [1.0.0] - 2026-11-04

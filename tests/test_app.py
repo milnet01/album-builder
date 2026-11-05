@@ -65,6 +65,34 @@ def test_resolve_tracks_dir_falls_back_to_user_music_for_installed(
     assert app._resolve_tracks_dir() == app.USER_MUSIC_DIR
 
 
+# Spec: L8-info
+def test_resolve_tracks_dir_ignores_cwd_tracks_for_installed(
+    xdg_config: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """An installed user launched from a folder that happens to hold a
+    `Tracks/` gets ~/Music, not that folder: `./Tracks` is a dev fallback."""
+    (tmp_path / "Tracks").mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ALBUM_BUILDER_DEV_MODE", raising=False)
+    monkeypatch.setattr(app, "_running_from_source_tree", lambda: False)
+    assert app._resolve_tracks_dir() == app.USER_MUSIC_DIR
+
+
+# Spec: L8-info
+def test_resolve_tracks_dir_uses_cwd_tracks_in_dev_mode(
+    xdg_config: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "Tracks").mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ALBUM_BUILDER_DEV_MODE", "1")
+    monkeypatch.setattr(app, "_DEV_TREE_TRACKS_DIR", tmp_path / "no_such_dir")
+    assert app._resolve_tracks_dir() == tmp_path / "Tracks"
+
+
 def test_resolve_tracks_dir_settings_wins_over_dev_path(
     xdg_config: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -227,6 +255,36 @@ def test_raise_server_brings_window_to_front(qtbot, isolated_key: str) -> None:
         # Poll until the server has handled the connection and shown the window.
         qtbot.waitUntil(window.isVisible, timeout=2000)
         assert window.isVisible()
+        client.disconnectFromServer()
+    finally:
+        server.close()
+        lock.detach()
+
+
+# Spec: TC-12-06
+def test_raise_server_handles_message_split_across_reads(
+    qtbot, isolated_key: str
+) -> None:
+    """`raise\\n` arriving in two pieces still raises the window: the server
+    waits for the newline instead of judging the first piece alone."""
+    window = QMainWindow()
+    qtbot.addWidget(window)
+    window.hide()
+    lock = app.acquire_single_instance_lock()
+    assert lock is not None
+    server = app.start_raise_server(window, lock=lock)
+    try:
+        client = QLocalSocket()
+        client.connectToServer(isolated_key)
+        assert client.waitForConnected(1000)
+        client.write(app.RAISE_MESSAGE[:3])
+        client.flush()
+        client.waitForBytesWritten(1000)
+        qtbot.wait(200)  # let the server read the first piece on its own
+        client.write(app.RAISE_MESSAGE[3:])
+        client.flush()
+        client.waitForBytesWritten(1000)
+        qtbot.waitUntil(window.isVisible, timeout=2000)
         client.disconnectFromServer()
     finally:
         server.close()
