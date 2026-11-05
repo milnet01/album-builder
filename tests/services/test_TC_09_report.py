@@ -562,3 +562,35 @@ def test_TC_09_32_print_is_light_screen_is_dark(tmp_path):
     assert printed >= 230, f"printed page median brightness {printed}"
     assert printed_margin >= 230, f"printed page margin brightness {printed_margin}"
     assert screen <= 40, f"screen page median brightness {screen}"
+
+
+def test_TC_09_28_artist_view_skips_cover_and_lyrics_work(tmp_path, monkeypatch):
+    # Spec: TC-09-28 — the artist view never shows covers or lyrics, so it
+    # does not decode covers or trim lyrics (MUSI-0399, review AP2.6).
+    paths = _seed_paths(tmp_path, 2)
+    library = _FakeLibrary({
+        p: _make_track(p, lyrics_text="la", cover_data=b"\xff\xd8x") for p in paths
+    })
+    album = _make_album(paths)
+    calls = []
+    monkeypatch.setattr(report_module, "_normalise_cover", lambda b: calls.append(b))
+    monkeypatch.setattr(
+        report_module, "_truncate_lyrics", lambda t: calls.append(t) or (t, False),
+    )
+    render_html(album, library, artist_view=True)
+    assert calls == []
+    render_html(album, library)
+    assert calls  # the full report still does the work
+
+
+def test_TC_09_report_skips_missing_tracks(tmp_path):
+    # Spec: TC-09-28 — a track marked missing is left out of the report, as
+    # the M3U and freshness check leave it out (review AP1.2).
+    paths = _seed_paths(tmp_path, 2)
+    library = _FakeLibrary({
+        paths[0]: _make_track(paths[0], title="Here"),
+        paths[1]: _make_track(paths[1], title="Gone", is_missing=True),
+    })
+    html = render_html(_make_album(paths), library)
+    assert "Here" in html
+    assert "Gone" not in html

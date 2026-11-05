@@ -87,3 +87,44 @@ def test_restore_refuses_album_already_present(store: AlbumStore, tmp_path: Path
 
     assert copy.exists()
     assert len(store.list()) == 1
+
+
+# Spec: TC-02-22 - a trash folder whose name ends in an impossible date
+# (month 99) is listed with no date instead of crashing the Restore dialog.
+def test_trashed_tolerates_impossible_date_stamp(store: AlbumStore, tmp_path: Path) -> None:
+    import shutil
+
+    a = store.create(name="Odd", target_count=3)
+    trash = tmp_path / TRASH_DIRNAME
+    trash.mkdir()
+    shutil.copytree(store.folder_for(a.id), trash / "odd-20269901-000000")
+
+    entries = store.trashed()
+
+    assert [e.name for e in entries] == ["Odd"]
+    assert entries[0].deleted_at is None
+
+
+# Spec: TC-02-22 - the "already present" check compares parsed ids, so an
+# upper-case id in a hand-edited album.json is still the same album.
+def test_restore_refuses_same_album_with_uppercase_id(
+    store: AlbumStore, tmp_path: Path,
+) -> None:
+    import json
+    import shutil
+
+    a = store.create(name="Twin", target_count=3)
+    store.flush()
+    trash = tmp_path / TRASH_DIRNAME
+    trash.mkdir()
+    copy = trash / "twin-20260101-000000-000000"
+    shutil.copytree(store.folder_for(a.id), copy)
+    data = json.loads((copy / "album.json").read_text())
+    data["id"] = data["id"].upper()
+    (copy / "album.json").write_text(json.dumps(data))
+
+    with pytest.raises(ValueError):
+        store.restore(copy)
+
+    assert copy.exists()
+    assert len(store.list()) == 1

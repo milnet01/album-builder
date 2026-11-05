@@ -617,13 +617,25 @@ class MainWindow(QMainWindow):
         self._refresh_undo_remove()
 
     def _on_rename(self, album_id: UUID, new_name: str) -> None:
-        self._store.rename(album_id, new_name)
-        self.top_bar.set_current(album_id)
+        try:
+            self._store.rename(album_id, new_name)
+        # Neither error may escape this slot: PyQt aborts the app on an
+        # uncaught exception.
+        except ValueError:
+            QMessageBox.warning(self, tr("Cannot rename album"), tr(
+                "An album name must be 1 to 80 characters on one line, and "
+                "must not end in a date such as \" - 2026-11-05\"."
+            ))
+        except OSError as exc:
+            QMessageBox.warning(self, tr("Cannot rename album"), tr(
+                "Couldn't rename the album folder: {error}", error=exc
+            ))
+        self.top_bar.set_current(album_id)  # shows the name now in force
 
     def _on_target(self, album_id: UUID, n: int) -> None:
         album = self._store.get(album_id)
-        if album is None:
-            return
+        if album is None or n == album.target_count:
+            return  # unchanged on focus-out: nothing to save or export
         try:
             album.set_target(n)
         except ValueError as exc:

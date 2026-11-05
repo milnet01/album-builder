@@ -114,7 +114,8 @@ def _normalise_cover(image_bytes: bytes | None) -> bytes | None:
                 # bytes that Image.open accepts lazily) before returning raw.
                 im.verify()
                 return image_bytes
-            # Re-open after verify - PIL closes the image on verify().
+            # Resize path: decode afresh from the bytes (verify() above is
+            # only reached on the no-resize path, and leaves `im` unusable).
             with Image.open(io.BytesIO(image_bytes)) as im2:
                 im2 = im2.convert("RGB")
                 im2.thumbnail((COVER_DIM_MAX, COVER_DIM_MAX))
@@ -163,12 +164,20 @@ def _resolve_columns(tracks: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _build_track_context(track_path: Path, track: Any, position: int) -> dict[str, Any]:
+def _build_track_context(
+    track_path: Path, track: Any, position: int, *, with_media: bool = True,
+) -> dict[str, Any]:
+    """`with_media=False` skips the cover decode and lyrics work, which the
+    artist view never shows (its template drops covers and track cards)."""
     duration_seconds = round(float(getattr(track, "duration_seconds", 0) or 0))
     # Track domain type publishes `lyrics_text`; older fixtures may use `lyrics`.
     raw_lyrics = getattr(track, "lyrics_text", None) or getattr(track, "lyrics", None)
-    lyrics_text, lyrics_truncated = _truncate_lyrics(raw_lyrics)
-    cover_bytes = _normalise_cover(getattr(track, "cover_data", None))
+    lyrics_text, lyrics_truncated = (
+        _truncate_lyrics(raw_lyrics) if with_media else (None, False)
+    )
+    cover_bytes = (
+        _normalise_cover(getattr(track, "cover_data", None)) if with_media else None
+    )
     cover_mime = getattr(track, "cover_mime", "image/jpeg") or "image/jpeg"
     if cover_bytes and not cover_mime.startswith("image/"):
         cover_mime = "image/jpeg"
@@ -186,22 +195,24 @@ def _build_track_context(track_path: Path, track: Any, position: int) -> dict[st
     }
 
 
-def _build_album_context(album: Any, library: Any) -> dict[str, Any]:
+def _build_album_context(album: Any, library: Any, *, with_media: bool = True) -> dict[str, Any]:
     tracks_ctx: list[dict[str, Any]] = []
     total_seconds = 0
     for i, track_path_str in enumerate(album.track_paths, start=1):
         track_path = Path(track_path_str)
         track = library.find(track_path)
-        if track is None:
+        # Skip unknown and missing tracks alike, as _render_m3u and
+        # is_export_fresh do (approve refuses missing files before this).
+        if track is None or getattr(track, "is_missing", False):
             continue
-        ctx = _build_track_context(track_path, track, i)
+        ctx = _build_track_context(track_path, track, i, with_media=with_media)
         tracks_ctx.append(ctx)
         total_seconds += ctx["duration_seconds"]
     columns = _resolve_columns(tracks_ctx)
 
     cover_uri: str | None = None
     cover_override = getattr(album, "cover_override", None)
-    if cover_override:
+    if cover_override and with_media:
         try:
             data = Path(cover_override).read_bytes()
             cover_uri = _b64_data_uri(_normalise_cover(data))
@@ -249,7 +260,7 @@ def render_html(
     env = _jinja_env()
     template = env.get_template(TEMPLATE_NAME)
     today = today or date.today()
-    ctx = _build_album_context(album, library)
+    ctx = _build_album_context(album, library, with_media=not artist_view)
     ctx.update({
         "version": version_string(),
         "approved_date": today.isoformat(),

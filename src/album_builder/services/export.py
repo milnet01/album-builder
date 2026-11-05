@@ -452,17 +452,13 @@ def regenerate_album_exports(
 
     Permissions / disk-full / FS-error before staging.mkdir is converted to
     `ExportFailed`; callers can show a user-friendly error toast instead of
-    a stack trace. The cross-filesystem rename guard is a runtime check
-    rather than `assert` (assertions are stripped under `python -O`).
+    a stack trace. The staging dir lives inside `folder`, so its renames
+    never cross a filesystem.
     """
     if not folder.exists():
         # Spec 08 §Errors: don't silently mkdir; we may be racing a delete.
         raise FileNotFoundError(f"album folder missing: {folder}")
     staging = folder / STAGING_DIRNAME
-    if staging.parent != folder:
-        raise RuntimeError(
-            f"staging dir must be sibling of folder; got {staging} parent={staging.parent}"
-        )
     if library_refresh and hasattr(library, "refresh"):
         library.refresh()
 

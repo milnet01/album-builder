@@ -599,3 +599,28 @@ def test_on_approve_catches_unexpected_exception(main_window, monkeypatch) -> No
 
     # finally: block re-enabled the approve button.
     assert main_window.top_bar.btn_approve.isEnabled()
+
+
+# Spec: TC-02-06 - an invalid name typed in the name box shows a warning and
+# reverts the box; the error must not escape the Qt slot (MUSI-0399).
+def test_rename_invalid_name_warns_and_reverts(main_window, monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        "album_builder.ui.main_window.QMessageBox.warning",
+        lambda *a, **k: calls.append(a[1]) or 0,
+    )
+    a = main_window._store.create(name="Keep", target_count=3)
+    main_window.top_bar.switcher.set_current(a.id)
+    main_window._on_rename(a.id, "Demo - 2026-11-05")
+    assert len(calls) == 1
+    assert a.name == "Keep"
+    assert main_window.top_bar.name_edit.text() == "Keep"
+
+
+# Spec: TC-04-12 - committing the unchanged target schedules no save.
+def test_unchanged_target_schedules_nothing(main_window, monkeypatch) -> None:
+    a = main_window._store.create(name="T", target_count=5)
+    saves = []
+    monkeypatch.setattr(main_window._store, "schedule_save", saves.append)
+    main_window._on_target(a.id, 5)
+    assert saves == []

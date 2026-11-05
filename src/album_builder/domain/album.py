@@ -7,6 +7,7 @@ in album_io.py (load/save) and AlbumStore (debounced disk writes).
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -39,10 +40,16 @@ def _now() -> datetime:
 _DATE_SUFFIX_RE = re.compile(r".* - \d{4}-\d{2}-\d{2}$")
 
 
-def _validate_name(name: str) -> str:
+def validate_name(name: str) -> str:
+    """Return `name` trimmed, or raise ValueError if it breaks Spec 02's
+    name rules. Shared by Album and AlbumStore.rename, which must reject a
+    bad name before it renames the folder on disk."""
     n = name.strip()
     if not (1 <= len(n) <= 80):
         raise ValueError(f"name must be 1-80 chars after trim, got {len(n)}")
+    if any(unicodedata.category(c) == "Cc" for c in n):
+        # A line break would also defeat _DATE_SUFFIX_RE (`.` stops at it).
+        raise ValueError("name must not contain control characters")
     if _DATE_SUFFIX_RE.match(n):
         raise ValueError(
             "name must not end in a date suffix (' - YYYY-MM-DD'); "
@@ -107,7 +114,7 @@ class Album:
         now = _now()
         return cls(
             id=uuid4(),
-            name=_validate_name(name),
+            name=validate_name(name),
             target_count=_validate_target(target_count),
             track_paths=[],
             status=AlbumStatus.DRAFT,
@@ -117,7 +124,7 @@ class Album:
         )
 
     def rename(self, new_name: str) -> None:
-        self.name = _validate_name(new_name)
+        self.name = validate_name(new_name)
         self.updated_at = _now()
 
     def _require_draft(self, action: str) -> None:

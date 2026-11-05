@@ -25,9 +25,11 @@ def test_album_create_returns_draft_with_fresh_uuid() -> None:
 # Spec: TC-02-02 — empty/whitespace/over-length names and date-suffix names
 # (Spec 10 §Atomic pair: " - YYYY-MM-DD" suffix collides with the report
 # filename pattern, so create/rename reject it pre-sanitise).
+# A control character is rejected too: a line break let "a\nb - 2026-01-01"
+# slip past the date-suffix check (MUSI-0399).
 @pytest.mark.parametrize(
     "bad",
-    ["", "   ", "x" * 81, "My Album - 2026-01-01"],
+    ["", "   ", "x" * 81, "My Album - 2026-01-01", "a\nb - 2026-01-01", "tab\there"],
 )
 def test_album_create_rejects_bad_names(bad: str) -> None:
     with pytest.raises(ValueError):

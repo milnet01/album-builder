@@ -466,3 +466,27 @@ def test_cross_fs_trash_warning_fires_at_lazy_trash_creation(
         "different filesystem" in rec.message.lower()
         for rec in caplog.records
     ), f"expected cross-FS warning at delete time; got: {[r.message for r in caplog.records]}"
+
+
+# Spec: TC-02-06 - a name ending in " - YYYY-MM-DD" is rejected
+# BEFORE the folder is renamed. The store used to check only the length,
+# rename the folder, then fail in Album.rename, leaving the folder and
+# album.json out of step (MUSI-0399).
+def test_rename_to_date_suffix_does_not_touch_disk(store: AlbumStore) -> None:
+    a = store.create(name="OldName", target_count=3)
+    old_folder = store.folder_for(a.id)
+    with pytest.raises(ValueError, match="date suffix"):
+        store.rename(a.id, "Demo - 2026-11-05")
+    assert store.get(a.id).name == "OldName"
+    assert store.folder_for(a.id) == old_folder
+    assert old_folder.exists()
+
+
+# Spec: TC-02-06 - committing the unchanged name writes nothing: no
+# updated_at bump, no album_renamed signal (MUSI-0399, review SC-A7).
+def test_rename_to_same_name_is_a_no_op(store: AlbumStore, qtbot) -> None:
+    a = store.create(name="Same", target_count=3)
+    before = a.updated_at
+    with qtbot.assertNotEmitted(store.album_renamed):
+        store.rename(a.id, "  Same ")
+    assert a.updated_at == before

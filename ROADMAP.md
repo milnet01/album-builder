@@ -120,6 +120,18 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   (es/fr/de/pt; ar/he/af). 36 of 39 suggestions applied after checking
   each against its call site; 3 rejected (New, System default, Track).
   Commit 8a90021. Native-speaker review still owed.
+  2026-11-05, owner: no native speakers available, so use other AIs, as
+  Groundwork and demoreel did. Plan: a small script (port of
+  /mnt/Emulators/claude-scratch/demoreel-gemini/pogem.py with
+  Groundwork's per-language RULES and RTL-mark handling) writes one
+  prompt per language as "N | English | draft" with a context note per
+  line, and applies a reply only if every code, line and {placeholder}
+  checks out. Gemini (High/Pro) via Claude in Chrome; DeepSeek as a
+  second opinion. Claude judges each suggestion against its call site;
+  register and term choices go to the owner. One commit per language;
+  the item stays open, since an AI pass improves a draft but never
+  confirms it. Runs after MUSI-0398..0404, so their new strings are
+  checked too.
   **Layman:** Have a fluent speaker of each language check the app's wording.
   Kind: doc.
   Source: in-session-2026-09-28.

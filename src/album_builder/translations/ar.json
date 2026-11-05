@@ -206,5 +206,8 @@
  "{icon} Play": "{icon} تشغيل",
  "{name} (deleted {when})": "{name} (حُذف في {when})",
  "{name} (missing)": "{name} (مفقود)",
- "{name} - Album Builder report": "{name} - تقرير Album Builder"
+ "{name} - Album Builder report": "{name} - تقرير Album Builder",
+ "Cannot rename album": "تعذّرت إعادة تسمية الألبوم",
+ "An album name must be 1 to 80 characters on one line, and must not end in a date such as \" - 2026-11-05\".": "يجب أن يتكوّن اسم الألبوم من 1 إلى 80 حرفًا في سطر واحد، وألّا ينتهي بتاريخ مثل \" - 2026-11-05\".",
+ "Couldn't rename the album folder: {error}": "تعذّرت إعادة تسمية مجلد الألبوم: {error}"
 }

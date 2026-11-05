@@ -32,16 +32,16 @@ Finding ids are the feedback file's own numbering, prefixed by group.
 
 | finding | verified | disposition | was → now |
 |---|---|---|---|
-| AP-extra rename to a name ending " - YYYY-MM-DD" renames the folder, then raises in a Qt slot | yes, `AlbumStore.rename` checks length only | | |
-| AP1.1 `_trash_stamp` raises on an impossible date | yes | | |
-| AP1.2 report skips `None` but not `is_missing` tracks | yes; unreachable (approve refuses missing) — consistency | | |
-| AP1.3 dead `staging.parent != folder` check + false docstring | yes | | |
-| AP1.4 + 3.6 `restore` compares id strings | yes | | |
-| AP1.6 line break defeats the date-suffix check | yes, `.match` + `$` | | |
-| AP2.6 artist view decodes covers and lyrics it never shows | yes | | |
-| AP3.4 inline `import os as _os` | yes | | |
-| AP3.5 misleading "Re-open after verify" comment | yes | | |
-| SC-A7 unchanged name / target on focus-out still writes | yes, `top_bar.py`, `target_counter.py` | | |
+| AP-extra rename to a name ending " - YYYY-MM-DD" renames the folder, then raises in a Qt slot | yes, `AlbumStore.rename` checks length only | fixed | store validates with shared `validate_name` before touching disk; `_on_rename` shows a plain translated warning; red: folder renamed |
+| AP1.1 `_trash_stamp` raises on an impossible date | yes | fixed | returns None; red: ValueError from `trashed()` |
+| AP1.2 report skips `None` but not `is_missing` tracks | yes; unreachable (approve refuses missing) — consistency | fixed | skips `is_missing` like `_render_m3u`; red: missing title rendered |
+| AP1.3 dead `staging.parent != folder` check + false docstring | yes | fixed | block and sentence removed; no red run: dead code |
+| AP1.4 + 3.6 `restore` compares id strings | yes | fixed | `_read_trash_entry` returns a UUID; red: upper-case id duplicated the album |
+| AP1.6 line break defeats the date-suffix check | yes, `.match` + `$` | fixed | control characters rejected; red: name accepted |
+| AP2.6 artist view decodes covers and lyrics it never shows | yes | fixed | `with_media=False` for the artist view; red: cover decoded |
+| AP3.4 inline `import os as _os` | yes | fixed | module-level `import os`; no red run: nothing observable |
+| AP3.5 misleading "Re-open after verify" comment | yes | fixed | comment says why it re-decodes |
+| SC-A7 unchanged name / target on focus-out still writes | yes, `top_bar.py`, `target_counter.py` | fixed | store rename returns early on the same name; `_on_target` skips an unchanged value; red: write and save happened |
 | AP1.5 KeyError vs ValueError | taste; every caller passes a held id | dismissed | |
 | AP1.7, 4.x | already documented | dismissed | |
 | AP2.1, 2.2 | deliberate: Spec 22 / Spec 08 TC-08-10a, TC-08-15 | dismissed | |

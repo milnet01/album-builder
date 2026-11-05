@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import shutil
 from dataclasses import dataclass
@@ -13,7 +14,7 @@ from uuid import UUID
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from album_builder.domain.album import Album
+from album_builder.domain.album import Album, validate_name
 from album_builder.domain.slug import slugify, unique_slug
 from album_builder.persistence.album_io import (
     AlbumDirCorrupt,
@@ -49,7 +50,7 @@ class TrashedAlbum:
     deleted_at: datetime | None
 
 
-def _read_trash_entry(entry: Path) -> tuple[str, str] | None:
+def _read_trash_entry(entry: Path) -> tuple[UUID, str] | None:
     """Return (id, name) from a trash entry's album.json, or None if unreadable.
 
     Reads the JSON directly rather than via `load_album`: the trash folder's
@@ -65,7 +66,10 @@ def _read_trash_entry(entry: Path) -> tuple[str, str] | None:
     album_id, name = data.get("id"), data.get("name")
     if not isinstance(album_id, str) or not isinstance(name, str):
         return None
-    return album_id, name
+    try:
+        return UUID(album_id), name
+    except ValueError:
+        return None
 
 
 def _trash_stamp(entry: Path) -> datetime | None:
@@ -73,7 +77,10 @@ def _trash_stamp(entry: Path) -> datetime | None:
     if m is None:
         return None
     stamp = m.group(1) + "-" + (m.group(2) or "000000")
-    return datetime.strptime(stamp, "%Y%m%d-%H%M%S-%f").replace(tzinfo=UTC)
+    try:
+        return datetime.strptime(stamp, "%Y%m%d-%H%M%S-%f").replace(tzinfo=UTC)
+    except ValueError:
+        return None  # digits that are not a real date (e.g. month 99)
 
 
 def _symlink_count_matches(album: Album, folder: Path) -> bool:
@@ -148,13 +155,12 @@ class AlbumStore(QObject):
         first-delete inspection (lazy creation case, L5-M1)."""
         if self._trash_fs_checked:
             return
-        import os as _os
         trash = self._albums_dir / TRASH_DIRNAME
         if not trash.exists():
             return  # nothing to compare yet; recheck after first delete.
         try:
-            albums_dev = _os.stat(self._albums_dir).st_dev
-            trash_dev = _os.stat(trash).st_dev
+            albums_dev = os.stat(self._albums_dir).st_dev
+            trash_dev = os.stat(trash).st_dev
         except OSError:
             return  # can't stat - skip the check rather than crash startup
         self._trash_fs_checked = True
@@ -308,14 +314,12 @@ class AlbumStore(QObject):
         album = self._albums[album_id]
         old_folder = self._folders[album_id]
 
-        # Validate the name BEFORE any disk mutation. Mirrors the rule in
-        # Album._validate_name (1..80 chars after trim) so that an invalid
-        # name aborts here without renaming the folder. Album.rename below
-        # re-validates against the same rule and is then guaranteed to
-        # succeed — no rollback path needed. L5-H1.
-        trimmed = new_name.strip()
-        if not (1 <= len(trimmed) <= 80):
-            raise ValueError(f"name must be 1-80 chars after trim, got {len(trimmed)}")
+        # Validate the name BEFORE any disk mutation, with the same rule
+        # Album.rename applies, so an invalid name aborts here without
+        # renaming the folder and Album.rename below cannot fail. L5-H1.
+        trimmed = validate_name(new_name)
+        if trimmed == album.name:
+            return  # nothing changed: no write, no updated_at bump
 
         slug_attempt = slugify(trimmed)
         # If the slug derived from the new name is identical to the album's
@@ -424,7 +428,7 @@ class AlbumStore(QObject):
         if info is None:
             raise ValueError(f"not a restorable album: {trash_path}")
         album_id, name = info
-        if any(str(a) == album_id for a in self._albums):
+        if album_id in self._albums:
             raise ValueError(f"'{name}' is already in the album list")
         folder = self._albums_dir / unique_slug(self._albums_dir, slugify(name))
         shutil.move(str(trash_path), str(folder))
