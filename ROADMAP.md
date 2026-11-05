@@ -348,7 +348,7 @@ docs/reviews/close-findings-2026-11-05.md.
   Kind: review-fix.
   Source: deepseek-review-2026-11-05.
 
-- 📋 [MUSI-0405] **Check that a left-click on the tray icon hides the window on Windows.**
+- ✅ [MUSI-0405] **Check that a left-click on the tray icon hides the window on Windows.**
   Spec 20 hides the window on a tray left-click only when it is "visible and active" (tray.py _toggle_window, isActiveWindow()). On Windows a click in the notification area usually takes focus from the app first, so the window may never count as active and never hide. TC-20-13 mocks isActiveWindow, so the suite cannot show this. Check on the Windows test machine (ssh wintest), then on KDE. Not fixed blind: the obvious fix (ignore activity) changes Spec 20's rule.
   2026-11-05, Windows confirmed, run with nobody at the PC: the
   windows.yml build of fe2dba5 on Windows 10, with real mouse clicks
@@ -375,7 +375,13 @@ docs/reviews/close-findings-2026-11-05.md.
   3 s, then icon click: app shown in front, not hidden. This run the
   icon sat on the taskbar, so the hidden-icons ^ path was not exercised.
   Still owed: the KDE check.
-  **Layman:** Clicking the tray icon now hides the window when it was in front, and brings it forward when it was behind (works on the Windows PC; Linux desktop check still to do).
+  2026-11-05, KDE passes (owner chose a scripted run): live checkout at
+  3335061 on Plasma Wayland, real clicks from a uinput virtual mouse,
+  window state read from KWin. App in front, then icon click: hidden
+  (twice). Click while hidden: shown and active (twice). KCalc in front
+  for 5 s, then icon click: app shown and active, not hidden. Both
+  platforms pass; item closed.
+  **Layman:** Clicking the tray icon now hides the window when it was in front, and brings it forward when it was behind (checked on Windows and on the KDE desktop).
   Kind: investigate.
   Source: deepseek-review-2026-11-05 (PL38).
 
