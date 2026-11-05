@@ -83,6 +83,11 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   wintest), un-maximising back to the saved size. Specs 00, 06, 10, 15
   and 21 amended in the same commit (Spec 21 was missing from Spec 26
   §11's list).
+  Progress (2026-11-05), MP-1 INV-15: checked on KDE (private
+  kwin_wayland --virtual session) and on Windows 10 (ssh wintest). KDE
+  found a bug: the maximised size was saved as the normal one, so
+  un-maximising after a relaunch stayed full screen. Fixed in e07ddc6.
+  Both now pass. Nothing is owed before the release that carries MP-1.
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 

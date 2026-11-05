@@ -258,7 +258,7 @@ Each test is seen failing against the code before its change. TC-26-08 is `INTEG
 | INV-12 (TC-26-12) | `tests/ui/test_TC_26_session_restore.py::test_periodic_save` |
 | INV-13 (TC-26-13) | `tests/ui/test_TC_26_session_restore.py::test_end_of_queue_saves_zero` |
 | INV-14 (TC-26-14) | `tests/ui/test_TC_26_session_restore.py::test_last_tab` |
-| INV-15 (TC-26-15) | **Partial:** `tests/ui/test_TC_26_session_restore.py::test_maximized` and `::test_maximized_by_compositor`; the offscreen platform does not maximise like a real window manager. KDE checked 2026-11-05 in a private `kwin_wayland --virtual` session driven by KWin scripts: maximise, close, relaunch maximised, un-maximise to the saved size. A check on Windows is owed |
+| INV-15 (TC-26-15) | **Partial:** `tests/ui/test_TC_26_session_restore.py::test_maximized` and `::test_maximized_by_compositor`; the offscreen platform does not maximise like a real window manager. KDE checked 2026-11-05 in a private `kwin_wayland --virtual` session driven by KWin scripts: maximise, close, relaunch maximised, un-maximise to the saved size. Windows 10 checked 2026-11-05 the same way, with `WM_SYSCOMMAND` maximise and restore on a CI build of e07ddc6 |
 | INV-16 (TC-26-16) | `tests/ui/test_TC_26_session_restore.py::test_modes_shown` |
 | Trust boundary (§5) | TC-26-02's tests, plus Spec 10's TC-10-12 / TC-10-13 tests |
 
