@@ -132,6 +132,10 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   the item stays open, since an AI pass improves a draft but never
   confirms it. Runs after MUSI-0398..0404, so their new strings are
   checked too.
+  2026-11-05, owner: wait for claude-config's shared ~/.claude
+  translation tool (free models, back-translation, escalation) rather
+  than run the remaining DeepSeek/Gemini passes by hand. Answers on
+  this project's format and checks sent to claude-config (msg 1558).
   **Layman:** Have a fluent speaker of each language check the app's wording.
   Kind: doc.
   Source: in-session-2026-09-28.
