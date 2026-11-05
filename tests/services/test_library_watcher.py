@@ -192,6 +192,11 @@ def test_parent_event_without_folder_change_is_ignored(qapp, tmp_path: Path) -> 
     shutil.rmtree(tracks)
     watcher._on_dir_changed(str(tmp_path))
     assert fired[0] == 1  # the folder vanished: rescan
+    # Run the rescan the debounce timer would have run: it records the
+    # folder as absent. Without it the next check compares against the
+    # ORIGINAL folder's inode, which ext4 reuses for the recreated folder
+    # (tmpfs does not), so the test failed on GitHub only.
+    watcher.refresh()
 
     tracks.mkdir()
     watcher._on_dir_changed(str(tmp_path))

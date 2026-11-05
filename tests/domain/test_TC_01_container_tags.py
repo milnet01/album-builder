@@ -226,10 +226,17 @@ def test_chunk_id3_title_is_read(tmp_path: Path, kind: str) -> None:
     if kind == "wav":
         path, opener = wav, WAVE
     else:
-        import subprocess
+        # A minimal AIFF built by hand (Python 3.13 removed aifc), so the
+        # test needs no ffmpeg: CI has none and must still run it.
+        # COMM: 1 channel, 800 frames, 16-bit, 8000 Hz as an 80-bit float.
+        import struct
+
+        comm = struct.pack(">hIh", 1, 800, 16) + bytes.fromhex("400BFA00000000000000")
+        ssnd = struct.pack(">II", 0, 0) + b"\x00\x00" * 800
+        body = (b"AIFF" + b"COMM" + struct.pack(">I", len(comm)) + comm
+                + b"SSND" + struct.pack(">I", len(ssnd)) + ssnd)
         path, opener = tmp_path / "s.aiff", AIFF
-        if subprocess.run(["ffmpeg", "-v", "quiet", "-i", str(wav), str(path)]).returncode:
-            pytest.skip("ffmpeg could not write AIFF")
+        path.write_bytes(b"FORM" + struct.pack(">I", len(body)) + body)
     f = opener(path)
     f.add_tags()
     f.tags.add(TIT2(encoding=3, text="Chunk Title"))
