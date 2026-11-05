@@ -88,6 +88,9 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   found a bug: the maximised size was saved as the normal one, so
   un-maximising after a relaunch stayed full screen. Fixed in e07ddc6.
   Both now pass. Nothing is owed before the release that carries MP-1.
+  Waiting-on: user (release MP-1 now as 1.1.0? Recommendation: yes. It
+  is built, CI-green and checked by hand on KDE and Windows, and a
+  release publishes to users, so it waits for you, 2026-11-05).
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 
@@ -141,6 +144,27 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   accounts, so the owner does or approves that step.
   Order: Dist-4 (Flatpak/Flathub), then Dist-5 (OBS, reusing the
   OBS project the "finbreak" session set up).
+  Waiting-on: user (Flathub app ID, permanent once published.
+  Recommendation: io.github.milnet01.AlbumBuilder, the pattern perch,
+  finbreak and rusty-psn use; Flathub accepts io.github ids without a
+  domain check. za.co.antsprojectshub.AlbumBuilder, as OneUp and Ants
+  Terminal use, needs the website to host a verification token. Dist-4
+  work proceeds with the recommended id; renaming before the first
+  publish is a search-and-replace, 2026-11-05).
+  Waiting-on: user (pursue Flathub at all? Recommendation: pause
+  Dist-4, 2026-11-05). Found while researching Dist-4: Flathub's
+  generative-AI policy (in force 2026-09-09) bars AI tools from opening
+  or writing submission PRs and replies, penalty up to a permanent ban
+  (quoted in Ants_Terminal/packaging/flatpak/FLATHUB.md). finbreak's
+  submission was declined for being AI-assisted (finbreak ROADMAP,
+  Discourse topic 12873). Album Builder's code is largely AI-written, so
+  a listing is unlikely and a try risks the owner's Flathub standing for
+  other apps. A self-hosted .flatpak bundle adds little over the
+  AppImage. Measured for whoever resumes it: KDE runtime 6.11 ships
+  Pango, Cairo, GDK-PixBuf, HarfBuzz, fontconfig and Qt's FFmpeg and
+  GStreamer media plugins; com.riverbankcomputing.PyQt.BaseApp//6.11
+  ships PyQt6 with QtMultimedia on Python 3.13. Dist-5 (OBS) is not
+  affected by this and can go ahead.
   **Layman:** List the app on Flathub and in openSUSE's package system, so people can install it from their app store.
   Kind: package.
   Source: user-decision-2026-11-04.
