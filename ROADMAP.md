@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: MUSI=397 -->
+<!-- ants-roadmap-id-high-water: MUSI=404 -->
 
 # Album Builder — Roadmap
 
@@ -251,6 +251,53 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   **Layman:** Pressing play on a track whose file is gone now shows one message, "Track file not found", with the file's location.
   Kind: fix.
   Source: found-2026-11-05-fixing-MUSI-0395.
+
+## DeepSeek review fixes (2026-11-05)
+
+Findings from seven outside reviews, each checked against the code. Ledger:
+docs/reviews/close-findings-2026-11-05.md.
+
+- 📋 [MUSI-0398] **Saving data: a damaged state file no longer stops the app starting; persistence tidy-ups.**
+  Group SD in the ledger: SD1, SD2, SD3, SD6, SD7, SD16.
+  **Layman:** If a settings file gets damaged, the app starts with defaults instead of crashing every launch.
+  Kind: review-fix.
+  Source: deepseek-review-2026-11-05.
+
+- 📋 [MUSI-0399] **Albums: renaming to a name ending in a date no longer closes the app; approval tidy-ups.**
+  Group AP in the ledger: the rename crash, AP1.1-1.4, 1.6, 2.6, 3.4-3.6, SC-A7.
+  **Layman:** Typing an album name that ends in a date now shows a message instead of closing the app.
+  Kind: review-fix.
+  Source: deepseek-review-2026-11-05.
+
+- 📋 [MUSI-0400] **Library: songs moved or deleted while the app is open no longer close it; home-folder changes no longer trigger a rescan.**
+  Group LB in the ledger: LB1b, LB4a, LB2a (Spec 01 fix), LB1a.
+  **Layman:** Moving songs around in your music folder while the app is open is now safe, and unrelated files in your home folder no longer make the app re-read every song.
+  Kind: review-fix.
+  Source: deepseek-review-2026-11-05.
+
+- 📋 [MUSI-0401] **Playback: Play starts the queue when nothing was loaded; playback tidy-ups.**
+  Group PB in the ledger: PB4 (Spec 15 amendment), PB1, PB3, PB5, PB13-15, PB17.
+  **Layman:** After adding songs to an empty queue, pressing Play now plays them.
+  Kind: review-fix.
+  Source: deepseek-review-2026-11-05.
+
+- 📋 [MUSI-0402] **Playlists and desktop: hand-edited playlist files are checked; tray and media-control tidy-ups.**
+  Group PL in the ledger: PL9/10/26, PL1, PL2, PL5, PL7, PL13, PL23, PL28. PL38 (Windows tray click) needs a Windows check.
+  **Layman:** A damaged playlists file is backed up and reported instead of loading nonsense.
+  Kind: review-fix.
+  Source: deepseek-review-2026-11-05.
+
+- 📋 [MUSI-0403] **Screens: deleting the current album shows another one; arrow buttons stay unclipped after a click; UI tidy-ups.**
+  Group SC in the ledger: SC-A1, SC-A4, SC-A3 (needs an owner decision on Spec 11 TC-11-06/07), SC1.2-1.4, 3.5, 4.1, 4.4, 4.5, B2, D5, E6.
+  **Layman:** Deleting the album you are on now switches to another album cleanly, and small arrow buttons no longer get clipped after you click them.
+  Kind: review-fix.
+  Source: deepseek-review-2026-11-05.
+
+- 📋 [MUSI-0404] **Lyrics: timing matches your lyric words to the words heard; one alignment at a time.**
+  Group LY in the ledger: LY-A1 and LY-B4 (Spec 07 amendments), A3, A4, A6, A8, A10.
+  **Layman:** Lyric lines now light up at the right moment even when the singing does not split the way your lines do, and aligning several songs no longer uses huge amounts of memory.
+  Kind: review-fix.
+  Source: deepseek-review-2026-11-05.
 
 ## 1.0.0 — Every sign of success proven
 
