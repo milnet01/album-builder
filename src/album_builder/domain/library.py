@@ -42,6 +42,11 @@ class Library:
     folder: Path
     tracks: tuple[Track, ...] = ()
     _search_blobs: tuple[str, ...] = field(default=(), repr=False, compare=False)
+    # path -> Track, built once: the Library never changes after construction,
+    # so the index can never go stale. Left out of eq/hash.
+    _by_path: dict[Path, Track] = field(
+        default_factory=dict, init=False, repr=False, compare=False,
+    )
 
     def __post_init__(self) -> None:
         # Permit callers to pass any iterable (list, generator) — but store
@@ -54,6 +59,7 @@ class Library:
             object.__setattr__(
                 self, "_search_blobs", tuple(_search_blob(t) for t in self.tracks),
             )
+        object.__setattr__(self, "_by_path", {t.path: t for t in self.tracks})
 
     @classmethod
     def scan(cls, folder: Path) -> Library:
@@ -95,19 +101,15 @@ class Library:
         return cls(folder=folder, tracks=tuple(tracks))
 
     def find(self, path: Path) -> Track | None:
-        # `Path.resolve()` is O(depth) plus a stat() syscall per component;
-        # callers that lookup by path in a tight loop should pre-resolve
-        # once and pass the resolved path. We re-resolve here defensively
-        # because `Track.from_path` already resolved at scan time, so
-        # comparing apples-to-apples requires the same canonical form.
-        # Memoising would force this method to invalidate on Library
-        # construction; the frozen dataclass + tuple of tracks keeps this
-        # simple. (L1-M3 — documented behaviour, not a fix.)
-        target = Path(path).resolve()
-        for t in self.tracks:
-            if t.path == target:
-                return t
-        return None
+        # Track paths are resolved at scan time, and the paths the app stores
+        # are those same paths, so the direct lookup nearly always hits. Only
+        # a miss pays for `Path.resolve()` (a stat() per component), which
+        # catches a symlinked or relative path to a known track (L1-M3).
+        path = Path(path)
+        track = self._by_path.get(path)
+        if track is None:
+            track = self._by_path.get(path.resolve())
+        return track
 
     def search(self, query: str) -> list[Track]:
         q = query.strip().casefold()

@@ -281,3 +281,24 @@ def test_library_scan_skips_file_that_vanishes(tmp_path: Path, tagged_track, mon
     monkeypatch.setattr(Track, "from_path", classmethod(vanishing))
     lib = Library.scan(tmp_path)
     assert [t.path.name for t in lib.tracks] == ["keep.mp3"]
+
+
+# Spec: TC-01-14 - find() is an index lookup: a path already in canonical
+# form (every path the app stores) is found without a resolve() syscall,
+# and a symlinked path still resolves to its track (review SC-B2: the
+# playlist pane called find() once per row, each a scan plus resolve()).
+def test_library_find_uses_index(tracks_dir: Path, monkeypatch) -> None:
+    lib = Library.scan(tracks_dir)
+    track = lib.tracks[0]
+    link = tracks_dir.parent / "link.mp3"
+    link.symlink_to(track.path)
+    assert lib.find(link) is track
+
+    calls = []
+    real = Path.resolve
+    monkeypatch.setattr(
+        Path, "resolve", lambda self, *a, **k: calls.append(self) or real(self, *a, **k),
+    )
+    assert lib.find(track.path) is track
+    assert calls == []
+    assert hash(lib) == hash(Library.scan(tracks_dir))  # still hashable

@@ -105,3 +105,38 @@ def test_plain_label_shows_the_surface_behind_it(qapp) -> None:
     centre = label.geometry().center()
     assert img.pixelColor(centre) == QColor(p.bg_pane)
     pane.close()
+
+
+def _bright_pixels(widget) -> int:
+    img = widget.grab().toImage()
+    return sum(
+        1
+        for x in range(img.width())
+        for y in range(img.height())
+        if img.pixelColor(x, y).lightness() > 200
+    )
+
+
+# Spec: TC-11-05 - the focus ring must not clip a glyph button's arrow: a
+# later `QPushButton:focus` padding used to override the glyph button's
+# padding: 0, shrinking a focused arrow to a sliver (MUSI-0403, review SC-A4).
+def test_focused_glyph_button_keeps_its_glyph(qtbot) -> None:
+    from PyQt6.QtWidgets import QHBoxLayout, QPushButton, QWidget
+
+    host = QWidget()
+    host.setStyleSheet(qt_stylesheet(Palette.dark_colourful()))
+    lay = QHBoxLayout(host)
+    btn = QPushButton("▲")
+    btn.setFixedWidth(28)
+    btn.setProperty("glyphButton", True)
+    other = QPushButton("x")
+    lay.addWidget(btn)
+    lay.addWidget(other)
+    qtbot.addWidget(host)
+    host.show()
+    other.setFocus()
+    qtbot.waitUntil(lambda: bool(other.hasFocus()))
+    unfocused = _bright_pixels(btn)
+    btn.setFocus()
+    qtbot.waitUntil(lambda: bool(btn.hasFocus()))
+    assert _bright_pixels(btn) >= 0.8 * unfocused > 0

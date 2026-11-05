@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import QSize, Qt, pyqtProperty, pyqtSignal
+from PyQt6.QtCore import QPoint, QSize, Qt, pyqtProperty, pyqtSignal
 from PyQt6.QtGui import QColor, QPainter, QPen
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -60,6 +60,7 @@ class _OrderRowWidget(QWidget):
         self.btn_play.setToolTip(tr("Preview-play this track"))
         self.btn_play.clicked.connect(lambda: on_preview(self._path))
 
+        self._press_pos: QPoint | None = None  # set by mousePressEvent
         self.label = QLabel(text, objectName="OrderRowLabel")
         # Let mouse events fall through the label to this widget, so
         # mousePressEvent fires for clicks on the title text area.
@@ -93,12 +94,12 @@ class _OrderRowWidget(QWidget):
         # startDragDistance, in which case QListWidget has already
         # consumed the gesture for InternalMove reordering.
         from PyQt6.QtWidgets import QApplication
-        press = getattr(self, "_press_pos", None)
-        if press is not None:
-            delta = e.pos() - press
-            if abs(delta.x()) <= QApplication.startDragDistance() and \
-               abs(delta.y()) <= QApplication.startDragDistance():
-                self.body_clicked.emit()
+        press, self._press_pos = self._press_pos, None
+        # Qt's own drag test: manhattanLength() against startDragDistance().
+        if press is not None and (
+            (e.pos() - press).manhattanLength() < QApplication.startDragDistance()
+        ):
+            self.body_clicked.emit()
         super().mouseReleaseEvent(e)
 
     def set_active(self, *, playing: bool) -> None:

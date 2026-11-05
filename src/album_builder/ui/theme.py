@@ -324,6 +324,12 @@ def qt_stylesheet(p: Palette) -> str:
         border: 2px solid {p.accent_primary_1};
         padding: 4px 11px;
     }}
+    /* The focus padding above has the same specificity as the glyphButton
+       rule and comes later, so it would clip a focused glyph button's
+       arrow to a sliver again (MUSI-0366). Keep glyph buttons at 0. */
+    QPushButton[glyphButton="true"]:focus {{
+        padding: 0;
+    }}
     QTableView:focus {{
         border: 2px solid {p.accent_primary_1};
     }}

@@ -24,7 +24,7 @@
  "Align lyrics — model download": "סנכרון מילים — הורדת מודל",
  "Align now": "סנכרון עכשיו",
  "Aligning lyrics uses local ML (Whisper + wav2vec2). On first use, ~1 GB of model files will download to the HuggingFace cache at ~/.cache/huggingface/hub/. Subsequent alignments use the cached models silently. Continue?": "סנכרון המילים משתמש בלמידת מכונה מקומית (Whisper + wav2vec2). בשימוש הראשון יורד כ־1 ג׳יגה־בייט של קובצי מודל למטמון של HuggingFace בנתיב ~/.cache/huggingface/hub/. הסנכרונים הבאים משתמשים במודלים השמורים בלי לשאול. להמשיך?",
- "Alignment failed: {error}": "הסנכרון נכשל: {error}",
+ "Alignment failed for {title}: {error}": "הסנכרון של {title} נכשל: {error}",
  "All tracks composed by {composer}": "כל הרצועות הולחנו בידי {composer}",
  "Approve '{name}'?\n\nThis will export symlinks + a printable PDF + HTML report, then lock the album from edits until you reopen it.\n\n{selected} of {target} tracks selected.": "לאשר את „{name}”?\n\nפעולה זו תייצא קישורים ודוח להדפסה בפורמטים PDF ו־HTML, ולאחר מכן תנעל את האלבום לעריכה עד שתפתחו אותו מחדש.\n\nנבחרו {selected} מתוך {target} רצועות.",
  "Approve album": "אישור האלבום",

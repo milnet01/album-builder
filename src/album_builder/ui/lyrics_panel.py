@@ -75,7 +75,6 @@ class LyricsPanel(QFrame):
         self.list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         outer.addWidget(self.list, stretch=1)
 
-        self._lyrics: Lyrics | None = None
         self._current_index: int = -1
         # Track desired visibility independently of Qt's `QWidget.isVisible()`
         # so callers (and tests) can ask "would this be visible if the
@@ -85,7 +84,6 @@ class LyricsPanel(QFrame):
     # ---- Public API -------------------------------------------------
 
     def set_lyrics(self, lyrics: Lyrics | None) -> None:
-        self._lyrics = lyrics
         self.list.clear()
         if lyrics is None:
             return

@@ -94,19 +94,19 @@ Finding ids are the feedback file's own numbering, prefixed by group.
 
 | finding | verified | disposition | was → now |
 |---|---|---|---|
-| SC-A1 deleting the current album leaves a half-blank screen | yes, `store.current_album_id` is never set by the UI | | |
-| SC-A4 `QPushButton:focus` padding undoes glyph-button padding | yes, equal specificity, later rule wins | | |
+| SC-A1 deleting the current album leaves a half-blank screen | yes, `store.current_album_id` is never set by the UI | fixed | the window keeps the store's current id in step; red: switcher None after delete |
+| SC-A4 `QPushButton:focus` padding undoes glyph-button padding | yes, equal specificity, later rule wins; measured by render: focused arrow a sliver | fixed | glyph focus rule keeps padding 0; pixel test; red: 10 vs 41 bright pixels |
 | SC-A3 `[accent=...]` QSS rules match nothing; TC-11-06/07 unimplemented | yes, no `accent` property set in `src/` | | |
-| SC1.2 alignment-failure toast names no song | yes | | |
-| SC1.3 duplicate scan cannot be interrupted; close waits | yes | | |
-| SC1.4 dead `isinstance` | yes | | |
-| SC3.5 `_press_pos` uninitialised; per-axis drag test | yes | | |
-| SC4.1 `dragEnterEvent` unguarded | yes | | |
-| SC4.4 `_current_theme` never read | yes | | |
-| SC4.5 broad except can swallow the success toast | yes | | |
-| SC-B2 `_track_label` resolves a path per row | yes | | |
-| SC-D5 `LyricsPanel._lyrics` never read | yes | | |
-| SC-E6 scrubber range `round` vs value `int` | yes | | |
+| SC1.2 alignment-failure toast names no song | yes | fixed | toast names the song; catalog key replaced in all seven |
+| SC1.3 duplicate scan cannot be interrupted; close waits | yes | fixed | `should_stop` polled per file; close requests interruption; red: report emitted |
+| SC1.4 dead `isinstance` | yes | fixed | removed; no red run: dead code |
+| SC3.5 `_press_pos` uninitialised; per-axis drag test | yes | fixed | initialised, consumed on release, Qt's manhattanLength test; red: diagonal drag clicked |
+| SC4.1 `dragEnterEvent` unguarded | yes | fixed | guarded like `dropEvent`; no red run: nothing raises today |
+| SC4.4 `_current_theme` never read | no: three test files read it as the theme state | dismissed | |
+| SC4.5 broad except can swallow the success toast | no: the guarded calls are what the toast needs; the folder open never raises (INV-22-4) | dismissed | |
+| SC-B2 `_track_label` resolves a path per row | yes | fixed | `Library.find` is a path index, resolving only on a miss; helps every caller; red: resolve() called |
+| SC-D5 `LyricsPanel._lyrics` never read | yes | fixed | removed |
+| SC-E6 scrubber range `round` vs value `int` | yes | fixed | both `int()`; red: handle short of the end |
 | SC1.1, 1.6, 2.6, 3.7, 4.3, A6 | wrong | dismissed | |
 | SC1.5, A2, A5 | already handled | dismissed | |
 | SC2.4, 3.8 | proposed fix would undo a language change | dismissed | |

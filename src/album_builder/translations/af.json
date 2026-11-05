@@ -24,7 +24,7 @@
  "Align lyrics — model download": "Sinchroniseer lirieke — model aflaai",
  "Align now": "Sinchroniseer nou",
  "Aligning lyrics uses local ML (Whisper + wav2vec2). On first use, ~1 GB of model files will download to the HuggingFace cache at ~/.cache/huggingface/hub/. Subsequent alignments use the cached models silently. Continue?": "Om lirieke te sinchroniseer gebruik plaaslike masjienleer (Whisper + wav2vec2). Die eerste keer word sowat 1 GB modellêers na die HuggingFace-kas by ~/.cache/huggingface/hub/ afgelaai. Latere sinchronisasies gebruik dié modelle sonder om te vra. Gaan voort?",
- "Alignment failed: {error}": "Sinchronisasie het misluk: {error}",
+ "Alignment failed for {title}: {error}": "Sinchronisasie het misluk vir {title}: {error}",
  "All tracks composed by {composer}": "Alle snitte gekomponeer deur {composer}",
  "Approve '{name}'?\n\nThis will export symlinks + a printable PDF + HTML report, then lock the album from edits until you reopen it.\n\n{selected} of {target} tracks selected.": "Keur '{name}' goed?\n\nDit sal skakels en 'n drukbare PDF- en HTML-verslag uitvoer, en dan die album sluit totdat jy dit weer oopmaak om te wysig.\n\n{selected} van {target} snitte gekies.",
  "Approve album": "Keur album goed",

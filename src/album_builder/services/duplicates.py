@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -48,13 +48,27 @@ def _groups(buckets: Iterable[list[Path]]) -> tuple[tuple[Path, ...], ...]:
     return tuple(sorted(tuple(sorted(b)) for b in buckets if len(b) > 1))
 
 
-def find_duplicates(tracks: Iterable[Track]) -> DuplicateReport:
-    """Group `tracks` into exact and likely copies. Reads, never writes."""
+class DuplicateScanCancelled(Exception):
+    """`should_stop` asked the scan to stop (the window is closing)."""
+
+
+def find_duplicates(
+    tracks: Iterable[Track], *, should_stop: Callable[[], bool] = lambda: False,
+) -> DuplicateReport:
+    """Group `tracks` into exact and likely copies. Reads, never writes.
+
+    `should_stop` is polled before each file read; when it returns True the
+    scan raises DuplicateScanCancelled."""
     tracks = [t for t in tracks if not t.is_missing]
+
+    def check_stop() -> None:
+        if should_stop():
+            raise DuplicateScanCancelled
     unreadable: list[Path] = []
 
     by_size: dict[int, list[Path]] = defaultdict(list)
     for t in tracks:
+        check_stop()
         try:
             by_size[t.path.stat().st_size].append(t.path)
         except OSError as exc:
@@ -65,6 +79,7 @@ def find_duplicates(tracks: Iterable[Track]) -> DuplicateReport:
         if len(same_size) < 2:
             continue
         for path in same_size:
+            check_stop()
             try:
                 by_digest[_digest(path)].append(path)
             except OSError as exc:
@@ -95,7 +110,11 @@ class DuplicateWorker(QThread):
 
     def run(self) -> None:
         try:
-            report = find_duplicates(self._tracks)
+            report = find_duplicates(
+                self._tracks, should_stop=self.isInterruptionRequested
+            )
+        except DuplicateScanCancelled:
+            return  # the window is closing: nobody is waiting for a report
         except Exception as exc:  # nothing may escape a thread's run()
             logger.exception("duplicate check failed")
             report = DuplicateReport(error=str(exc) or type(exc).__name__)

@@ -475,3 +475,29 @@ def test_toggle_column_click_still_works_when_playing(main_window, qtbot) -> Non
     assert tracks[1].path in a.track_paths, (
         "TC-06-21: toggle column click is independent of the row-body rule"
     )
+
+
+# Spec: TC-06-22 - click vs drag uses Qt's own measure (manhattanLength vs
+# startDragDistance): a diagonal move of the drag distance on both axes is
+# a drag, not a click (review SC3.5).
+def test_album_order_row_diagonal_drag_is_not_a_click(qtbot, tmp_path: Path) -> None:
+    from PyQt6.QtCore import QPoint
+    from PyQt6.QtWidgets import QApplication
+
+    from album_builder.ui.album_order_pane import _OrderRowWidget
+
+    row = _OrderRowWidget("1. T", tmp_path / "t.mp3", "T", on_preview=lambda p: None)
+    row.resize(300, 30)
+    qtbot.addWidget(row)
+    clicks: list[bool] = []
+    row.body_clicked.connect(lambda: clicks.append(True))
+    d = QApplication.startDragDistance()
+    qtbot.mousePress(row, Qt.MouseButton.LeftButton, pos=QPoint(40, 10))
+    qtbot.mouseRelease(row, Qt.MouseButton.LeftButton, pos=QPoint(40 + d, 10 + d))
+    assert clicks == []
+    # A release with no press first (press landed elsewhere) is no click.
+    fresh = _OrderRowWidget("2. U", tmp_path / "u.mp3", "U", on_preview=lambda p: None)
+    qtbot.addWidget(fresh)
+    fresh.body_clicked.connect(lambda: clicks.append(True))
+    qtbot.mouseRelease(fresh, Qt.MouseButton.LeftButton, pos=QPoint(5, 5))
+    assert clicks == []

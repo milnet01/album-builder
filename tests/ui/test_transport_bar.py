@@ -377,3 +377,12 @@ def test_stylesheet_has_checked_rule_for_toggles() -> None:
     qss = qt_stylesheet(Palette.dark_colourful())
     assert "TransportShuffle:checked" in qss
     assert "TransportRepeat:checked" in qss
+
+
+# Spec: TC-06-08 - range and value round the same way, so a position at
+# the end of a 180.6 s track puts the handle at the end (review SC-E6).
+def test_scrubber_reaches_its_end_on_fractional_duration(player_and_bar) -> None:
+    p, b = player_and_bar
+    p.duration_changed.emit(180.6)
+    p.position_changed.emit(180.6)
+    assert b.scrubber.value() == b.scrubber.maximum()

@@ -198,7 +198,8 @@ class TransportBar(QWidget):
         self.lbl_current.setText(self._format_time(seconds))
 
     def _on_duration_changed(self, seconds: float) -> None:
-        self.scrubber.setRange(0, round(seconds))
+        # int(), as _on_position_changed uses, so the slider can reach its end.
+        self.scrubber.setRange(0, int(seconds))
         self.lbl_duration.setText(self._format_time(seconds))
 
     def _on_state_changed(self, state) -> None:

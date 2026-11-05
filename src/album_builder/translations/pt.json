@@ -24,7 +24,7 @@
  "Align lyrics — model download": "Sincronizar letras — download do modelo",
  "Align now": "Sincronizar agora",
  "Aligning lyrics uses local ML (Whisper + wav2vec2). On first use, ~1 GB of model files will download to the HuggingFace cache at ~/.cache/huggingface/hub/. Subsequent alignments use the cached models silently. Continue?": "A sincronização de letras usa aprendizado de máquina local (Whisper + wav2vec2). No primeiro uso, cerca de 1 GB de modelos será baixado para o cache do HuggingFace em ~/.cache/huggingface/hub/. As sincronizações seguintes usam esses modelos sem perguntar. Continuar?",
- "Alignment failed: {error}": "Falha na sincronização: {error}",
+ "Alignment failed for {title}: {error}": "Falha na sincronização de {title}: {error}",
  "All tracks composed by {composer}": "Todas as faixas compostas por {composer}",
  "Approve '{name}'?\n\nThis will export symlinks + a printable PDF + HTML report, then lock the album from edits until you reopen it.\n\n{selected} of {target} tracks selected.": "Aprovar \"{name}\"?\n\nIsso vai exportar links e um relatório em PDF para impressão e em HTML, e depois bloquear o álbum até que você o reabra para edição.\n\n{selected} de {target} faixas selecionadas.",
  "Approve album": "Aprovar álbum",

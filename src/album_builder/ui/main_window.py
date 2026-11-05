@@ -612,6 +612,10 @@ class MainWindow(QMainWindow):
         return self._store.get(cid) if cid else None
 
     def _on_current_changed(self, album_id) -> None:
+        # Keep the store's current id in step with the switcher: delete()
+        # relies on it to fall back to the first remaining album (TC-02-16).
+        if album_id is None or self._store.get(album_id) is not None:
+            self._store.set_current(album_id)
         self.top_bar.set_current(album_id)
         album = self._store.get(album_id) if album_id else None
         self.library_pane.set_current_album(album)
@@ -817,10 +821,14 @@ class MainWindow(QMainWindow):
             self._start_add_music([Path(p) for p in chosen])
 
     def dragEnterEvent(self, event) -> None:
-        if any(url.isLocalFile() for url in event.mimeData().urls()):
-            event.acceptProposedAction()
-        else:
-            event.ignore()
+        # No exception may leave a Qt event handler (as dropEvent below).
+        try:
+            if any(url.isLocalFile() for url in event.mimeData().urls()):
+                event.acceptProposedAction()
+                return
+        except Exception:
+            logger.exception("add music: drag-enter failed")
+        event.ignore()
 
     def dropEvent(self, event) -> None:
         # No exception may leave a Qt event handler: on Windows it aborts.
@@ -1180,8 +1188,6 @@ class MainWindow(QMainWindow):
             return True
         # Editable QComboBox: the line edit is a child whose parent is the
         # combo. Walk up one level to recognise the case.
-        if isinstance(w, QLineEdit):
-            return True
         parent = w.parent() if w is not None else None
         if isinstance(parent, QComboBox) and parent.isEditable():
             return True
@@ -1512,8 +1518,14 @@ class MainWindow(QMainWindow):
         self._set_lyrics_all(lyrics)
         self._tracker.set_lyrics(lyrics)
 
-    def _on_alignment_error(self, _path: Path, msg: str) -> None:
-        self._toast.show_message(tr("Alignment failed: {error}", error=msg))
+    def _on_alignment_error(self, path: Path, msg: str) -> None:
+        # Name the song: a slow job can fail after the user has moved on, and
+        # an unnamed failure reads as if the current song failed.
+        track = self._library_watcher.library().find(path)
+        title = track.title if track is not None else path.name
+        self._toast.show_message(
+            tr("Alignment failed for {title}: {error}", title=title, error=msg)
+        )
 
     def _on_whisperx_missing(self, _path: Path) -> None:
         # Driven by AlignmentService.runtime_missing, never by the (translated)
@@ -1640,6 +1652,8 @@ class MainWindow(QMainWindow):
         if self._add_music_worker is not None:
             self._add_music_worker.wait()
         if self._duplicate_worker is not None:
+            # The scan only reads, so stop it rather than wait for every song.
+            self._duplicate_worker.requestInterruption()
             self._duplicate_worker.wait()
         try:
             # Spec 20: drop the bus name (clean relaunch) + remove the cover-art

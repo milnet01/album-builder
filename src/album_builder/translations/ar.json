@@ -24,7 +24,7 @@
  "Align lyrics — model download": "مزامنة الكلمات — تنزيل النموذج",
  "Align now": "زامِن الآن",
  "Aligning lyrics uses local ML (Whisper + wav2vec2). On first use, ~1 GB of model files will download to the HuggingFace cache at ~/.cache/huggingface/hub/. Subsequent alignments use the cached models silently. Continue?": "تستخدم مزامنة الكلمات تعلّمًا آليًا على جهازك (Whisper + wav2vec2). في أول استخدام سيُنزَّل نحو 1 غيغابايت من ملفات النماذج إلى ذاكرة HuggingFace المؤقتة في ~/.cache/huggingface/hub/. وتستخدم المزامنات اللاحقة هذه النماذج دون سؤال. هل تريد المتابعة؟",
- "Alignment failed: {error}": "فشلت المزامنة: {error}",
+ "Alignment failed for {title}: {error}": "فشلت مزامنة {title}: {error}",
  "All tracks composed by {composer}": "جميع المقاطع من تلحين {composer}",
  "Approve '{name}'?\n\nThis will export symlinks + a printable PDF + HTML report, then lock the album from edits until you reopen it.\n\n{selected} of {target} tracks selected.": "هل تريد اعتماد «{name}»؟\n\nسيُصدَّر ذلك روابط وتقريرًا قابلًا للطباعة بصيغتي PDF وHTML، ثم يُقفَل الألبوم أمام التحرير حتى تعيد فتحه.\n\nالمقاطع المختارة: {selected} من {target}.",
  "Approve album": "اعتماد الألبوم",

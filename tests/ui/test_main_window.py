@@ -632,3 +632,33 @@ def test_library_scan_failure_shows_toast(main_window, monkeypatch) -> None:
     monkeypatch.setattr(main_window, "_show_toast", shown.append)
     main_window._library_watcher.scan_failed.emit("Permission denied: a.mp3")
     assert len(shown) == 1 and "a.mp3" in shown[0]
+
+
+# Spec: TC-02-16 - deleting the current album switches the whole window to
+# the alphabetically-first remaining album: switcher, name box and panes
+# agree. The store's current id was never set by the UI, so the window was
+# told "None" while the switcher pill still named another album (MUSI-0403).
+def test_delete_current_album_switches_to_first_remaining(main_window, monkeypatch) -> None:
+    from PyQt6.QtWidgets import QMessageBox
+
+    monkeypatch.setattr(
+        "album_builder.ui.main_window.QMessageBox.question",
+        lambda *a, **k: QMessageBox.StandardButton.Yes,
+    )
+    a = main_window._store.create(name="Alpha", target_count=3)
+    b = main_window._store.create(name="Beta", target_count=3)
+    main_window.top_bar.switcher.set_current(b.id)
+    main_window._on_delete_album(b.id)
+    assert main_window.top_bar.switcher.current_id == a.id
+    assert main_window.top_bar.name_edit.text() == "Alpha"
+    assert main_window._current_album() is a
+
+
+# Spec: TC-07-17 - an alignment failure names the song it was for (a slow
+# job may fail after the user moved to another song; review SC1.2).
+def test_alignment_error_names_the_song(main_window, monkeypatch) -> None:
+    shown = []
+    monkeypatch.setattr(main_window._toast, "show_message", shown.append)
+    track = main_window._library_watcher.library().tracks[0]
+    main_window._on_alignment_error(track.path, "boom")
+    assert track.title in shown[0] and "boom" in shown[0]

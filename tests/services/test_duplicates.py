@@ -123,7 +123,7 @@ def test_worker_reports_a_failed_check_as_failed(qtbot, monkeypatch, music: Path
     # Spec: MUSI-0386 - a crash must never read as "no duplicates".
     import album_builder.services.duplicates as dup
 
-    def boom(_tracks):
+    def boom(_tracks, **_kw):
         raise RuntimeError("disk on fire")
 
     monkeypatch.setattr(dup, "find_duplicates", boom)
@@ -134,3 +134,38 @@ def test_worker_reports_a_failed_check_as_failed(qtbot, monkeypatch, music: Path
         worker.start()
     worker.wait()
     assert results == [DuplicateReport(error="disk on fire")]
+
+
+def test_scan_stops_when_asked(music: Path) -> None:
+    # Spec: MUSI-0386 - closing the window interrupts the scan instead of
+    # waiting for it to read every song (MUSI-0403, review SC1.3).
+    from album_builder.services.duplicates import DuplicateScanCancelled
+
+    a = _song(music, "a.mp3", b"same", title="One", artist="X")
+    b = _song(music, "b.mp3", b"same", title="Two", artist="Y")
+    with pytest.raises(DuplicateScanCancelled):
+        find_duplicates([a, b], should_stop=lambda: True)
+
+
+def test_interrupted_worker_reports_nothing(qtbot, monkeypatch, music: Path) -> None:
+    # Spec: MUSI-0386 - an interrupted worker finishes without a report.
+    # QThread.start() clears a pending request, so the interruption is
+    # asked for from inside the scan, after the first file is read.
+    import album_builder.services.duplicates as dup
+
+    a = _song(music, "a.mp3", b"same", title="One", artist="X")
+    b = _song(music, "b.mp3", b"same", title="Two", artist="Y")
+    worker = DuplicateWorker([a, b])
+    real_digest = dup._digest
+
+    def digest_then_interrupt(path):
+        worker.requestInterruption()
+        return real_digest(path)
+
+    monkeypatch.setattr(dup, "_digest", digest_then_interrupt)
+    results: list[DuplicateReport] = []
+    worker.done.connect(results.append)
+    worker.start()
+    assert worker.wait(5000)
+    qtbot.wait(50)
+    assert results == []
