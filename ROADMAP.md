@@ -369,7 +369,13 @@ docs/reviews/close-findings-2026-11-05.md.
   Spec 20 and TC-20-13 amended; regression test proven red first). Still
   owed: a re-run of the unattended Windows tray test on a new windows.yml
   build, and the KDE check.
-  **Layman:** On Windows, clicking the tray icon never hides the window (checked on the Windows PC); how to fix it is the owner's call.
+  2026-11-05, Windows passes: windows.yml run 42070626928 (29d7d5f),
+  same unattended method. App in front, then icon click: hidden (twice).
+  Click while hidden: shown and in front (twice). Notepad in front for
+  3 s, then icon click: app shown in front, not hidden. This run the
+  icon sat on the taskbar, so the hidden-icons ^ path was not exercised.
+  Still owed: the KDE check.
+  **Layman:** Clicking the tray icon now hides the window when it was in front, and brings it forward when it was behind (works on the Windows PC; Linux desktop check still to do).
   Kind: investigate.
   Source: deepseek-review-2026-11-05 (PL38).
 
