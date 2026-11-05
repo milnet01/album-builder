@@ -165,6 +165,10 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   GStreamer media plugins; com.riverbankcomputing.PyQt.BaseApp//6.11
   ships PyQt6 with QtMultimedia on Python 3.13. Dist-5 (OBS) is not
   affected by this and can go ahead.
+  Dist-5 spec: docs/specs/27-obs-packages.md, accepted 2026-11-05 with
+  no review gate (cheap to redo; nothing publishes before the owner
+  approves). Tumbleweed only for now: Leap 16.0's weasyprint 65.1 and
+  platformdirs 4.3.8 are below requirements.txt's floors.
   **Layman:** List the app on Flathub and in openSUSE's package system, so people can install it from their app store.
   Kind: package.
   Source: user-decision-2026-11-04.
