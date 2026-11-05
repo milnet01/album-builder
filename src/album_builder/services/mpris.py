@@ -268,11 +268,11 @@ class MediaPlayer2PlayerAdaptor(QDBusAbstractAdaptor):
 
     @pyqtSlot()
     def Play(self) -> None:
-        self._player.play()
+        self._controller.play()
 
     @pyqtSlot()
     def PlayPause(self) -> None:
-        self._player.toggle()
+        self._controller.toggle()
 
     @pyqtSlot()
     def Stop(self) -> None:

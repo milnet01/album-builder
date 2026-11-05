@@ -1,8 +1,9 @@
 """Transport bar - Spec 06 §user-visible behavior, transport bar elements.
 
 The widget is dumb-on-purpose: it reflects player state, the player is
-the source of truth. Buttons call ``player.toggle()`` / ``player.set_muted``
-directly; the volume slider writes via ``player.set_volume``.
+the source of truth. Play calls ``controller.toggle()`` (queue-aware,
+TC-15-35); mute calls ``player.set_muted`` directly; the volume slider
+writes via ``player.set_volume``.
 """
 
 from __future__ import annotations
@@ -143,7 +144,7 @@ class TransportBar(QWidget):
     # ---- Slots ------------------------------------------------------
 
     def _on_play_clicked(self) -> None:
-        self._player.toggle()
+        self._controller.toggle()
 
     def _on_prev_clicked(self) -> None:
         self._controller.previous()

@@ -250,8 +250,9 @@ no shadow state of its own. Property reads pull live from those.
 
 - Methods (`pyqtSlot`):
   - `Next()` -> `controller.next()`; `Previous()` -> `controller.previous()`.
-  - `Pause()` -> `player.pause()`; `Play()` -> `player.play()`;
-    `PlayPause()` -> `player.toggle()`; `Stop()` -> `player.stop()`.
+  - `Pause()` -> `player.pause()`; `Play()` -> `controller.play()`;
+    `PlayPause()` -> `controller.toggle()` (both queue-aware, Spec 15 TC-15-35);
+    `Stop()` -> `player.stop()`.
   - `Seek(offset: 'x')` -> seek to `player.position() + offset/1e6` seconds
     (offset is signed microseconds; `Player.seek` already clamps to `[0, dur-1]`).
   - `SetPosition(track_id: 'o', position: 'x')` -> ignore unless `track_id` equals the
@@ -368,7 +369,7 @@ no shadow state of its own. Property reads pull live from those.
 `TrayIcon(player, controller, window, icon, parent=None)`:
 - `self.available = QSystemTrayIcon.isSystemTrayAvailable()`; when false, constructs
   and wires nothing (no icon shown).
-- Context menu actions: **Play/Pause** (`player.toggle`; label + icon track
+- Context menu actions: **Play/Pause** (`controller.toggle`, queue-aware per Spec 15 TC-15-35; label + icon track
   `player.state_changed` — "Play" when not playing, "Pause" when playing),
   **Next** (`controller.next`), **Previous** (`controller.previous`), a separator,
   **Show/Hide** (toggle `window` visibility + raise), **Quit** (`QApplication.quit`).
@@ -612,7 +613,7 @@ gate warns and the test skips. The audio and lyrics tiers in `test_player.py` an
 - **TC-20-12** — `TrayIcon` with tray available builds a 6-action menu
   (Play/Pause, Next, Previous, separator, Show/Hide, Quit); the Play/Pause action
   label flips on `state_changed`. Each action's trigger calls the right command
-  (spied on fakes): Play/Pause -> `player.toggle`, Next -> `controller.next`,
+  (spied on fakes): Play/Pause -> `controller.toggle`, Next -> `controller.next`,
   Previous -> `controller.previous`, Quit -> `QApplication.quit`, Show/Hide toggles the
   window's visibility. With tray **unavailable**, `available=False` and no menu/icon is
   built (no crash).

@@ -29,11 +29,11 @@ def _force_tray_available(monkeypatch, available: bool) -> None:
 def test_tray_builds_menu_and_wires_actions(qtbot, monkeypatch) -> None:
     _force_tray_available(monkeypatch, True)
     player = Player()
-    toggles: list = []
-    monkeypatch.setattr(player, "toggle", lambda: toggles.append(True))
     quits: list = []
     monkeypatch.setattr(QApplication, "quit", staticmethod(lambda: quits.append(True)))
     controller = MagicMock()
+    toggles: list = []
+    controller.toggle.side_effect = lambda *a: toggles.append(True)
     window = MagicMock()
     window.isVisible.return_value = False
     bring: list = []

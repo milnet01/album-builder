@@ -462,3 +462,37 @@ def test_manual_wrap_emits_queue_changed_under_shuffle(ctl) -> None:
     que2 = Spy(c.queue_changed)
     c.previous()  # at slot 0 -> wrap to last, no reshuffle (shuffle off anyway)
     assert que2.count == 0
+
+
+# Spec: TC-15-35 - play/pause on a controller with a staged queue but no
+# loaded source (enqueue on an idle app) starts the queue's current track;
+# it used to call Player.toggle() on nothing and do nothing (MUSI-0401).
+def test_toggle_starts_staged_queue(ctl) -> None:
+    c, player = ctl
+    a, b = _track("a"), _track("b")
+    c.enqueue([a, b])
+    assert player.source() is None
+    c.toggle()
+    assert player.source() == a.path
+    assert player.state() == PlayerState.PLAYING
+    c.toggle()  # a loaded source: plain pause
+    assert player.state() == PlayerState.PAUSED
+    assert player.source() == a.path
+
+
+# Spec: TC-15-35 - play() (MPRIS Play) behaves the same way.
+def test_play_starts_staged_queue(ctl) -> None:
+    c, player = ctl
+    a = _track("a")
+    c.enqueue([a])
+    c.play()
+    assert player.source() == a.path
+    assert player.state() == PlayerState.PLAYING
+
+
+# Spec: TC-15-35 - with nothing queued, toggle is the player's own toggle.
+def test_toggle_with_empty_queue_is_player_toggle(ctl) -> None:
+    c, player = ctl
+    c.toggle()
+    assert player.source() is None
+    assert player.play_calls == 1

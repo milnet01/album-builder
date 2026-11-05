@@ -100,6 +100,8 @@ class Player(QObject):
         _prime_notify_override_check(self._output)
         self._player.setAudioOutput(self._output)
         self._source: Path | None = None
+        # Last value sent on buffering_changed, so it emits only on a flip.
+        self._buffering = False
         self._duration_seconds = 0.0
         # Spec 26 resume point: where the first play of this source starts.
         # None once play has started with the media loaded, or with no source.
@@ -364,7 +366,9 @@ class Player(QObject):
 
     def _on_media_status(self, status: QMediaPlayer.MediaStatus) -> None:
         is_buffering = status == QMediaPlayer.MediaStatus.BufferingMedia
-        self.buffering_changed.emit(is_buffering)
+        if is_buffering != self._buffering:
+            self._buffering = is_buffering
+            self.buffering_changed.emit(is_buffering)
 
         if status == QMediaPlayer.MediaStatus.LoadedMedia:
             # Spec 26 §4.2: the backend's positionChanged moves the scrubber

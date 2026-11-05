@@ -34,7 +34,7 @@ class TrayIcon(QSystemTrayIcon):
 
         menu = QMenu()
         self._play_pause = QAction(self._play_pause_label(), menu)
-        self._play_pause.triggered.connect(player.toggle)
+        self._play_pause.triggered.connect(controller.toggle)
         menu.addAction(self._play_pause)
         act_next = QAction(tr("Next"), menu)
         act_next.triggered.connect(controller.next)

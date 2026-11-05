@@ -1190,7 +1190,7 @@ class MainWindow(QMainWindow):
     def _space_pressed(self) -> None:
         if self._key_in_text_field():
             return
-        self._player.toggle()
+        self._controller.toggle()
 
     def _seek_relative(self, delta: float) -> None:
         if self._key_in_text_field():

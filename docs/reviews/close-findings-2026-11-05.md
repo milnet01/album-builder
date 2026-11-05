@@ -65,11 +65,11 @@ Finding ids are the feedback file's own numbering, prefixed by group.
 
 | finding | verified | disposition | was → now |
 |---|---|---|---|
-| PB4 "Add to queue" while idle, then Play does nothing | yes, Play calls `Player.toggle()` with no source; Spec 15 deferred to Phase C, which shipped | | |
-| PB17 `ReplayGainService` controller untyped | yes | | |
-| PB5 no test pins the under-1 s seek | yes | | |
-| PB1 `buffering_changed` emits on every status | yes | | |
-| PB3, 13, 14, 15 missing comments | yes | | |
+| PB4 "Add to queue" while idle, then Play does nothing | yes, Play calls `Player.toggle()` with no source; Spec 15 deferred to Phase C, which shipped | fixed | `PlaybackController.toggle()/play()` start a staged queue; button, Space, tray and MPRIS route through them; Spec 15 TC-15-35, Spec 20 routing updated; red: no source after toggle |
+| PB17 `ReplayGainService` controller untyped | yes | fixed | `TYPE_CHECKING` import; no red run: typing only |
+| PB5 no test pins the under-1 s seek | yes | fixed | test pins seek to 0 |
+| PB1 `buffering_changed` emits on every status | yes | fixed | emits on a flip only; red: repeated emits |
+| PB3, 13, 14, 15 missing comments | yes | fixed | comments in `restore`, `remove`, `move`, `append`; no red run: comments |
 | PB2, 8, 9 | wrong: frozen dataclass equality; cache adds invalidation risk | dismissed | |
 | PB7, 18 | deliberate: Spec 15 over-emit; Spec 21 public surface | dismissed | |
 | PB6, 10–12, 16, 19–21 | taste or agreed no-ops | dismissed | |

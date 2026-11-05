@@ -240,11 +240,11 @@ def test_player_adaptor_methods_and_setposition_guard() -> None:
     a.Previous()
     controller.previous.assert_called_once()
     a.Play()
-    player.play.assert_called_once()
+    controller.play.assert_called_once()  # queue-aware, TC-15-35
     a.Pause()
     player.pause.assert_called_once()
     a.PlayPause()
-    player.toggle.assert_called_once()
+    controller.toggle.assert_called_once()
     a.Stop()
     player.stop.assert_called_once()
 

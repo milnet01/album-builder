@@ -119,7 +119,9 @@ class PlayQueue:
             self._deck = [new_idx]
             self._cursor = 0
         else:
-            # Identity deck (shuffle off) stays identity; shuffle-on tail-append.
+            # Identity deck (shuffle off) stays identity; under shuffle the
+            # new entry goes on the tail of the play order, not a random slot
+            # (Spec 14 TC-14-27).
             self._deck.append(new_idx)
 
     def extend(self, tracks: Iterable[Track]) -> None:
@@ -146,12 +148,15 @@ class PlayQueue:
         # Natural indices above the removed one shift down by one.
         self._deck = [i - 1 if i > index else i for i in self._deck]
         if not self._entries:
-            self._cursor = -1
+            self._cursor = -1  # removed the only entry
             return
         if pos < self._cursor:
-            self._cursor -= 1
+            self._cursor -= 1  # removed before the cursor: same entry, one slot left
         elif pos == self._cursor and self._cursor >= len(self._deck):
+            # Removed the current entry, which was last: clamp to the new last.
             self._cursor = len(self._deck) - 1
+        # Otherwise (after the cursor, or current but not last) the cursor
+        # index already points at the right entry.
 
     def move(self, from_index: int, to_index: int) -> None:
         n = len(self._entries)
@@ -160,6 +165,7 @@ class PlayQueue:
         if from_index == to_index:
             return
         remap = self._move_remap(from_index, to_index, n)
+        # n > 0 after the range check, so the cursor is a valid deck index.
         cur_nat = self._deck[self._cursor]
         entry = self._entries.pop(from_index)
         self._entries.insert(to_index, entry)

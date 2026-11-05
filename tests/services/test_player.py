@@ -423,3 +423,29 @@ def test_set_source_clears_error_state(qtbot, tmp_path: Path) -> None:
     # Immediately after set_source, the contract is "back to STOPPED" —
     # leaving ERROR in the accept set made the assertion a near no-op.
     assert p.state() == PlayerState.STOPPED
+
+
+# Spec: Spec 06 buffering_changed - emitted only when buffering flips, not
+# on every media-status change (review PB1).
+def test_buffering_changed_emits_only_on_flip(qapp) -> None:
+    from PyQt6.QtMultimedia import QMediaPlayer
+
+    p = Player()
+    seen: list[bool] = []
+    p.buffering_changed.connect(seen.append)
+    status = QMediaPlayer.MediaStatus
+    for s in (status.LoadingMedia, status.LoadedMedia, status.BufferingMedia,
+              status.BufferingMedia, status.BufferedMedia, status.BufferedMedia):
+        p._on_media_status(s)
+    assert seen == [True, False]
+
+
+# Spec: Spec 06 seek (Tier 3 L3-M2) - on a track shorter than 1 s every seek
+# lands at the start: the documented tail-margin side effect is pinned.
+def test_seek_on_sub_second_track_lands_at_zero(qapp) -> None:
+    p = Player()
+    p._set_duration_for_test(0.5)
+    landed: list[float] = []
+    p.seeked.connect(landed.append)
+    p.seek(0.3)
+    assert landed == [0.0]

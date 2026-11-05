@@ -85,6 +85,9 @@ class PlaybackController(QObject):
         if current is not None:
             self._player.set_source(current.path, start_seconds=position_seconds)
         self.queue_changed.emit(self._queue.play_order())
+        # Set _loaded directly rather than via _set_loaded: Spec 26 §4.3 wants
+        # current_changed emitted exactly once here, even when it equals the
+        # track already loaded (_set_loaded would suppress that emit).
         self._loaded = current
         self.current_changed.emit(current)
         self.shuffle_changed.emit(snapshot.shuffle)
@@ -112,6 +115,25 @@ class PlaybackController(QObject):
     def play_next(self, track: Track) -> None:
         self._queue.insert_next(track)
         self.queue_changed.emit(self._queue.play_order())
+
+    def toggle(self) -> None:
+        """Play/pause for every transport: the button, Space, the tray and
+        MPRIS PlayPause. With a queue staged but no source loaded (Add to
+        queue on an idle app), start the queue's current track (TC-15-35)."""
+        if not self._start_staged():
+            self._player.toggle()
+
+    def play(self) -> None:
+        """MPRIS Play: as toggle(), but never pauses (TC-15-35)."""
+        if not self._start_staged():
+            self._player.play()
+
+    def _start_staged(self) -> bool:
+        track = self._queue.current()
+        if self._player.source() is not None or track is None:
+            return False
+        self._load_and_play(track)
+        return True
 
     def next(self) -> None:
         track = self._queue.next()

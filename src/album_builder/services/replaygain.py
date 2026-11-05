@@ -15,11 +15,16 @@ MainWindow menu handler owns the guarded `write_replaygain` (mirroring how Spec
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from PyQt6.QtCore import QObject
 
 from album_builder.domain.track import Track
 from album_builder.persistence.settings import ReplayGainSettings
 from album_builder.services.player import Player
+
+if TYPE_CHECKING:
+    from album_builder.services.playback_controller import PlaybackController
 
 
 def gain_factor(track: Track | None, mode: str) -> float:
@@ -50,7 +55,7 @@ class ReplayGainService(QObject):
     def __init__(
         self,
         player: Player,
-        controller,
+        controller: PlaybackController,
         settings: ReplayGainSettings,
         parent: QObject | None = None,
     ) -> None:

@@ -182,10 +182,10 @@ Commands:
 - `enqueue(tracks: Iterable[Track]) -> None` — append `tracks` to the queue
   (`PlayQueue.extend`). Does **not** change the player source or playback state:
   "Add to queue" never interrupts what is playing, and on an idle/stopped
-  controller it only stages entries (no `set_source`, no `play`). Starting an
-  enqueue-only queue in Phase B is via the Up Next double-click (`jump_to`) or a
-  library play action — not the bare Spec 06 transport play, which drives the
-  `Player` directly and is not queue-aware until Phase C. Emits `queue_changed`
+  controller it only stages entries (no `set_source`, no `play`). A staged queue
+  starts from the Up Next double-click (`jump_to`), a library play action, or
+  any play/pause transport — button, Space, tray, MPRIS — which all route
+  through `toggle()` / `play()` (TC-15-35). Emits `queue_changed`
   (on the empty-queue case the staged `current()` highlights via the
   `current_position()` pull after `queue_changed` — see §main_window changes).
   (Phase B only ever enqueues a single-element list — `[clicked track]`; the
@@ -719,6 +719,13 @@ assert on a "playing" state without real async decode uses the Spec 06
 - **TC-15-34** — `play_next(X)` onto an **empty** stopped controller mirrors
   `enqueue`-on-empty: `current_track() == X`, `current_position() == 0`, player
   `STOPPED` with no source loaded, `queue_changed` fired, **no** `current_changed`.
+- **TC-15-35** — `toggle()` and `play()` on a controller whose queue has a current
+  track but whose `Player` has no source (enqueue on an idle app) load and play
+  that track. With a source loaded they are `Player.toggle()` / `Player.play()`;
+  with an empty queue too. Every play/pause transport (TransportBar Play, Space,
+  tray Play/Pause, MPRIS `Play` / `PlayPause`) calls them. Added 2026-11-05
+  (MUSI-0401): the old routing called `Player.toggle()` on no source, so Play did
+  nothing.
 
 ## Out of scope (v1 / later phases)
 
