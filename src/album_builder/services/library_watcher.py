@@ -4,11 +4,15 @@ without the user having to re-open the app (Spec 01 Phase-2 deferrals)."""
 
 from __future__ import annotations
 
+import logging
+import os
 from pathlib import Path
 
 from PyQt6.QtCore import QFileSystemWatcher, QObject, QTimer, pyqtSignal
 
 from album_builder.domain.library import Library
+
+logger = logging.getLogger(__name__)
 
 
 class LibraryWatcher(QObject):
@@ -22,11 +26,22 @@ class LibraryWatcher(QObject):
     correctness for not-having-to-poll.
     """
     tracks_changed = pyqtSignal(object)  # Library
+    # A rescan failed (an unreadable file, TC-01-10): the message names it.
+    # The previous library stays in place.
+    scan_failed = pyqtSignal(str)
 
     def __init__(self, folder: Path, *, parent: QObject | None = None):
         super().__init__(parent)
         self._folder = Path(folder)
-        self._library = Library.scan(self._folder)
+        # Set when the start-up scan failed, for MainWindow to show once.
+        self.last_error: str | None = None
+        try:
+            self._library = Library.scan(self._folder)
+        except OSError as exc:
+            self.last_error = str(exc)
+            logger.warning("library scan failed: %s", exc)
+            self._library = Library(folder=self._folder, tracks=())
+        self._folder_id = self._identity()
         self._watcher = QFileSystemWatcher(self)
         # Coalesce a burst of FS events (mass-import drops 50 events in a row)
         # into one rescan after 200 ms idle.
@@ -71,14 +86,24 @@ class LibraryWatcher(QObject):
         if to_add:
             self._watcher.addPaths(to_add)
 
+    def _identity(self) -> tuple[int, int] | None:
+        """(device, inode) of the music folder, or None if it is absent."""
+        try:
+            st = os.stat(self._folder)
+        except OSError:
+            return None
+        return st.st_dev, st.st_ino
+
     def _on_dir_changed(self, path: str) -> None:
-        # L5-M4: the parent-folder watch fires on any sibling-directory
-        # change inside the parent. Filter to events whose path is either
-        # our tracked folder OR our exact parent (signal that the folder
-        # itself was added/removed/renamed). Sibling changes are ignored.
-        if path != str(self._folder) and path != str(self._folder.parent):
-            return
-        self._debounce.start()
+        if path == str(self._folder):
+            self._debounce.start()
+        elif path == str(self._folder.parent):
+            # The parent watch exists only to notice the music folder itself
+            # appearing, vanishing or being replaced. With ~/Music the parent
+            # is $HOME, where files change all the time: rescan only when the
+            # folder's identity changed (L5-M4, MUSI-0400).
+            if self._identity() != self._folder_id:
+                self._debounce.start()
 
     def set_folder(self, folder: Path) -> None:
         """Point the watcher at a new folder and rescan now (Spec 01,
@@ -91,6 +116,15 @@ class LibraryWatcher(QObject):
         return self._library
 
     def refresh(self) -> None:
-        self._library = Library.scan(self._folder)
+        # A Qt timer slot: nothing may escape it, or PyQt aborts the app.
+        self._folder_id = self._identity()
+        try:
+            library = Library.scan(self._folder)
+        except OSError as exc:
+            logger.warning("library rescan failed: %s", exc)
+            self._rebind_watch()
+            self.scan_failed.emit(str(exc))
+            return
+        self._library = library
         self._rebind_watch()  # in case folder was recreated
         self.tracks_changed.emit(self._library)

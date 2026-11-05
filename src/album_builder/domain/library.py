@@ -72,7 +72,8 @@ class Library:
             # scan. Spec 01 TC-01-02 says an unreadable folder yields an empty
             # Library; a single unreadable entry should not be more disruptive
             # than that. PermissionError from Track.from_path's stat() still
-            # propagates - that path is exercised by TC-01-10.
+            # propagates - that path is exercised by TC-01-10. A file that vanished
+            # mid-scan (FileNotFoundError) is skipped below.
             try:
                 if not (entry.is_file() and entry.suffix.lower() in SUPPORTED_EXTENSIONS):
                     continue
@@ -80,6 +81,10 @@ class Library:
                 continue
             try:
                 tracks.append(Track.from_path(entry))
+            except FileNotFoundError:
+                # Deleted or moved between iterdir() and now (a file manager
+                # moving songs while the app is open): it is simply gone.
+                continue
             except mutagen.MutagenError:
                 # Spec 01: malformed audio with no parseable tags is loaded
                 # with placeholders by Track.from_path itself. A bare

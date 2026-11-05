@@ -161,3 +161,59 @@ def test_watcher_survives_folder_deletion_and_recreation(
         # Force the watcher to re-pick the recreated folder
         watcher.refresh()
     assert len(watcher.library().tracks) == 1
+
+
+def _counting_debounce(watcher: LibraryWatcher) -> list[int]:
+    fired = [0]
+    real_start = watcher._debounce.start
+
+    def counting_start(*args, **kwargs):
+        fired[0] += 1
+        return real_start(*args, **kwargs)
+
+    watcher._debounce.start = counting_start  # type: ignore[assignment]
+    return fired
+
+
+# Spec: Spec 01 §Errors (parent watch) - an event on the PARENT folder
+# rescans only when the music folder itself appeared, vanished or was
+# replaced. A file saved directly in the parent (with the default ~/Music,
+# that is $HOME) used to rescan every song (MUSI-0400, review LB4a).
+def test_parent_event_without_folder_change_is_ignored(qapp, tmp_path: Path) -> None:
+    tracks = tmp_path / "Tracks"
+    tracks.mkdir()
+    watcher = LibraryWatcher(tracks)
+    fired = _counting_debounce(watcher)
+
+    (tmp_path / ".bash_history").write_text("x")
+    watcher._on_dir_changed(str(tmp_path))
+    assert fired[0] == 0
+
+    shutil.rmtree(tracks)
+    watcher._on_dir_changed(str(tmp_path))
+    assert fired[0] == 1  # the folder vanished: rescan
+
+    tracks.mkdir()
+    watcher._on_dir_changed(str(tmp_path))
+    assert fired[0] == 2  # and came back: rescan
+
+
+# Spec: TC-01-10 - an unreadable file still propagates out of Library.scan,
+# but a watcher rescan must not let it escape the Qt timer slot (PyQt
+# aborts the app). The previous library stays and scan_failed reports it.
+def test_refresh_survives_unreadable_file(qapp, tmp_path: Path, monkeypatch, qtbot) -> None:
+    from album_builder.domain import library as library_mod
+
+    tracks = tmp_path / "Tracks"
+    tracks.mkdir()
+    watcher = LibraryWatcher(tracks)
+    before = watcher.library()
+
+    def boom(folder):
+        raise PermissionError(13, "Permission denied", str(folder / "a.mp3"))
+
+    monkeypatch.setattr(library_mod.Library, "scan", classmethod(lambda cls, f: boom(f)))
+    with qtbot.waitSignal(watcher.scan_failed, timeout=1000) as sig:
+        watcher.refresh()
+    assert "a.mp3" in sig.args[0]
+    assert watcher.library() is before

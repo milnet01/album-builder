@@ -50,12 +50,12 @@ class Track:
         # still carrying a perfectly good stream length (MUSI-0360).
         duration = float(mf.info.length) if mf is not None and mf.info is not None else 0.0
 
-        id3 = _open_tags(ID3, path)
         tags = mf.tags if mf is not None else None
-        # WAV and AIFF carry ID3 in a chunk, which `ID3(path)` does not reach but
-        # `mutagen.File` does. Same frames either way, so route them to the same reader.
-        if id3 is None and isinstance(tags, ID3):
-            id3 = tags
+        # mutagen.File already parsed an MP3's ID3 (and the ID3 chunk of a WAV
+        # or AIFF, which `ID3(path)` cannot reach): reuse it rather than parse
+        # the file a second time. Other containers still get the `ID3(path)`
+        # probe, which finds a leading ID3v2 header (raw AAC, some FLAC).
+        id3 = tags if isinstance(tags, ID3) else _open_tags(ID3, path)
 
         if id3 is not None:
             title = _text(id3, "TIT2") or path.name

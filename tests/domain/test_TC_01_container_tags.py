@@ -204,3 +204,52 @@ def test_container_replaygain_is_read(tmp_path: Path, ext: str) -> None:
 
     assert track.replaygain_track_gain == pytest.approx(-6.48)
     assert track.replaygain_album_gain == pytest.approx(-8.30)
+
+
+# Spec: TC-01-04 - WAV and AIFF carry ID3 in a chunk that `ID3(path)` does
+# not reach; the title still comes from it (pins the route before the
+# double-parse fix, MUSI-0400 review LB1a).
+@pytest.mark.parametrize("kind", ["wav", "aiff"])
+def test_chunk_id3_title_is_read(tmp_path: Path, kind: str) -> None:
+    import wave
+
+    from mutagen.aiff import AIFF
+    from mutagen.id3 import TIT2
+    from mutagen.wave import WAVE
+
+    wav = tmp_path / "s.wav"
+    with wave.open(str(wav), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(8000)
+        w.writeframes(b"\x00\x00" * 800)
+    if kind == "wav":
+        path, opener = wav, WAVE
+    else:
+        import subprocess
+        path, opener = tmp_path / "s.aiff", AIFF
+        if subprocess.run(["ffmpeg", "-v", "quiet", "-i", str(wav), str(path)]).returncode:
+            pytest.skip("ffmpeg could not write AIFF")
+    f = opener(path)
+    f.add_tags()
+    f.tags.add(TIT2(encoding=3, text="Chunk Title"))
+    f.save()
+    assert Track.from_path(path).title == "Chunk Title"
+
+
+# Spec: TC-01-04 - an MP3's tags are parsed once: mutagen.File already
+# returns its ID3, so no second ID3(path) read (review LB1a).
+def test_mp3_tags_parsed_once(tagged_track, monkeypatch) -> None:
+    from album_builder.domain import track as track_mod
+
+    path = tagged_track("one.mp3")
+    calls = []
+    real = track_mod._open_tags
+
+    def counting(opener, p):
+        calls.append(opener)
+        return real(opener, p)
+
+    monkeypatch.setattr(track_mod, "_open_tags", counting)
+    Track.from_path(path)
+    assert track_mod.ID3 not in calls

@@ -51,10 +51,10 @@ Finding ids are the feedback file's own numbering, prefixed by group.
 
 | finding | verified | disposition | was → now |
 |---|---|---|---|
-| LB1b song vanishing mid-scan / unreadable file escapes a Qt timer slot | yes, `Library.scan` catches only MutagenError; `refresh` uncaught | | |
-| LB4a parent-folder watch rescans on any change in `$HOME` | yes, `_on_dir_changed` | | |
-| LB2a Spec 01 promises a single-file re-parse on replace | yes, `fileChanged` not connected | | |
-| LB1a MP3 tags parsed twice | yes, `track.py` | | |
+| LB1b song vanishing mid-scan / unreadable file escapes a Qt timer slot | yes, `Library.scan` catches only MutagenError; `refresh` uncaught | fixed | scan skips vanished files; watcher keeps the old library and emits `scan_failed`, shown as a translated message; red: FileNotFoundError / AttributeError |
+| LB4a parent-folder watch rescans on any change in `$HOME` | yes, `_on_dir_changed` | fixed | parent event rescans only when the folder's device+inode changed; red: rescan on an unrelated file |
+| LB2a Spec 01 promises a single-file re-parse on replace | yes, `fileChanged` not connected | fixed | Spec 01 row says what happens |
+| LB1a MP3 tags parsed twice | yes, `track.py` | fixed | reuses `mutagen.File`'s ID3; WAV/AIFF chunk tests added first; red: second ID3 open |
 | LB3a set-based `_free_name` | proposed fix overwrites songs on case-insensitive filesystems | dismissed | |
 | LB3b concurrent add-music | already guarded in `main_window` | dismissed | |
 | LB1c, 1d, 2c, 5a, 5c | wrong: mutagen keys; Qt sniffs format; harmless; fresh size is safer; titles never empty | dismissed | |

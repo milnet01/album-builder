@@ -261,3 +261,23 @@ def test_library_scan_includes_tagless_aac(tmp_path: Path) -> None:
     assert track.artist == "Unknown artist"
     assert track.lyrics_text is None
     assert track.cover_data is None
+
+
+# Spec: Spec 01 §Errors (file vanishes mid-scan) - a song deleted or moved
+# between the folder listing and its turn in the scan is skipped, not a
+# FileNotFoundError out of the scan (MUSI-0400, review LB1b).
+def test_library_scan_skips_file_that_vanishes(tmp_path: Path, tagged_track, monkeypatch) -> None:
+    from album_builder.domain.track import Track
+
+    tagged_track("keep.mp3")
+    gone = tagged_track("gone.mp3")
+    real = Track.from_path.__func__
+
+    def vanishing(cls, path, **kw):
+        if Path(path).name == "gone.mp3":
+            gone.unlink(missing_ok=True)
+        return real(cls, path, **kw)
+
+    monkeypatch.setattr(Track, "from_path", classmethod(vanishing))
+    lib = Library.scan(tmp_path)
+    assert [t.path.name for t in lib.tracks] == ["keep.mp3"]

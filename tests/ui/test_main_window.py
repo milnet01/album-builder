@@ -624,3 +624,11 @@ def test_unchanged_target_schedules_nothing(main_window, monkeypatch) -> None:
     monkeypatch.setattr(main_window._store, "schedule_save", saves.append)
     main_window._on_target(a.id, 5)
     assert saves == []
+
+
+# Spec: TC-01-10 - a failed rescan is shown to the user, naming the error.
+def test_library_scan_failure_shows_toast(main_window, monkeypatch) -> None:
+    shown = []
+    monkeypatch.setattr(main_window, "_show_toast", shown.append)
+    main_window._library_watcher.scan_failed.emit("Permission denied: a.mp3")
+    assert len(shown) == 1 and "a.mp3" in shown[0]

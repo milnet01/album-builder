@@ -373,6 +373,12 @@ class MainWindow(QMainWindow):
         self.queue_pane.row_activated.connect(self._controller.jump_to_position)
         for pane in self._library_panes:
             library_watcher.tracks_changed.connect(pane.set_library)
+        # TC-01-10: an unreadable song stops a rescan; say so, naming it.
+        library_watcher.scan_failed.connect(self._on_library_scan_failed)
+        if library_watcher.last_error:
+            QTimer.singleShot(0, lambda e=library_watcher.last_error: (
+                self._on_library_scan_failed(e)
+            ))
         # Spec 17 (Phase D): saved playlists. The store drives both panes; both
         # are seeded once at construction (and the library once, so tracks
         # render with titles before the first rescan). tracks_changed also
@@ -912,6 +918,9 @@ class MainWindow(QMainWindow):
             self._show_toast(tr("Couldn't save language choice: {error}", error=exc))
             return
         self._show_toast(tr("Restart Album Builder to use {language}.", language=name))
+
+    def _on_library_scan_failed(self, error: str) -> None:
+        self._show_toast(tr("Couldn't read your music folder: {error}", error=error))
 
     def _show_toast(self, message: str) -> None:
         """Surface a message via the toast widget. The toast is constructed

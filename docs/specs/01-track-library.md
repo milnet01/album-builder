@@ -89,7 +89,10 @@ What *is* persisted: the `lrc_path` sibling files (see Spec 07) and album JSON f
 | Duplicate file paths | Cannot happen (filesystem invariant). |
 | Two files with identical title+artist | Both shown. Album Builder treats `path` as identity, never `(title, artist)`. |
 | Cover image of non-image mime inside APIC frame (e.g. `application/octet-stream`) | `cover_data` and `cover_mime` are both `None`; the now-playing pane shows the default cover placeholder. Common image mimes (PNG, JPEG, WebP, GIF) all pass through. |
-| File replaced (same name, different content) | `QFileSystemWatcher` emits the change; library re-parses that single file. |
+| File replaced (same name, different content) | Not noticed until the next rescan: an in-place overwrite does not change the folder listing, and the watcher does not watch files (`library_watcher.py`). Changing the folder or restarting rescans it. |
+| File deleted or moved while a scan reads the folder | Skipped: `Library.scan` treats a `FileNotFoundError` from `Track.from_path` as "gone" (MUSI-0400). |
+| A rescan hits a file the OS refuses to read (TC-01-10) | `LibraryWatcher` keeps the previous library and emits `scan_failed`; the window shows a message naming the error. Nothing escapes the timer slot (MUSI-0400). |
+| A change in the music folder's parent (e.g. `$HOME` for `~/Music`) | Rescans only when the music folder itself appeared, vanished or was replaced (its device and inode changed). Other changes there are ignored (MUSI-0400). |
 | File renamed | Treated as remove + add. Albums referencing the old path mark it missing. (Improvement: detect renames by `(file_size, duration, title)` hash — deferred to roadmap.) |
 | Very large library (>500 files) | Acceptable degradation: scan time ~2 s, search remains responsive (in-memory list). Beyond 5000 files we'd need indexing — not v1. |
 | Symlink loop in `Tracks/` (a symlink that points back at its parent or grandparent) | The flat-scan rule (`folder.iterdir()` + filter by suffix) does not recurse, so cyclic links produce at most one file entry; mutagen reads it once. If `iterdir()` itself raises, that is folder-level: the scan returns `Library(tracks=())` per TC-01-02. The library does not crash. |
