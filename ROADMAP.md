@@ -346,7 +346,17 @@ docs/reviews/close-findings-2026-11-05.md.
 
 - 📋 [MUSI-0405] **Check that a left-click on the tray icon hides the window on Windows.**
   Spec 20 hides the window on a tray left-click only when it is "visible and active" (tray.py _toggle_window, isActiveWindow()). On Windows a click in the notification area usually takes focus from the app first, so the window may never count as active and never hide. TC-20-13 mocks isActiveWindow, so the suite cannot show this. Check on the Windows test machine (ssh wintest), then on KDE. Not fixed blind: the obvious fix (ignore activity) changes Spec 20's rule.
-  **Layman:** On Windows, clicking the tray icon may never hide the window; this needs a real Windows check.
+  2026-11-05, Windows confirmed, run with nobody at the PC: the
+  windows.yml build of fe2dba5 on Windows 10, with real mouse clicks
+  (SendInput) from a scheduled task on the signed-in desktop. The
+  icon sat in the hidden-icons pop-up, the Windows default for a new
+  program. Before each click the app was the foreground window. After
+  each of three icon clicks it was visible and in front; it never
+  hid. The click reaches the app: after the ^ arrow click Explorer
+  held the foreground, and the icon click brought the app back. Not
+  tested: an icon pinned to the taskbar. Still open: KDE, and the
+  owner's choice of fix against Spec 20's rule.
+  **Layman:** On Windows, clicking the tray icon never hides the window (checked on the Windows PC); how to fix it is the owner's call.
   Kind: investigate.
   Source: deepseek-review-2026-11-05 (PL38).
 
