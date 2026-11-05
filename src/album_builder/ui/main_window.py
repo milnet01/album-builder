@@ -8,7 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 from uuid import UUID
 
-from PyQt6.QtCore import Qt, QTimer, QUrl
+from PyQt6.QtCore import QEvent, QRect, Qt, QTimer, QUrl
 from PyQt6.QtGui import (
     QAction,
     QActionGroup,
@@ -158,6 +158,10 @@ class MainWindow(QMainWindow):
         project_root: Path,
     ):
         super().__init__()
+        # Spec 26 INV-15: the last two normal (not maximised) geometries; see
+        # _note_normal_geometry.
+        self._normal_geometry: QRect | None = None
+        self._prev_normal_geometry: QRect | None = None
         self._store = store
         self._library_watcher = library_watcher
         self._state = state
@@ -431,10 +435,9 @@ class MainWindow(QMainWindow):
         self._restore_session(state)
         self._wire_session_saves()
         self.tabs.setCurrentWidget(self._tab_by_name[state.last_tab])
-        # Spec 26: the normal geometry to save while maximised when Qt has none
-        # to report (a window maximised from launch, before any un-maximise,
-        # can read back an invalid normalGeometry()).
-        self._launch_geometry = self.geometry()
+        # Spec 26: the launch geometry is the normal one to save if the window
+        # starts maximised and is never un-maximised.
+        self._note_normal_geometry()
         if state.window.maximized:
             self.setWindowState(self.windowState() | Qt.WindowState.WindowMaximized)
 
@@ -1541,7 +1544,43 @@ class MainWindow(QMainWindow):
         # Bottom-of-window banner; sits above the bottom edge.
         if hasattr(self, "_toast"):
             self._toast.setGeometry(20, self.height() - 60, self.width() - 40, 40)
+        self._note_normal_geometry()
         self._state_save_timer.start()
+
+    def changeEvent(self, e) -> None:
+        super().changeEvent(e)
+        if e.type() == QEvent.Type.WindowStateChange:
+            # Un-maximising restores the normal size with no resize event
+            # while the window reads as normal (KDE Wayland).
+            self._note_normal_geometry()
+
+    def _note_normal_geometry(self) -> None:
+        """Remember the window's normal geometry, for Spec 26 INV-15.
+
+        Qt's normalGeometry() is not enough: on KDE Wayland the compositor
+        resizes the window to the maximised size while it still reads as
+        normal, and only then flags it maximised, so normalGeometry()
+        reports the maximised size. Keeping the geometry before the last
+        size change lets _saved_normal_geometry() skip that resize."""
+        if self.windowState() & (
+            Qt.WindowState.WindowMaximized
+            | Qt.WindowState.WindowFullScreen
+            | Qt.WindowState.WindowMinimized
+        ):
+            return
+        geom = self.geometry()
+        if self._normal_geometry is not None and geom.size() != self._normal_geometry.size():
+            self._prev_normal_geometry = self._normal_geometry
+        self._normal_geometry = geom
+
+    def _saved_normal_geometry(self) -> QRect:
+        """The size a maximised window returns to when un-maximised."""
+        geom = self._normal_geometry or self.normalGeometry()
+        if geom.size() == self.size() and self._prev_normal_geometry is not None:
+            # The last "normal" size is the maximised one: the compositor's
+            # resize before the maximised flag. The one before is the real one.
+            geom = self._prev_normal_geometry
+        return geom
 
     def moveEvent(self, e) -> None:
         super().moveEvent(e)
@@ -1625,11 +1664,7 @@ class MainWindow(QMainWindow):
         # Spec 26: a maximised window keeps the size it returns to when
         # un-maximised, not the full-screen size.
         maximized = self.isMaximized()
-        geom = self.geometry()
-        if maximized:
-            geom = self.normalGeometry()
-            if not geom.isValid():
-                geom = self._launch_geometry
+        geom = self._saved_normal_geometry() if maximized else self.geometry()
         self._state.window = WindowState(
             width=geom.width(), height=geom.height(),
             x=geom.x() if maximized else self.x(),

@@ -77,7 +77,7 @@ Three additions, all optional on load:
 
 `position_seconds` belongs to the restored current track. `last_played_track_path` is still written and equals the queue's current entry; when both are present and disagree, the queue wins.
 
-With the window maximised, `window.width/height/x/y` hold `normalGeometry()`, the size it returns to when un-maximised.
+With the window maximised, `window.width/height/x/y` hold the normal geometry, the size it returns to when un-maximised. Qt's `normalGeometry()` cannot supply it on KDE Wayland: KWin resizes the window to the maximised size while it still reads as normal, then flags it maximised. So `MainWindow` keeps its last two normal geometries and skips one equal to the maximised size.
 
 ### 4.2 New surfaces
 
@@ -258,7 +258,7 @@ Each test is seen failing against the code before its change. TC-26-08 is `INTEG
 | INV-12 (TC-26-12) | `tests/ui/test_TC_26_session_restore.py::test_periodic_save` |
 | INV-13 (TC-26-13) | `tests/ui/test_TC_26_session_restore.py::test_end_of_queue_saves_zero` |
 | INV-14 (TC-26-14) | `tests/ui/test_TC_26_session_restore.py::test_last_tab` |
-| INV-15 (TC-26-15) | **Partial:** `tests/ui/test_TC_26_session_restore.py::test_maximized`; the offscreen platform does not maximise like a real window manager, so a check by hand on KDE and Windows is owed |
+| INV-15 (TC-26-15) | **Partial:** `tests/ui/test_TC_26_session_restore.py::test_maximized` and `::test_maximized_by_compositor`; the offscreen platform does not maximise like a real window manager. KDE checked 2026-11-05 in a private `kwin_wayland --virtual` session driven by KWin scripts: maximise, close, relaunch maximised, un-maximise to the saved size. A check on Windows is owed |
 | INV-16 (TC-26-16) | `tests/ui/test_TC_26_session_restore.py::test_modes_shown` |
 | Trust boundary (§5) | TC-26-02's tests, plus Spec 10's TC-10-12 / TC-10-13 tests |
 

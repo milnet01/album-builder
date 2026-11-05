@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 import pytest
+from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QCloseEvent
 
 from album_builder.domain.play_queue import QueueSnapshot, RepeatMode
@@ -234,6 +235,29 @@ def test_maximized(make_window, tmp_path: Path, qtbot) -> None:
     qtbot.waitUntil(lambda: not win.isMaximized(), timeout=2000)
     win._save_state_now()
     assert load_state(tmp_path).window.maximized is False
+
+
+# Spec: TC-26-15
+def test_maximized_by_compositor(make_window, tmp_path: Path, qtbot) -> None:
+    # KDE Wayland (KWin, Plasma 6, checked 2026-11-05): maximising from the
+    # title bar resizes the window to the maximised size while it still reads
+    # as normal, then flags it maximised; normalGeometry() then reports the
+    # maximised size. Replay that order: the size before it must be saved.
+    win = make_window(AppState(window=WindowState(width=700, height=500, x=0, y=60)))
+    win.show()
+    qtbot.waitExposed(win)
+    before = win.size()
+    # The offscreen platform does not resize on maximise, so the test plays
+    # the compositor: a bigger size first, while the window is still normal.
+    maximised = before + QSize(200, 100)
+    win.resize(maximised)
+    qtbot.waitUntil(lambda: win.size() == maximised, timeout=2000)
+    win.setWindowState(win.windowState() | Qt.WindowState.WindowMaximized)
+    qtbot.waitUntil(win.isMaximized, timeout=2000)
+    win._save_state_now()
+    saved = load_state(tmp_path).window
+    assert saved.maximized is True
+    assert (saved.width, saved.height) == (before.width(), before.height())
 
 
 # Spec: TC-26-16
