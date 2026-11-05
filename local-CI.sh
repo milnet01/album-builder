@@ -98,21 +98,27 @@ echo "== pytest (full suite) =="
 # runs green, about 230 MB for all four workers (2026-11-05). Four, not every
 # core, so a push leaves the machine usable; GitHub's runner has 4 too.
 # AB_TEST_WORKERS overrides. Without xdist every test still runs, serially.
-workers=()
+pytest_args=()
 if "$PY" -c "import xdist" 2>/dev/null; then
-    workers=(-n "${AB_TEST_WORKERS:-4}")
+    pytest_args=(-n "${AB_TEST_WORKERS:-4}")
 else
     echo "local-CI: WARNING - pytest-xdist missing, so the suite runs on one"
     echo "local-CI:   core (slower, same tests). It is in requirements-dev.txt."
 fi
+# Test scratch stays in /tmp, which is RAM (tmpfs) here and ext4 on GitHub.
+# tmpfs never reuses a deleted folder's inode and ext4 does, so a test that
+# leaned on that passed here and failed on CI (fixed in 82f17b6). Moving
+# scratch to the checkout's ext4 disk catches that, but measured 2026-11-05
+# it took pytest from 5.5 s to 27 s (a spinning disk, and the app fsyncs
+# every save), so it is not done.
 if command -v dbus-run-session >/dev/null 2>&1; then
     QT_QPA_PLATFORM=offscreen AB_INTEGRATION_DBUS=1 \
-        dbus-run-session -- "$PY" -m pytest "${workers[@]}"
+        dbus-run-session -- "$PY" -m pytest "${pytest_args[@]}"
 else
     echo "local-CI: WARNING - dbus-run-session not found, so the MPRIS"
     echo "local-CI:   wire-signature test will SKIP and the D-Bus type pins"
     echo "local-CI:   go unchecked. Install the dbus package to close this."
-    QT_QPA_PLATFORM=offscreen "$PY" -m pytest "${workers[@]}"
+    QT_QPA_PLATFORM=offscreen "$PY" -m pytest "${pytest_args[@]}"
 fi
 
 echo "== local-CI: PASSED =="
