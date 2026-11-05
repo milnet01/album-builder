@@ -1,10 +1,10 @@
 # 07 — Lyrics Alignment & Display
 
-**Status:** Implemented (Phase 3B + v0.6.1 cache-path amendment) · **Last updated:** 2026-05-18 · **Depends on:** 00, 01, 06, 10, 11
+**Status:** Implemented (Phase 3B + v0.6.1 cache-path amendment + 2026-11-05 word-matching and queue amendment, MUSI-0404) · **Last updated:** 2026-11-05 · **Depends on:** 00, 01, 06, 10, 11
 
 ## Purpose
 
-Show synchronized scrolling lyrics in the now-playing pane. The line being sung is highlighted; passed lines fade; upcoming lines are dimmer. Alignment is generated automatically from the audio + plain `lyrics-eng` tag using local ML (Whisper + wav2vec2 forced alignment), cached as a sidecar `.lrc` file, and re-used for instant playback on subsequent runs.
+Show synchronized scrolling lyrics in the now-playing pane. The line being sung is highlighted; passed lines fade; upcoming lines are dimmer. Alignment is generated automatically from the audio + plain `lyrics-eng` tag using local ML (Whisper + wav2vec2 word timing), cached as a sidecar `.lrc` file, and re-used for instant playback on subsequent runs.
 
 ## User-visible behavior
 
@@ -18,6 +18,7 @@ Show synchronized scrolling lyrics in the now-playing pane. The line being sung 
 - The panel is also scrollable manually if the user wants to read ahead. Auto-scroll resumes the next time the now-line changes.
 - A small status indicator at the top of the panel shows alignment state:
   - `LRC: ✓ ready` — synced playback
+  - `LRC: waiting...` — queued behind another song's alignment
   - `LRC: aligning... 23%` — progress when alignment is running
   - `LRC: not yet aligned` — track has lyrics text but no LRC; clicking "Align now" enqueues alignment
   - `LRC: no lyrics text` — the file has no `lyrics-eng` ID3 tag; the user must add one in their tagging tool of choice (Album Builder is read-only on source audio per Spec 00 non-goals — this spec does **not** read `.txt` sidecars in v1; that was an earlier draft idea, withdrawn)
@@ -26,7 +27,7 @@ Show synchronized scrolling lyrics in the now-playing pane. The line being sung 
 ### Alignment job (background)
 
 - Triggered explicitly: user clicks "Align now" on a track, OR enables "Auto-align on play" in settings (default: off — alignment is opt-in, the user has to click).
-- Runs in a `QThread` worker. Progress updates emitted at the chunk level (Whisper segments through the audio in 30 s windows).
+- Runs in a `QThread` worker. One alignment runs at a time; later requests wait their turn in the order made. Both models are freed when each song ends, so only one song's models are ever in memory. Progress updates emitted at the chunk level (Whisper segments through the audio in 30 s windows).
 - A model is downloaded on first use (~1 GB total: faster-whisper `medium.en` ~770 MB + wav2vec2 alignment model ~360 MB). Before the first download, a one-shot dialog explains size and asks for confirmation. The download happens in the same worker, with progress.
 - Output: an `.lrc` file with the same stem as the audio, written to `Tracks/`.
 
@@ -73,23 +74,29 @@ Show synchronized scrolling lyrics in the now-playing pane. The line being sung 
 ## Lyrics tracker
 
 - Subscribes to `player.position_changed` (Spec 06).
+- When lyrics are set, starts from the player's current position, so lyrics that arrive mid-song mark the right line at once.
 - Maintains a pointer into `Lyrics.lines`. On each tick, advances the pointer to the line whose `time_seconds <= current_time` and the next line's `time_seconds > current_time` (or the last line, if at end).
 - Emits `current_line_changed(index: int)` — the panel re-renders past/now/future styling and scrolls.
 
-## Alignment pipeline (forced alignment, not transcription)
+## Alignment pipeline (word matching)
 
-Why forced alignment instead of free transcription: we already have the lyrics text. The job is to align *known* text to audio, which is a much easier and more accurate task than transcribing.
+WhisperX hears the song and times each word it hears. The user's lyric words are then matched to the heard words (`domain/lyric_timing.py`, `difflib.SequenceMatcher`), and each lyric line starts at its first matched word. Case and punctuation are ignored. A misheard word inside a line does not lose the line. A transcript segment holding two sung lines no longer shifts every later line. (Amended 2026-11-05, MUSI-0404 — previously lyric lines were paired with transcript segments by position.)
 
 ```
-audio (.mpeg) ──┐
-                ├──► faster-whisper transcribe (gets segment-level timing)
-plain text ─────┘                  │
+audio (.mpeg) ──► faster-whisper transcribe (segments)
+                                   │
                                    ▼
-                           wav2vec2 forced alignment (line/word timestamps)
+                  wav2vec2 alignment (a time per heard word)
+                                   │
+plain lyrics text ─────────────────┤
+                                   ▼
+             match lyric words to heard words (lyric_timing)
                                    │
                                    ▼
                           line-level [mm:ss.xx] LRC
 ```
+
+A line none of whose words were heard sits evenly between its timed neighbours. Lines after the last heard word take the latest heard end time. Line times never decrease.
 
 Library: **WhisperX** is the sole alignment backend in v1 — it bundles the forced-alignment phase. Earlier drafts proposed `whisper-timestamped` as a fallback if WhisperX install issues blocked the install; the v0.4.0 implementation shipped WhisperX-only, surfacing an install hint on `ImportError`. The fallback is deferred to roadmap if it becomes necessary.
 
@@ -111,18 +118,18 @@ Sung-vocal accuracy expectation: ~80–90% of lines aligned within ±0.5 s on fi
 | Condition | Behavior |
 |---|---|
 | `lyrics_text` is None or empty | Status `no lyrics text`. Lyrics panel shows helper: "Add lyrics via the `lyrics-eng` ID3 tag in your tagging tool of choice." (No `.txt` sidecar is read in v1.) |
-| Alignment process killed mid-run | No `.lrc` produced; status reverts to `not yet aligned`. Re-running is safe and idempotent. |
+| Alignment process killed mid-run | No `.lrc` produced; status reverts to `not yet aligned`. A result the worker emits after the cancel is ignored. Re-running is safe and idempotent. |
+| No words heard (silence, or instrumental) | Alignment fails with "No singing was heard in this song, so the lyrics could not be timed."; no `.lrc` written; status `alignment failed`. |
 | Whisper model download interrupted (user kills app, network drop) | Resume is owned by the upstream caches: `huggingface_hub` resumes from its `.incomplete` blob on the same `etag` (discarding and restarting if the etag drifted); `torch.hub.download_url_to_file` retries from scratch. Partial-blob disk usage is bounded at the model size by each upstream library; Album Builder does not leak any state of its own. |
 | Whisper model download fails (after retry) | One automatic retry with backoff; on second failure, show error with a "Retry" button. Album Builder is otherwise fully functional. |
-| Existing `.lrc` is malformed | Treat as `not yet aligned`; offer to regenerate. Keep the malformed one as `<stem>.lrc.bak`. |
-| Audio file shorter than expected by lyrics text | Whisper returns whatever it can; trailing lines may have no good timestamp. Mark them at end-of-track. |
+| Existing `.lrc` is malformed | Treat as `not yet aligned`; offer to regenerate. Keep the malformed one as `<stem>.lrc.bak`, moved in one atomic rename (`os.replace`). |
+| Audio file shorter than expected by lyrics text | Whisper returns whatever it can; trailing lines may have no good timestamp. Mark them at the latest heard end time. |
 | Audio shorter than ~2 s | Reject alignment; not enough signal. Show "audio too short to align." |
 | Two tracks playing — stale subscriptions | The tracker is rewired on every track change in `player.set_source()`. |
 
 ## Performance budget
 
-- Cold alignment: ~30 s for a 4 min song on a modern CPU (8 cores). Faster on GPU but we don't require CUDA.
-- Warm alignment (model already loaded): ~10 s for a 4 min song.
+- Alignment: ~30 s for a 4 min song on a modern CPU (8 cores). Faster on GPU but we don't require CUDA. Every alignment loads the models afresh, since they are freed after each song.
 - Reading a cached `.lrc`: <5 ms.
 - Tracker tick cost: O(1) per position update (linear-search on a small `lines` list, with a cached "last index" hint).
 
@@ -130,7 +137,7 @@ Sung-vocal accuracy expectation: ~80–90% of lines aligned within ±0.5 s on fi
 
 Each clause is a testable assertion. Tests must reference its TC ID via a `# Spec: TC-07-NN` marker.
 
-**Phase status — every TC below shipped in v0.4.0 (Phase 3B).** Coverage:
+**Coverage.** TC-07-01 to TC-07-15 shipped in v0.4.0 (Phase 3B); TC-07-18 to TC-07-20 in the 2026-11-05 amendment.
 
 | TC | Test |
 |---|---|
@@ -139,28 +146,31 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
 | TC-07-03 | `tests/domain/test_lyrics.py::test_line_at_boundaries` |
 | TC-07-04 | `tests/services/test_lyrics_tracker.py::test_tracker_cached_hint_skips_search_for_forward_within_line` + `..._backward_seek_resets_hint` |
 | TC-07-05 | `tests/services/test_lyrics_tracker.py::test_tracker_emits_on_line_change_only` |
-| TC-07-06 | `tests/services/test_alignment_status.py::test_status_label_each_state` + `tests/ui/test_lyrics_panel.py::test_status_label_each_state` (status pill cycles `no lyrics text` → `not yet aligned` → `aligning... N%` → `ready` / `failed`) |
+| TC-07-06 | `tests/services/test_alignment_status.py::test_status_label_each_state` (one case per `AlignmentStatus` member) + `tests/ui/test_lyrics_panel.py::test_status_label_each_state` |
 | TC-07-07 | `tests/services/test_alignment_service.py::test_start_alignment_rejects_short_audio` |
-| TC-07-08 | `tests/services/test_alignment_service.py::test_cancel_no_lrc_written` |
+| TC-07-08 | `tests/services/test_alignment_service.py::test_interrupted_worker_writes_no_lrc` + `::test_late_result_after_cancel_is_ignored` + `tests/services/test_alignment_worker.py::test_cancel_during_last_step_writes_no_lrc` |
 | TC-07-09 | deferred — `huggingface_hub` handles partial-download resume at the library level; v0.4.0 does not add a project-side resume layer |
-| TC-07-10 | `tests/persistence/test_lrc_io.py::test_read_lrc_backs_up_malformed_to_bak` |
-| TC-07-11 | `tests/services/test_lyrics_tracker.py::test_tracker_set_lyrics_clears_old_state` + `tests/ui/test_main_window.py::test_main_window_track_switch_clears_old_lyrics` |
+| TC-07-10 | `tests/persistence/test_lrc_io.py::test_read_lrc_backs_up_malformed_to_bak` + `::test_read_lrc_backup_is_one_atomic_rename` |
+| TC-07-11 | `tests/services/test_lyrics_tracker.py::test_tracker_set_lyrics_clears_old_state` + `::test_set_lyrics_starts_at_player_position` + `tests/ui/test_main_window.py::test_main_window_track_switch_clears_old_lyrics` |
 | TC-07-12 | `tests/domain/test_lyrics.py::test_lyrics_frozen_and_hashable` |
 | TC-07-13 | `tests/services/test_alignment_service.py::test_auto_align_on_play_off_by_default` + `tests/ui/test_main_window.py::test_main_window_auto_align_off_by_default_does_not_start_worker` |
 | TC-07-14 | `tests/persistence/test_lrc_io.py::test_is_lrc_fresh_*` + `tests/ui/test_main_window.py::test_main_window_loads_fresh_lrc_on_preview_play` |
 | TC-07-15 | `tests/ui/test_lyrics_panel.py::test_visual_styling_uses_palette_tokens` |
+| TC-07-18 | `tests/domain/test_TC_07_18_lyric_timing.py` + `tests/services/test_alignment_worker.py::test_worker_times_lines_from_heard_words` |
+| TC-07-19 | `tests/domain/test_TC_07_18_lyric_timing.py::test_nothing_heard_raises` + `tests/services/test_alignment_worker.py::test_worker_fails_when_nothing_heard` + `::test_worker_frees_models_after_use` |
+| TC-07-20 | `tests/services/test_alignment_service.py::test_second_alignment_waits_for_the_first` + `::test_cancel_waiting_alignment_drops_it` + `tests/ui/test_main_window.py::test_main_window_shows_waiting_for_a_queued_song` |
 
 - **TC-07-01** — `parse_lrc(text)` returns `Lyrics` with line times in seconds and section markers flagged correctly.
 - **TC-07-02** — `format_lrc(Lyrics)` round-trips to **semantically equivalent** text on a fixture LRC: re-parsing the formatter output reproduces the original `Lyrics.lines` (same `time_seconds` to centisecond precision, same `text`, same `is_section_marker`). Byte-identical equality is intentionally not contracted because the in-memory `Lyrics` does not retain headers (`[ti:..]`/`[ar:..]`/`[al:..]`/`[length:..]`), line-ending style, multi-stamp grouping, or comment lines from the input — those are surface metadata, not part of the playable contract. Headers, when desired, are passed explicitly to `format_lrc(...)` by the caller. *(Indie-review L1-H3 amendment, 2026-04-30.)*
 - **TC-07-03** — `tracker.line_at(t)` returns the correct index for boundary cases: before the first line (`-1`), exactly at a line, between lines, exactly at the last line, after the last line.
 - **TC-07-04** — `tracker` advances monotonically: a position tick that goes backward (seek) re-runs the search; forward ticks use the cached "last index" hint and run in O(1).
 - **TC-07-05** — `current_line_changed(index)` emits exactly when the line crosses; not on every position tick.
-- **TC-07-06** — Status pill cycles correctly across alignment phases: `no lyrics text`, `not yet aligned`, `aligning... N%`, `ready`, `failed`.
+- **TC-07-06** — Status pill cycles correctly across alignment phases: `no lyrics text`, `not yet aligned`, `waiting...`, `aligning... N%`, `ready`, `failed`. Every `AlignmentStatus` member has a label.
 - **TC-07-07** — Audio < 2 s rejects alignment with a clear message; no `.lrc` written; status `audio too short to align`.
-- **TC-07-08** — Alignment process killed mid-run produces no `.lrc`; status reverts to `not yet aligned`; re-running is safe.
+- **TC-07-08** — Alignment process killed mid-run produces no `.lrc`; status reverts to `not yet aligned`; a result emitted after the cancel is ignored; re-running is safe.
 - **TC-07-09** — Whisper model download interruption: partial blob is detected on next launch and resume / discard is correctly chosen based on etag stability.
-- **TC-07-10** — Malformed `.lrc` is moved to `<stem>.lrc.bak` and status is `not yet aligned`; the user is offered "Regenerate."
-- **TC-07-11** — Tracker is rewired on `player.set_source()` — no stale subscriptions across track switches.
+- **TC-07-10** — Malformed `.lrc` is moved to `<stem>.lrc.bak` in one atomic rename and status is `not yet aligned`; the user is offered "Regenerate."
+- **TC-07-11** — Tracker is rewired on `player.set_source()` — no stale subscriptions across track switches. New lyrics start from the player's current position, not 0:00.
 - **TC-07-12** — `Lyrics` dataclass is frozen + hashable (parallel to Phase 1's Library guarantee).
 - **TC-07-13** — Alignment opt-in: with `auto_align_on_play = false` (default), loading a track with `not yet aligned` status does not start an alignment job.
 - **TC-07-14** — `LRC` cache hit: opening a track that already has a fresh `.lrc` (mtime ≥ audio mtime) skips re-alignment and goes straight to `ready`.
@@ -170,6 +180,9 @@ Each clause is a testable assertion. Tests must reference its TC ID via a `# Spe
   (b) `NowPlayingPane` adds the lyrics panel to its `QVBoxLayout` with non-zero stretch and does **not** add a competing `addStretch()` after it, so the lyrics panel absorbs the leftover vertical space.
   (c) Measurable assertion: with a `qtbot.addWidget(now_playing_pane)` + `now_playing_pane.resize(420, 800)` + `qApp.processEvents()`, `lyrics_panel.height()` is at least `300` (i.e. at least 2x the 150 px minimum — the panel actually grew rather than just being allowed to). On the offscreen pytest-qt platform, geometry is finalised after `resize()` + a processed event-loop tick; no `show()` is required for `height()` to return a non-zero value once the layout has run.
 - **TC-07-17** — A missing WhisperX runtime is a signal, not a sentence: `AlignmentWorker` emits `runtime_missing` before `failed`, `AlignmentService` forwards it as `runtime_missing(path)`, and `MainWindow` shows the install dialog from that signal only, once per session. The `failed` message is translated; no code matches its wording. Test: `tests/ui/test_TC_07_17_whisperx_missing_signal.py`.
+- **TC-07-18** — Each lyric line is timed by matching its words to the words WhisperX heard, not by its position among transcript segments. Case and punctuation are ignored. An unheard line sits evenly between its timed neighbours; trailing unheard lines take the latest heard end time; times never decrease.
+- **TC-07-19** — A transcript with no words fails the alignment: `failed` is emitted, no `.lrc` is written, and nothing reports `ready` with every line at 0:00. Both models are freed when the song ends, success or not.
+- **TC-07-20** — One alignment runs at a time. A request made while one runs waits in arrival order, with status `waiting...`. Asking again for a waiting or running song does nothing. Cancelling a waiting song removes it from the queue. The next song starts when the running worker's thread ends. Switching to a song that is waiting shows `waiting...`.
 
 (Slow-integration "real alignment" tests stay opt-in / `@pytest.mark.slow` — they're not part of the default test contract.)
 

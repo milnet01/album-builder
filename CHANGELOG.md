@@ -27,9 +27,27 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Changed
 
+- **Lyrics are aligned one song at a time**
+  Asking to align several songs no longer runs them all at once and uses huge
+  amounts of memory. Songs wait their turn and show "waiting...", and the
+  memory is freed after each song. (MUSI-0404)
+
 - **Files saved in your home folder no longer make the app re-read every song when your music is in ~/Music. Closing the app during a duplicate check is now quick. (MUSI-0400, MUSI-0403)**
 
 ### Fixed
+
+- **Synced lyrics light up at the right moment more often**
+  Each lyric line is now timed by matching its words to the words the app
+  hears in the song. Before, if the singing ran two of your lines together,
+  every later line was shown a line late. (MUSI-0404)
+
+- **A song with no singing no longer claims its lyrics are ready**
+  If no singing is heard, the lyrics panel now says the alignment failed and
+  why, instead of saying "ready" with every line stuck at 0:00. (MUSI-0404)
+
+- **Lyrics that finish aligning mid-song highlight the right line straight away**
+  Before, the highlight jumped to the first line until the song moved on.
+  (MUSI-0404)
 
 - **Renaming an album to a name ending in a date (like "Demo - 2026-11-05") no longer closes the app. You get a clear message instead.** (MUSI-0399)
 

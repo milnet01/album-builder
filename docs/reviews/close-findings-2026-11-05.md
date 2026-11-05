@@ -117,13 +117,13 @@ Finding ids are the feedback file's own numbering, prefixed by group.
 
 | finding | verified | disposition | was → now |
 |---|---|---|---|
-| LY-A1 lines paired with transcript segments by index | yes, `_segments_to_lyrics` | in progress | part 1: `domain/lyric_timing.py` + tests (fe70554), not yet wired; rest listed on MUSI-0404 |
-| LY-B4 no limit on concurrent alignments | yes, per-path dedupe only | | |
-| LY-A3 zero segments still reports READY | yes | | |
-| LY-A4 `set_lyrics` resets position to 0 | yes | | |
-| LY-A6 cancel can be overwritten by a late result | yes; no caller of `cancel` today | | |
-| LY-A8 `.bak` move not atomic | yes, `shutil.move` | | |
-| LY-A10 `status_label` has no fallback; test list hand-written | yes | | |
+| LY-A1 lines paired with transcript segments by index | yes, `_segments_to_lyrics` | fixed | lines timed by matching lyric words to heard words (`domain/lyric_timing.py`, wired into the worker; Spec 07 TC-07-18); red: merged segment shifted line 2 |
+| LY-B4 no limit on concurrent alignments | yes, per-path dedupe only | fixed | one at a time, FIFO queue, status `waiting...`; models freed after each song (TC-07-19/20); red: second song started at once, models outlived the run |
+| LY-A3 zero segments still reports READY | yes | fixed | nothing heard → `failed`, no `.lrc` (TC-07-19); red: READY with lines at 0:00 |
+| LY-A4 `set_lyrics` resets position to 0 | yes | fixed | seeds from `player.position()` (TC-07-11); red: line 0 at 7 s |
+| LY-A6 cancel can be overwritten by a late result | yes; no caller of `cancel` today | fixed | worker checks interruption before `write_lrc`; service drops signals from a cancelled worker (TC-07-08); red: late `lyrics_ready`, `.lrc` written |
+| LY-A8 `.bak` move not atomic | yes, `shutil.move` | fixed | `os.replace` (TC-07-10); red: no `os.replace` call |
+| LY-A10 `status_label` has no fallback; test list hand-written | yes | fixed | `case _` fallback; test parametrised from `list(AlignmentStatus)`; no red run: no unlabelled state exists |
 | LY-B5 model reloaded per song | owner chose free-after-each (RAM) | dismissed | |
 | LY-A9 seconds ≥ 60 accepted | hand-edit only; no crash, stays monotonic | dismissed | |
 | LY-A2, A5, A7, B3, D2 | wrong | dismissed | |
@@ -134,8 +134,8 @@ Finding ids are the feedback file's own numbering, prefixed by group.
 ## Run-level
 
 - cited_by:
-- swept: per-group full pytest + ruff; specs 01, 10, 11, 15, 17, 20 amended where fixes changed them; LY group not yet swept.
-- collateral:
+- swept: per-group full pytest + ruff; specs 01, 07, 10, 11, 15, 17, 20 amended where fixes changed them.
+- collateral: LY-B4's queue made a stale pill common, so switching to a waiting or aligning song now shows that state (`AlignmentService.live_status`); Spec 07's TC-07-08 row named a test that did not exist, now the real ones.
 - surfaced:
 - out_of_scope:
 - falsified:

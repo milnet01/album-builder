@@ -313,7 +313,7 @@ docs/reviews/close-findings-2026-11-05.md.
   Kind: review-fix.
   Source: deepseek-review-2026-11-05.
 
-- 🚧 [MUSI-0404] **Lyrics: timing matches your lyric words to the words heard; one alignment at a time.**
+- ✅ [MUSI-0404] **Lyrics: timing matches your lyric words to the words heard; one alignment at a time.**
   Group LY in the ledger: LY-A1 and LY-B4 (Spec 07 amendments), A3, A4, A6, A8, A10.
   2026-11-05 part 1 done (fe70554): domain/lyric_timing.py (heard_words,
   line_start_times, NothingHeard) +
@@ -334,6 +334,12 @@ docs/reviews/close-findings-2026-11-05.md.
   shutil.move. (6) Amend Spec 07: pipeline text (word matching), new
   TC-07-18/19 (written into the tests already) and TC-07-20 (queue),
   status list. New UI strings need all seven catalogs.
+  2026-11-05 done: worker times lines with lyric_timing, nothing heard -> failed,
+  models freed after each song; one-at-a-time FIFO queue with QUEUED
+  "waiting..." (also shown when switching to a waiting song, via
+  AlignmentService.live_status); tracker seeds from player.position();
+  cancel race closed in worker and service; .lrc.bak via os.replace;
+  Spec 07 amended (TC-07-18/19/20). Ledger LY rows filled.
   **Layman:** Lyric lines now light up at the right moment even when the singing does not split the way your lines do, and aligning several songs no longer uses huge amounts of memory.
   Kind: review-fix.
   Source: deepseek-review-2026-11-05.
