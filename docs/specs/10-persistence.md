@@ -162,7 +162,7 @@ Every JSON file in the app obeys these rules. Other specs MUST NOT contradict th
 ### Paths
 
 - `track_paths`, `last_played_track_path`, `cover_override`, `tracks_folder`, `albums_folder` etc. are **absolute POSIX-style strings** when on disk.
-- On load, non-absolute paths are rejected with a self-heal warning: bump the field to its absolute form via `Path(p).resolve()` and write back.
+- On load, non-absolute paths are rejected with a self-heal warning: bump the field to its absolute form via `Path(p).absolute()` (not `resolve()`, which would follow symlinks) and write back.
 - Symlinks are not resolved on save (the user's path is the user's path); only relativeness is normalised.
 
 ### JSON formatting

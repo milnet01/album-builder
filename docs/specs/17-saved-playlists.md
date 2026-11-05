@@ -170,7 +170,7 @@ No Qt import. This object does no I/O and does not consult the `Library`
 ### `persistence/playlist_io.py`
 
 Mirrors `state_io.py` (module-level `CURRENT_SCHEMA_VERSION` + empty `MIGRATIONS`,
-calling `schema.migrate_forward` and the `_write_migration_bak` scaffold -
+calling `schema.migrate_forward` and the `write_migration_bak` scaffold -
 `migrate_forward` lives in `schema.py`, which `state_io` likewise imports), keyed
 to the `.album-builder/` dir it imports from `state_io`:
 
@@ -183,7 +183,7 @@ to the `.album-builder/` dir it imports from `state_io`:
 - `load_playlists(project_root: Path) -> list[Playlist]` - returns `[]` when the
   file is absent (a fresh project has no playlists). Otherwise parses, runs
   `schema.migrate_forward(data, current=CURRENT_SCHEMA_VERSION,
-  migrations=MIGRATIONS)`, writes a `.v<old>.bak` via the `_write_migration_bak`
+  migrations=MIGRATIONS)`, writes a `.v<old>.bak` via the `write_migration_bak`
   scaffold when a migration bumped the version, and builds `Playlist` objects
   healing each path relative->absolute (`Path(s)` then `p if p.is_absolute() else
   p.absolute()`), exactly like `album_io`. On a corrupt / unreadable file
@@ -202,7 +202,8 @@ to the `.album-builder/` dir it imports from `state_io`:
   raise-not-reset posture of `album_io.load_album` - except `album_io` wraps these
   in `AlbumDirCorrupt` whereas `load_playlists` propagates the raw types. Playlists
   are user data, so a silent reset would be data loss. Only the `migrate_forward` +
-  `_write_migration_bak` scaffold is shared with `state_io`.
+  `write_migration_bak` scaffold (both in `persistence/schema.py`) is shared
+  with `state_io` and `album_io`.
 - `save_playlists(project_root: Path, playlists: list[Playlist]) -> None` -
   serialises `{"schema_version": CURRENT_SCHEMA_VERSION, "playlists": [{"id",
   "name", "track_paths": [str(p) for p in pl.track_paths]}, ...]}` with
@@ -431,12 +432,10 @@ modal loop):
   `DebouncedWriter` keyed `"playlists"` (250 ms idle, last-writer-wins), so a
   burst of edits collapses to one write.
 - `schema_version` = 1; `MIGRATIONS` empty. The `migrate_forward` +
-  `_write_migration_bak` scaffold gives a future schema change a ready migration +
+  `write_migration_bak` scaffold gives a future schema change a ready migration +
   backup path (a v1->v2 bump would write `playlists.json.v1.bak` before rewriting).
-  Since `_write_migration_bak` is now byte-identical in `state_io` and `album_io`,
-  this third call-site is the Rule-of-Three trigger: **extract a shared
-  `_write_migration_bak`** (e.g. into `persistence/schema.py`) and call it from all
-  three, rather than copy it again. The whole migration/`.bak` path is **dormant
+  The writer is `schema.write_migration_bak`, shared by `album_io`,
+  `state_io` and `playlist_io` (extracted 2026-11-05, MUSI-0398). The whole migration/`.bak` path is **dormant
   until a v2 schema lands** - scaffold-only at v1, and carries no TC by design
   (matching the project's latent-until-v2 posture).
 - Absent file -> empty catalogue (no error). On a corrupt file, or one whose
@@ -451,7 +450,7 @@ modal loop):
   writing, and sets `self.load_failed = True` (a clean or absent file leaves it
   `False`). The unreadable file is **never silently destroyed**: while `load_failed`
   is `True`, the first save renames the existing file to `playlists.json.corrupt.bak`
-  (best-effort, mirroring the `_write_migration_bak` posture) *before* writing the
+  (best-effort, mirroring the `write_migration_bak` posture) *before* writing the
   new catalogue, so a hand-fixable original is always recoverable. Right after
   constructing the store, `MainWindow` checks `store.load_failed` and, if set, shows
   a `Toast` warning the file was unreadable and kept as `.corrupt.bak` - that flag is

@@ -11,8 +11,11 @@ rather than a silent overwrite.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable, Mapping
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class SchemaTooNewError(Exception):
@@ -47,6 +50,12 @@ def migrate_forward(
     current: int,
     migrations: Mapping[int, Migration],
 ) -> dict:
+    if not isinstance(data, dict):
+        # Valid JSON that is not an object (a hand edit, odd corruption):
+        # every caller treats this as an unreadable file, not a crash.
+        raise UnreadableSchemaError(
+            f"top-level value must be an object, got {type(data).__name__}"
+        )
     raw = data.get("schema_version")
     if not isinstance(raw, int):
         raise UnreadableSchemaError(
@@ -66,3 +75,14 @@ def migrate_forward(
                 f"migration v{v} -> v{v + 1} did not bump schema_version correctly"
             )
     return data
+
+
+def write_migration_bak(path: Path, original_bytes: bytes, from_version: int) -> None:
+    """Persist `<path>.v<from_version>.bak` with the pre-migration bytes
+    (Spec 10 §79). On failure, log + continue — the rewrite of the migrated
+    form is independent and must not be blocked by a missed backup."""
+    bak = path.parent / f"{path.name}.v{from_version}.bak"
+    try:
+        bak.write_bytes(original_bytes)
+    except OSError as exc:
+        logger.warning("failed to write migration backup %s: %s", bak, exc)

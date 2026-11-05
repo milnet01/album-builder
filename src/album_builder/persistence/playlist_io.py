@@ -16,13 +16,14 @@ from pathlib import Path
 
 from album_builder.domain.playlist import Playlist
 from album_builder.persistence.atomic_io import atomic_write_text
-from album_builder.persistence.schema import UnreadableSchemaError, migrate_forward
+from album_builder.persistence.schema import (
+    UnreadableSchemaError,
+    migrate_forward,
+    write_migration_bak,
+)
 
-# Reuse state_io's `.album-builder/` dir constant and the migration-backup
-# writer rather than re-literal / re-copy them (Rule of Three - Spec 17 notes a
-# future extraction of `_write_migration_bak` into a shared home; the path is
-# dormant until a v2 schema lands, so the reuse-by-import suffices for now).
-from album_builder.persistence.state_io import STATE_DIR, _write_migration_bak
+# Reuse state_io's `.album-builder/` dir constant rather than re-literal it.
+from album_builder.persistence.state_io import STATE_DIR
 
 CURRENT_SCHEMA_VERSION = 1
 PLAYLISTS_FILE = "playlists.json"
@@ -52,14 +53,10 @@ def load_playlists(project_root: Path) -> list[Playlist]:
         return []
     raw_bytes = path.read_bytes()
     raw = json.loads(raw_bytes.decode("utf-8"))
-    if not isinstance(raw, dict):
-        # migrate_forward calls raw.get(...) and would AttributeError on a
-        # top-level list/scalar; guard it here (state_io/album_io do not).
-        raise UnreadableSchemaError("playlists.json: top-level value is not an object")
-    from_version = raw.get("schema_version")
+    from_version = raw.get("schema_version") if isinstance(raw, dict) else None
     data = migrate_forward(raw, current=CURRENT_SCHEMA_VERSION, migrations=MIGRATIONS)
     if isinstance(from_version, int) and data.get("schema_version") != from_version:
-        _write_migration_bak(path, raw_bytes, from_version)
+        write_migration_bak(path, raw_bytes, from_version)
 
     playlists: list[Playlist] = []
     try:

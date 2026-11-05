@@ -438,3 +438,33 @@ def test_save_album_for_unapprove_deletes_marker_before_json(
     album_io.save_album_for_unapprove(folder, a)
     assert order == ["marker_deleted", "json"], order
     assert not (folder / ".approved").exists()
+
+
+# Spec: TC-10-12 - valid JSON that is not an object is a corrupt album,
+# not an AttributeError escaping the loader.
+@pytest.mark.parametrize("payload", ["[]", "null", "42"])
+def test_load_non_object_json_raises_albumdircorrupt(tmp_path: Path, payload: str) -> None:
+    folder = tmp_path / "x"
+    folder.mkdir()
+    folder.joinpath("album.json").write_text(payload)
+    with pytest.raises(AlbumDirCorrupt):
+        load_album(folder)
+
+
+# Spec: TC-02-13 - the approve/unapprove preconditions raise rather than
+# assert, so they still hold under `python -O` (the MUSI-0073 rule).
+def test_approve_unapprove_preconditions_raise(tmp_path: Path) -> None:
+    from album_builder.persistence import album_io
+
+    folder = tmp_path / "x"
+    folder.mkdir()
+    a = Album.create(name="X", target_count=3)
+    with pytest.raises(RuntimeError, match="approved"):
+        album_io.save_album_for_approve(folder, a)
+    a.status = AlbumStatus.APPROVED
+    with pytest.raises(RuntimeError, match="draft"):
+        album_io.save_album_for_unapprove(folder, a)
+    a.status = AlbumStatus.DRAFT
+    (folder / "reports").mkdir()
+    with pytest.raises(RuntimeError, match="reports"):
+        album_io.save_album_for_unapprove(folder, a)

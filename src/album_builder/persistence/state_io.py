@@ -23,6 +23,7 @@ from album_builder.persistence.schema import (
     SchemaTooNewError,
     UnreadableSchemaError,
     migrate_forward,
+    write_migration_bak,
     written_by_newer,
 )
 
@@ -188,9 +189,10 @@ def _coerce_queue(
     if not valid:
         logger.warning("state.json: playback.queue=%r invalid; discarding the queue", value)
         return empty
-    # Spec 10 §Paths: a relative path self-heals to its absolute form.
+    # Spec 10 §Paths: a relative path self-heals to its absolute form via
+    # absolute(), not resolve(), so a user's symlink survives (as album_io).
     paths = tuple(
-        p if p.is_absolute() else p.resolve() for p in (Path(e) for e in entries)
+        p if p.is_absolute() else p.absolute() for p in (Path(e) for e in entries)
     )
     return QueueSnapshot(paths, tuple(order), current, shuffle=shuffle, repeat=repeat)
 
@@ -245,8 +247,9 @@ def load_state(project_root: Path) -> AppState:
         # will not overwrite it either.
         logger.warning("%s: %s; using defaults and leaving the file alone", path, exc)
         return AppState()
-    except (json.JSONDecodeError, OSError, UnreadableSchemaError) as exc:
-        # Spec 10 TC-10-12: corrupt state.json -> defaults + REWRITE so the
+    except (ValueError, OSError, UnreadableSchemaError) as exc:
+        # ValueError covers JSONDecodeError and a non-UTF-8 file's
+        # UnicodeDecodeError. Spec 10 TC-10-12: corrupt state.json -> defaults + REWRITE so the
         # next reader sees consistent state, even if the user closes the app
         # without further mutation.
         logger.warning("%s: unreadable (%s); falling back to defaults + rewriting", path, exc)
@@ -256,10 +259,6 @@ def load_state(project_root: Path) -> AppState:
         except OSError as save_exc:
             logger.warning("%s: failed to rewrite defaults (%s)", path, save_exc)
         return defaults
-
-    if not isinstance(data, dict):
-        logger.warning("%s: top-level value is not an object; defaulting", path)
-        return AppState()
 
     playback, position = _coerce_playback(data.get("playback"))
     state = AppState(
@@ -278,24 +277,13 @@ def load_state(project_root: Path) -> AppState:
         isinstance(from_version, int)
         and data.get("schema_version") != from_version
     ):
-        _write_migration_bak(path, raw_bytes, from_version)
+        write_migration_bak(path, raw_bytes, from_version)
         try:
             save_state(project_root, state)
         except OSError as exc:
             logger.warning("%s: failed to rewrite migrated state (%s)", path, exc)
 
     return state
-
-
-def _write_migration_bak(path: Path, original_bytes: bytes, from_version: int) -> None:
-    """Persist `<path>.v<from_version>.bak` with the pre-migration bytes
-    (Spec 10 §79). On failure, log + continue — the rewrite of the migrated
-    form is independent and must not be blocked by a missed backup."""
-    bak = path.parent / f"{path.name}.v{from_version}.bak"
-    try:
-        bak.write_bytes(original_bytes)
-    except OSError as exc:
-        logger.warning("failed to write migration backup %s: %s", bak, exc)
 
 
 def save_state(project_root: Path, state: AppState) -> None:

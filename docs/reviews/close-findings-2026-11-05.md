@@ -18,12 +18,12 @@ Finding ids are the feedback file's own numbering, prefixed by group.
 
 | finding | verified | disposition | was → now |
 |---|---|---|---|
-| SD1 `migrate_forward` crashes on a non-object file | yes, ran `load_state` on `[]`: AttributeError | | |
-| SD2 `assert` in `save_album_for_*` vanishes under `-O` | yes, `album_io.py` | | |
-| SD3 `tmps_swept` docstring disagrees with code | yes, `atomic_pair.py` | | |
-| SD6 `state_io` `resolve()` vs `album_io` `absolute()`; Spec 10 contradicts itself | yes | | |
-| SD7 `SETTINGS_MIGRATIONS` untyped | yes | | |
-| SD16 `_write_migration_bak` duplicated | yes, `album_io` + `state_io` | | |
+| SD1 `migrate_forward` crashes on a non-object file | yes, ran `load_state` on `[]`: AttributeError | fixed | crash → `UnreadableSchemaError` in the shared runner; state loader also catches non-UTF-8 bytes; red run AttributeError |
+| SD2 `assert` in `save_album_for_*` vanishes under `-O` | yes, `album_io.py` | fixed | assert → RuntimeError; red run: no raise |
+| SD3 `tmps_swept` docstring disagrees with code | yes, `atomic_pair.py` | fixed | docstring says per stem, both branches; no red run: nothing observable changes |
+| SD6 `state_io` `resolve()` vs `album_io` `absolute()`; Spec 10 contradicts itself | yes | fixed | Spec 10 §Paths says `absolute()`; `state_io` uses it |
+| SD7 `SETTINGS_MIGRATIONS` untyped | yes | fixed | `dict[int, Migration]`; no red run: typing only |
+| SD16 `_write_migration_bak` duplicated | yes, `album_io` + `state_io` | fixed | one `schema.write_migration_bak` for three loaders; Spec 17 updated |
 | SD4, SD5, SD18, SD20 | no — frozen dataclass; slug of "Live (2)" is `live-2`; hex chunk is accurate; non-trailing Z already invalid | dismissed | |
 | SD8–15, SD19 | taste: different data kinds, one read per action, tiny loops, documented | dismissed | |
 | SD17 BOM | already handled: `json.loads` rejects a BOM string | dismissed | |

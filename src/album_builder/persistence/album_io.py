@@ -17,6 +17,7 @@ from album_builder.persistence.schema import (
     SchemaTooNewError,
     UnreadableSchemaError,
     migrate_forward,
+    write_migration_bak,
 )
 
 CURRENT_SCHEMA_VERSION = 1
@@ -184,7 +185,8 @@ def save_album_for_approve(folder: Path, album: Album) -> None:
     """Approve transition: marker BEFORE status flip on disk (Spec 09
     canonical sequence steps 4 -> 5). Caller has already set
     album.status = APPROVED in memory."""
-    assert album.status == AlbumStatus.APPROVED, "caller must flip status first"
+    if album.status != AlbumStatus.APPROVED:
+        raise RuntimeError("caller must flip status to approved first")
     (folder / APPROVED_MARKER).touch(exist_ok=True)   # step 4
     _write_album_json(folder, album)                  # step 5
 
@@ -199,30 +201,22 @@ def save_album_for_unapprove(folder: Path, album: Album) -> None:
     PRECONDITION: any `reports/` directory inside `folder` MUST already
     have been deleted by the caller (Spec 02 §unapprove step 1, Phase 4
     backfill). Phase 2 ships without the export pipeline so reports/ won't
-    exist; the assert below catches the mistake when Phase 4 lands and a
-    caller forgets the reports cleanup. If reports/ is present, raising
+    exist; the check below catches the mistake when Phase 4 lands and a
+    caller forgets the reports cleanup. Both checks raise rather than
+    `assert`, which `python -O` strips (the MUSI-0073 rule). If reports/ is present, raising
     here is correct: it would otherwise leave the user with `status=draft`
     + `reports/` present, which Spec 02 calls "recoverable but messy"."""
-    assert album.status == AlbumStatus.DRAFT, "caller must flip status first"
+    if album.status != AlbumStatus.DRAFT:
+        raise RuntimeError("caller must flip status to draft first")
     reports_dir = folder / "reports"
-    assert not reports_dir.exists(), (
-        f"caller must delete {reports_dir} before unapprove (Spec 02 §unapprove)"
-    )
+    if reports_dir.exists():
+        raise RuntimeError(
+            f"caller must delete {reports_dir} before unapprove (Spec 02 §unapprove)"
+        )
     marker = folder / APPROVED_MARKER
     if marker.exists():
         marker.unlink()                               # step 2 (after Phase-4 reports/ delete)
     _write_album_json(folder, album)                  # step 3
-
-
-def _write_migration_bak(path: Path, original_bytes: bytes, from_version: int) -> None:
-    """Persist `<path>.v<from_version>.bak` with the pre-migration bytes
-    (Spec 10 §79). On failure, log + continue — the rewrite of the migrated
-    form is independent and must not be blocked by a missed backup."""
-    bak = path.parent / f"{path.name}.v{from_version}.bak"
-    try:
-        bak.write_bytes(original_bytes)
-    except OSError as exc:
-        logger.warning("failed to write migration backup %s: %s", bak, exc)
 
 
 def load_album(folder: Path) -> Album:
@@ -261,7 +255,7 @@ def load_album(folder: Path) -> Album:
         and data.get("schema_version") != from_version
     )
     if migrated:
-        _write_migration_bak(path, raw_bytes, from_version)
+        write_migration_bak(path, raw_bytes, from_version)
 
     # Self-heal: relative paths normalised + target_count bumped if needed
     # (TC-10-09 + TC-04-09). _deserialize already applied the heal to the

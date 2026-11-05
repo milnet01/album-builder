@@ -156,3 +156,14 @@ def test_state_migration_preserves_bak_with_original_bytes(
     bak = state_dir / "state.json.v0.bak"
     assert bak.exists(), f"expected {bak} to be written before migrated rewrite"
     assert bak.read_bytes() == original_bytes
+
+
+# Spec: TC-10-12 - a state.json holding valid JSON that is not an object
+# (hand edit, odd corruption), or bytes that are not UTF-8, falls back to
+# defaults instead of crashing the loader, which would stop the app
+# starting on every launch.
+def test_non_object_state_falls_back_to_defaults(tmp_path: Path) -> None:
+    for payload in (b"[]", b"null", b"42", b'"text"', b"\xff\xfe{}"):
+        (tmp_path / ".album-builder").mkdir(exist_ok=True)
+        (tmp_path / ".album-builder" / "state.json").write_bytes(payload)
+        assert load_state(tmp_path) == AppState()

@@ -13,6 +13,7 @@ import platformdirs
 from album_builder.i18n import SUPPORTED
 from album_builder.persistence.atomic_io import atomic_write_text
 from album_builder.persistence.schema import (
+    Migration,
     SchemaTooNewError,
     UnreadableSchemaError,
     migrate_forward,
@@ -27,7 +28,7 @@ SETTINGS_SCHEMA_VERSION = 1
 hand-rolled file without ``schema_version`` self-heals on the next save and
 the migration runner has an unambiguous starting point when v2 lands."""
 
-SETTINGS_MIGRATIONS: dict = {}
+SETTINGS_MIGRATIONS: dict[int, Migration] = {}
 """``from_version -> fn(dict) -> dict`` for persistence.schema.migrate_forward.
 Empty until settings v2."""
 

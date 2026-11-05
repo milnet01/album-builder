@@ -117,8 +117,10 @@ def scan_reports_dir(reports_dir: Path, *, sanitised_name: str) -> dict[str, int
         removed AND every related `.tmp` was successfully unlinked. A
         partial cleanup (one of the unlinks raised) does NOT count as
         repaired - the next scan retries.
-      - `tmps_swept`: count of `.tmp` files removed where no final yet
-        existed for that date stem AND every unlink succeeded.
+      - `tmps_swept`: count of date stems whose stale `.tmp` files were
+        all removed - one per stem, not per file. Counts both a stem with
+        no final yet and a complete pair with leftover tmps (which also
+        counts in `pairs_completed`).
 
     Empty `sanitised_name` is rejected (would collapse the regex/glob
     prefix and false-match every file).
