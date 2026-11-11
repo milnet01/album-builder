@@ -136,6 +136,20 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   translation tool (free models, back-translation, escalation) rather
   than run the remaining DeepSeek/Gemini passes by hand. Answers on
   this project's format and checks sent to claude-config (msg 1558).
+  2026-11-11: es/fr/pt/af/ar/he checked with the shared
+  ~/.claude/tools/translate-review (free models, back-translation).
+  Each doubt judged against its call site. Applied 4: es Used-column
+  screen-reader name says "count" (6af7237); pt toast name
+  Notificação, not Aviso (b82d2f1); af "Now playing" Speel tans, not
+  the command Speel nou (07d20e4); ar Used header no longer reads as
+  "User" (a46d0b1). fr and he: no change. Rejected: rewordings, and
+  Hebrew levelling fixes (the proposed text was ungrammatical; each
+  catalog names levelling consistently, with the menu entry spelling
+  out volume levelling). The optional Gemini/DeepSeek second opinion
+  (chrome.txt) was not run. Scratch moved to
+  /mnt/Emulators/.claude/Scratchpad/Album_Builder/album-gemini/;
+  pogem.py is now under Scratchpad/demoreel/demoreel-gemini/.
+  Native-speaker check still owed.
   **Layman:** Have a fluent speaker of each language check the app's wording.
   Kind: doc.
   Source: in-session-2026-09-28.

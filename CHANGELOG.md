@@ -36,6 +36,13 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Fixed
 
+- **Clearer wording in Spanish, Portuguese, Afrikaans and Arabic** (MUSI-0369)
+  Four small fixes. In Afrikaans, the "Now playing" heading no longer
+  reads like the command "play now". In Arabic, the "Used" column
+  header no longer reads as "User". Screen readers now announce
+  pop-up messages in Portuguese as notifications, not warnings. In
+  Spanish they say that the Used column is a count.
+
 - **On Windows, clicking the tray icon now hides the window again** (MUSI-0405)
   Before, a click on the tray icon only ever brought the window forward on
   Windows, because the click itself pulled focus away from the app. Now, if
