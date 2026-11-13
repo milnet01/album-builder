@@ -12,10 +12,16 @@
       "path": "pyproject.toml",
       "pattern": "version = \"{OLD}\"",
       "replace": "version = \"{NEW}\""
+    },
+    {
+      "path": "packaging/obs/album-builder.spec",
+      "pattern": "Version:        {OLD}",
+      "replace": "Version:        {NEW}"
     }
   ],
-  "post_check": "test \"$(sed -n 's/^__version__ = \"\\(.*\\)\"/\\1/p' src/album_builder/version.py)\" = \"$(sed -n 's/^version = \"\\(.*\\)\"/\\1/p' pyproject.toml)\" && echo version-lockstep-ok",
+  "post_check": "test \"$(sed -n 's/^__version__ = \"\\(.*\\)\"/\\1/p' src/album_builder/version.py)\" = \"$(sed -n 's/^version = \"\\(.*\\)\"/\\1/p' pyproject.toml)\" && .venv/bin/pytest -q tests/packaging/test_TC_27_packaging.py -k 'versions_agree or metainfo' && echo version-lockstep-ok",
   "todos": [
-    "Update the README ## Status banner to lead with v{NEW} and its headline (dated {TODAY})"
+    "Update the README ## Status banner to lead with v{NEW} and its headline (dated {TODAY})",
+    "Add a <release version=\"{NEW}\" date=\"{TODAY}\"> block at the top of <releases> in packaging/linux/io.github.milnet01.AlbumBuilder.metainfo.xml, its text taken from the CHANGELOG section for {NEW} (changelog-writer mode A)"
   ]
 }
