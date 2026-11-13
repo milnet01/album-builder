@@ -15,11 +15,12 @@ right.](docs/screenshots/album-builder-curate.png)
 
 ## Status
 
-**v1.0.0 (2026-11-04): every sign of success proven.** You can
-now undo removing a song with Ctrl+Z, the tick column for adding
-songs sits right next to the play button, and printed album
-reports come out on white paper with their bold title intact.
-The 0.9 releases brought finding songs you have twice
+**v1.1.0 (2026-11-13): the player picks up where you left off.**
+Close the app and open it again, and your song, your place in it
+and the play queue are back. Ctrl+F jumps to the search box, and
+synced lyrics light up at the right moment more often.
+Version 1.0.0 added undoing a removed song with Ctrl+Z and
+printed album reports on white paper. The 0.9 releases brought finding songs you have twice
 (File → Find Duplicates...); adding music by dragging songs
 onto the window or with File → Add Music...; more
 languages, including Arabic and Hebrew, which mirror the

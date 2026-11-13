@@ -8,16 +8,20 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-13
+
+**Theme:** The player picks up where you left off
+
 ### Added
 
 - **Songs in the current album show a purple strip down the left of the library; songs whose file is missing show an orange one.** (MUSI-0403)
 
-- **Press Ctrl+F to search your music** (MUSI-0356)
+- **Press Ctrl+F to search your music** (part of MUSI-0356)
   Ctrl+F puts the cursor in the search box of the tab you are on, with
   the old search selected, so you can type a new one straight away.
   F1 lists it with the other shortcuts.
 
-- **The player picks up where you left off** (MUSI-0356)
+- **The player picks up where you left off** (part of MUSI-0356)
   Close Album Builder and open it again, and your song is back at the
   spot where you stopped. It waits for you to press play. The play
   queue comes back in the same order, so Next and Previous carry on
@@ -36,7 +40,7 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Fixed
 
-- **Clearer wording in Spanish, Portuguese, Afrikaans and Arabic** (MUSI-0369)
+- **Clearer wording in Spanish, Portuguese, Afrikaans and Arabic** (part of MUSI-0369)
   Four small fixes. In Afrikaans, the "Now playing" heading no longer
   reads like the command "play now". In Arabic, the "Used" column
   header no longer reads as "User". Screen readers now announce

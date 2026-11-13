@@ -40,6 +40,14 @@
     <category>Audio</category>
   </categories>
   <releases>
+    <release version="1.1.0" date="2026-11-13">
+      <description>
+        <p>The player picks up where you left off: reopen the app and your
+        song, your place in it and the play queue are back. Press Ctrl+F to
+        search your music. Synced lyrics light up at the right moment more
+        often, and several faults that could close the app are fixed.</p>
+      </description>
+    </release>
     <release version="1.0.0" date="2026-11-04">
       <description>
         <p>You can undo removing a song from an album with Ctrl+Z. Album
