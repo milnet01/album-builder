@@ -150,6 +150,9 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   /mnt/Emulators/.claude/Scratchpad/Album_Builder/album-gemini/;
   pogem.py is now under Scratchpad/demoreel/demoreel-gemini/.
   Native-speaker check still owed.
+  2026-11-13, owner: Afrikaans "gelykmaking" stays as the word for
+  levelling. The Arabic suggestions for "Levelling reference" and
+  "symlink folder" are not applied; they wait for the native speaker.
   **Layman:** Have a fluent speaker of each language check the app's wording.
   Kind: doc.
   Source: in-session-2026-09-28.
