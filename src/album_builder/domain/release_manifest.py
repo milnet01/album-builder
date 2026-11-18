@@ -28,12 +28,15 @@ from cryptography.hazmat.primitives.serialization import (
 
 Version = tuple[int, int, int]
 
-TRUSTED_KEYS: dict[str, str] = {}
+TRUSTED_KEYS: dict[str, str] = {
+    # Project release key, generated 2026-11-18 (private half: the
+    # RELEASE_SIGNING_KEY secret, backed up by the owner).
+    "43f74035ce2eab1a": "dU6MouUJe5qjmH65uKRXZ1+o+n/ki6ZVgISamGU7/II=",
+}
 """Key id -> standard base64 of a 32-byte raw Ed25519 public key (§4.3).
 
-Empty until the project key exists, so every release fails the signature
-check and nothing is offered (§6, safe by default). A key change adds the
-successor here (§6)."""
+A release signed by none of these is never offered (§6). A key change adds
+the successor here (§6)."""
 
 SIGNATURE_TAG = "album-builder-signature-v1"
 
