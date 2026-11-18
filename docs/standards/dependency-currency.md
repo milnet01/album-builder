@@ -89,7 +89,7 @@ if green, delete the row and the cap in the same change.
 ## 5. Baseline verified green
 
 Snapshot of the versions last confirmed passing the full gate
-(`./local-CI.sh`: ruff + 687 tests). Informational - not a lockfile; it records
+(`./local-CI.sh`: ruff + the full test suite). Informational - not a lockfile; it records
 what "latest" resolved to at verification time.
 
 | Dependency | Version | | Dependency | Version |
