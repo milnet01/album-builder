@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: MUSI=408 -->
+<!-- ants-roadmap-id-high-water: MUSI=409 -->
 
 # Album Builder — Roadmap
 
@@ -117,6 +117,12 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   review-contract gate at its 2-loop cap (11 verified findings, all
   fixed, 1 dismissed; calm cap). Status accepted; ready to build. Loop
   log: docs/reviews/29-play-history-loop-log.md. No deferred tail.
+  2026-11-18: Phase MP-4 BUILT to docs/specs/29-play-history.md
+  (status implemented): hearts, play counts, and the Favourites /
+  Recently played / Most played rows in the Playlists tab. Specs 00,
+  06, 10, 11, 17, 18 amended. MP-3's play-count sort is delivered by
+  the Player tab's Plays column. MP-3 (held by the owner until MP-4
+  shipped) is next.
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 
@@ -463,6 +469,17 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   **Layman:** If the saved playlists file gets garbled, the app refuses to start instead of starting with no playlists and keeping the bad file aside.
   Kind: review-fix.
   Source: review-contract-2026-11-18 (Spec 29 loop 2).
+
+- 📋 [MUSI-0409] **Saved playlists are not written on quit, so an edit just before closing can be lost.**
+  Read 2026-11-18: MainWindow.closeEvent flushes AlbumStore, state
+  and (since Spec 29) PlayHistory, but nothing calls
+  PlaylistStore.flush(); its DebouncedWriter waits 250 ms, and its
+  timer never fires once the app has quit. Unverified by a run.
+  Fix: flush it in closeEvent beside PlayHistory.flush(), with a
+  test that edits a playlist and closes at once.
+  **Layman:** A change to a saved playlist made in the last quarter-second before you close the app may not be kept.
+  Kind: fix.
+  Source: found-while-building-spec-29-2026-11-18.
 
 ## DeepSeek review fixes (2026-11-05)
 

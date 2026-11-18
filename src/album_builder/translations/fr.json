@@ -235,5 +235,20 @@
  "LRC: waiting...": "LRC : en attente...",
  "No singing was heard in this song, so the lyrics could not be timed.": "Aucun chant n'a été entendu dans ce morceau, les paroles n'ont donc pas pu être synchronisées.",
  "The update could not finish. You are still on {version}.": "La mise à jour n'a pas pu se terminer. Vous êtes toujours sur la version {version}.",
- "Open download page": "Ouvrir la page de téléchargement"
+ "Open download page": "Ouvrir la page de téléchargement",
+ "Add to favourites": "Ajouter aux favoris",
+ "Favourite": "Favori",
+ "Favourite: {title}": "Favori : {title}",
+ "Fills itself from what you play": "Se remplit d'après ce que vous écoutez",
+ "Hearts and play counts were saved by a newer Album Builder. Changes will not be saved until you update the app.": "Les cœurs et les compteurs d'écoute ont été enregistrés par une version plus récente d'Album Builder. Les modifications ne seront pas enregistrées tant que vous n'aurez pas mis à jour l'application.",
+ "Not a favourite: {title}": "Pas un favori : {title}",
+ "Played {count} times": "Écouté {count} fois",
+ "Played once": "Écouté une fois",
+ "Plays": "Écoutes",
+ "Remove from favourites": "Retirer des favoris",
+ "This list has no songs yet.": "Cette liste ne contient encore aucun titre.",
+ "play_history.json was unreadable; started with no hearts or play counts. Your original file is preserved as play_history.json.corrupt.bak.": "play_history.json était illisible ; démarrage sans cœurs ni compteurs d'écoute. Votre fichier d'origine est conservé sous play_history.json.corrupt.bak.",
+ "{icon} Favourites": "{icon} Favoris",
+ "{icon} Recently played": "{icon} Écoutés récemment",
+ "{icon} Most played": "{icon} Les plus écoutés"
 }

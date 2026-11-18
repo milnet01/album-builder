@@ -21,6 +21,7 @@ Define the rules for writing data to disk so that:
 | `Albums/<slug>/.approved` | marker | empty file | on approve / unapprove |
 | `Albums/<slug>/reports/*.{pdf,html}` | one per approval | n/a | on approve |
 | `.album-builder/state.json` | one global | spec below | on selection change, geometry change, debounced |
+| `.album-builder/play_history.json` | one global | Spec 29 §4.1 | on a counted play or a heart change, debounced |
 | `<config-dir>/album-builder/settings.json` (platform-resolved, Spec 22: Linux `<XDG_CONFIG_HOME or ~/.config>`, Windows `%LOCALAPPDATA%`, macOS `~/Library/Application Support`) | one global | spec below | on settings change |
 | `Tracks/<stem>.lrc` | one per aligned track | LRC (Spec 07) | on alignment completion |
 
@@ -164,6 +165,7 @@ Every JSON file in the app obeys these rules. Other specs MUST NOT contradict th
 - `track_paths`, `last_played_track_path`, `cover_override`, `tracks_folder`, `albums_folder` etc. are **absolute POSIX-style strings** when on disk.
 - On load, non-absolute paths are rejected with a self-heal warning: bump the field to its absolute form via `Path(p).absolute()` (not `resolve()`, which would follow symlinks) and write back.
 - Symlinks are not resolved on save (the user's path is the user's path); only relativeness is normalised.
+- Exception: `play_history.json`'s keys are song paths relative to the music folder (Spec 29 §4.1), so a library moved whole keeps its data. The rules above do not apply to them.
 
 ### JSON formatting
 

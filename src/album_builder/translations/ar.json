@@ -235,5 +235,20 @@
  "LRC: waiting...": "‏LRC: في الانتظار...",
  "No singing was heard in this song, so the lyrics could not be timed.": "لم يُسمع أي غناء في هذه الأغنية، لذا تعذّرت مزامنة كلماتها.",
  "The update could not finish. You are still on {version}.": "تعذّر إكمال التحديث. ما زلت تستخدم الإصدار {version}.",
- "Open download page": "فتح صفحة التنزيل"
+ "Open download page": "فتح صفحة التنزيل",
+ "Add to favourites": "إضافة إلى المفضلة",
+ "Favourite": "مفضّلة",
+ "Favourite: {title}": "مفضّلة: {title}",
+ "Fills itself from what you play": "تمتلئ تلقائيًا بما تستمع إليه",
+ "Hearts and play counts were saved by a newer Album Builder. Changes will not be saved until you update the app.": "حُفظت القلوب وأعداد مرات التشغيل بواسطة إصدار أحدث من Album Builder. لن تُحفظ التغييرات حتى تحدّث التطبيق.",
+ "Not a favourite: {title}": "ليست مفضّلة: {title}",
+ "Played {count} times": "شُغّلت {count} مرة",
+ "Played once": "شُغّلت مرة واحدة",
+ "Plays": "مرات التشغيل",
+ "Remove from favourites": "إزالة من المفضلة",
+ "This list has no songs yet.": "لا تحتوي هذه القائمة على أغانٍ بعد.",
+ "play_history.json was unreadable; started with no hearts or play counts. Your original file is preserved as play_history.json.corrupt.bak.": "تعذّرت قراءة play_history.json؛ بدأ التطبيق بلا قلوب ولا أعداد تشغيل. ملفك الأصلي محفوظ باسم play_history.json.corrupt.bak.",
+ "{icon} Favourites": "{icon} المفضلة",
+ "{icon} Recently played": "{icon} المشغّلة مؤخرًا",
+ "{icon} Most played": "{icon} الأكثر تشغيلًا"
 }

@@ -7,6 +7,11 @@ only - it performs no store mutation and pops no confirm/prompt dialog itself
 MainWindow._on_delete_album` split). Re-render is driven by
 `PlaylistStore.changed -> set_playlists`.
 
+Spec 29: once a `PlayHistory` is set, three built-in rows - Favourites,
+Recently played, Most played - sit above the user's playlists. They carry a
+`SmartList` under their own role and never a store id, so the id-carrying
+signals never fire for them; Play emits `smart_play_requested` instead.
+
 Track rows resolve through a stashed `Library`: a present track shows its title,
 a path not in the library shows "<basename> (missing)" and is never dropped. The
 library may be `None` before the first `set_library` (it is a frozen dataclass
@@ -17,6 +22,7 @@ every track renders "(missing)" rather than crashing.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
@@ -32,10 +38,23 @@ from PyQt6.QtWidgets import (
 
 from album_builder.domain.library import Library
 from album_builder.domain.playlist import Playlist
-from album_builder.i18n import tr
+from album_builder.domain.track import Track
+from album_builder.i18n import N_, tr
+from album_builder.services.play_history import SmartList
 from album_builder.ui.theme import Glyphs
 
+if TYPE_CHECKING:
+    from album_builder.services.play_history import PlayHistory
+
 _ID_ROLE = Qt.ItemDataRole.UserRole
+_SMART_ROLE = Qt.ItemDataRole.UserRole + 1
+
+# Spec 29 §4.4: the built-in rows, in display order.
+_SMART_NAMES = (
+    (SmartList.FAVOURITES, N_("{icon} Favourites")),
+    (SmartList.RECENTLY_PLAYED, N_("{icon} Recently played")),
+    (SmartList.MOST_PLAYED, N_("{icon} Most played")),
+)
 
 
 class PlaylistsPane(QFrame):
@@ -47,6 +66,7 @@ class PlaylistsPane(QFrame):
     delete_requested = pyqtSignal(object)         # id
     move_track_requested = pyqtSignal(object, int, int)  # (id, from, to)
     remove_track_requested = pyqtSignal(object, int)     # (id, index)
+    smart_play_requested = pyqtSignal(object)    # Type: list[Track], the shown songs
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -54,6 +74,9 @@ class PlaylistsPane(QFrame):
 
         self._playlists: list[Playlist] = []
         self._library: Library | None = None
+        # Spec 29: None until set_play_history; then the built-in rows show.
+        self._history: PlayHistory | None = None
+        self._smart_tracks: list[Track] = []
         # Set when a move/remove intent is emitted so the *next* set_playlists
         # re-render lands the track selection on the moved/removed slot (the
         # keyboard-reorder path). None => preserve the track row by index.
@@ -133,18 +156,28 @@ class PlaylistsPane(QFrame):
         first remaining row, or clear the selection when the catalogue is now
         empty (TC-17-27)."""
         prev_id = self.current_playlist_id()
+        prev_smart = self.current_smart_list()
         self._playlists = list(playlists)
 
         self._rebuilding = True
         self.playlists_list.clear()
+        if self._history is not None:
+            for which, name in _SMART_NAMES:
+                item = QListWidgetItem(tr(name, icon=Glyphs.AUTO_LIST))
+                item.setData(_SMART_ROLE, which)
+                item.setToolTip(tr("Fills itself from what you play"))
+                # Not editable: the default flags lack ItemIsEditable.
+                self.playlists_list.addItem(item)
         for pl in self._playlists:
             item = QListWidgetItem(pl.name)
             item.setData(_ID_ROLE, pl.id)
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
             self.playlists_list.addItem(item)
         target = self._row_for_id(prev_id)
+        if prev_smart is not None:
+            target = self._smart_row(prev_smart)
         if target < 0 and self._playlists:
-            target = 0  # prior selection gone: fall to the first row
+            target = self._smart_count()  # prior selection gone: the first playlist
         self.playlists_list.setCurrentRow(target)
         self._rebuilding = False
 
@@ -156,9 +189,19 @@ class PlaylistsPane(QFrame):
         self._library = library
         self._render_tracks()
 
+    def set_play_history(self, history: PlayHistory) -> None:
+        """Spec 29: show the built-in rows, refreshed on every change."""
+        self._history = history
+        history.changed.connect(self._on_history_changed)
+        self.set_playlists(self._playlists)
+
     def current_playlist_id(self) -> str | None:
         item = self.playlists_list.currentItem()
         return None if item is None else item.data(_ID_ROLE)
+
+    def current_smart_list(self) -> SmartList | None:
+        item = self.playlists_list.currentItem()
+        return None if item is None else item.data(_SMART_ROLE)
 
     # --- rendering ----------------------------------------------------------
 
@@ -174,6 +217,14 @@ class PlaylistsPane(QFrame):
             desired = self.tracks_list.currentRow()
 
         self.tracks_list.clear()
+        which = self.current_smart_list()
+        self._smart_tracks = (
+            self._history.smart_list(which)
+            if which is not None and self._history is not None
+            else []
+        )
+        for track in self._smart_tracks:
+            self.tracks_list.addItem(QListWidgetItem(track.title))
         if pl is not None:
             for path in pl.track_paths:
                 self.tracks_list.addItem(QListWidgetItem(self._track_label(path)))
@@ -193,7 +244,8 @@ class PlaylistsPane(QFrame):
     def _update_buttons(self) -> None:
         has_pl = self.current_playlist_id() is not None
         self.btn_delete.setEnabled(has_pl)
-        self.btn_play.setEnabled(has_pl)
+        # A built-in row plays too; it is never deleted, reordered or edited.
+        self.btn_play.setEnabled(has_pl or self.current_smart_list() is not None)
 
         row = self.tracks_list.currentRow()
         n = self.tracks_list.count()
@@ -210,12 +262,20 @@ class PlaylistsPane(QFrame):
             return None
         return next((pl for pl in self._playlists if pl.id == pl_id), None)
 
+    def _smart_count(self) -> int:
+        return 0 if self._history is None else len(_SMART_NAMES)
+
+    def _smart_row(self, which: SmartList) -> int:
+        if self._history is None:
+            return -1
+        return next(row for row, (w, _name) in enumerate(_SMART_NAMES) if w == which)
+
     def _row_for_id(self, pl_id: str | None) -> int:
         if pl_id is None:
             return -1
         for row, pl in enumerate(self._playlists):
             if pl.id == pl_id:
-                return row
+                return row + self._smart_count()
         return -1
 
     # --- signal adapters ----------------------------------------------------
@@ -225,8 +285,12 @@ class PlaylistsPane(QFrame):
             return
         self._render_tracks()
 
+    def _on_history_changed(self) -> None:
+        if self.current_smart_list() is not None:
+            self._render_tracks()
+
     def _on_item_changed(self, item: QListWidgetItem) -> None:
-        if self._rebuilding:
+        if self._rebuilding or item.data(_ID_ROLE) is None:
             return
         self.rename_committed.emit(item.data(_ID_ROLE), item.text())
 
@@ -236,6 +300,9 @@ class PlaylistsPane(QFrame):
             self.delete_requested.emit(pl_id)
 
     def _on_play_clicked(self) -> None:
+        if self.current_smart_list() is not None:
+            self.smart_play_requested.emit(list(self._smart_tracks))
+            return
         pl_id = self.current_playlist_id()
         if pl_id is not None:
             self.play_requested.emit(pl_id)

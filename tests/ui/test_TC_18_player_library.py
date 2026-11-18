@@ -51,7 +51,9 @@ def test_player_mode_hides_curation_columns(qtbot) -> None:
     qtbot.addWidget(curation)
     hidden = {c[1] for i, c in enumerate(COLUMNS) if player.table.isColumnHidden(i)}
     assert hidden == {"_toggle", "_used"}
-    assert not any(curation.table.isColumnHidden(i) for i in range(len(COLUMNS)))
+    # Spec 29: the heart and play-count columns are the Player tab's only.
+    hidden = {c[1] for i, c in enumerate(COLUMNS) if curation.table.isColumnHidden(i)}
+    assert hidden == {"_fav", "_plays"}
 
 
 # Spec: TC-18-27

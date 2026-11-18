@@ -235,5 +235,20 @@
  "LRC: waiting...": "‏LRC: ממתין...",
  "No singing was heard in this song, so the lyrics could not be timed.": "לא נשמעה שירה בשיר הזה, ולכן לא ניתן היה לסנכרן את המילים.",
  "The update could not finish. You are still on {version}.": "לא ניתן היה להשלים את העדכון. אתם עדיין בגרסה {version}.",
- "Open download page": "פתיחת דף ההורדה"
+ "Open download page": "פתיחת דף ההורדה",
+ "Add to favourites": "הוספה למועדפים",
+ "Favourite": "מועדף",
+ "Favourite: {title}": "מועדף: {title}",
+ "Fills itself from what you play": "מתמלאת מעצמה לפי מה שמושמע",
+ "Hearts and play counts were saved by a newer Album Builder. Changes will not be saved until you update the app.": "הלבבות ומוני ההשמעה נשמרו על ידי גרסה חדשה יותר של Album Builder. שינויים לא יישמרו עד לעדכון האפליקציה.",
+ "Not a favourite: {title}": "לא מועדף: {title}",
+ "Played {count} times": "הושמע {count} פעמים",
+ "Played once": "הושמע פעם אחת",
+ "Plays": "השמעות",
+ "Remove from favourites": "הסרה מהמועדפים",
+ "This list has no songs yet.": "ברשימה הזו עדיין אין שירים.",
+ "play_history.json was unreadable; started with no hearts or play counts. Your original file is preserved as play_history.json.corrupt.bak.": "לא ניתן היה לקרוא את play_history.json; האפליקציה התחילה בלי לבבות ומוני השמעה. הקובץ המקורי נשמר בשם play_history.json.corrupt.bak.",
+ "{icon} Favourites": "{icon} מועדפים",
+ "{icon} Recently played": "{icon} הושמעו לאחרונה",
+ "{icon} Most played": "{icon} הכי מושמעים"
 }

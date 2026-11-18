@@ -55,3 +55,8 @@ class Glyphs:
     # success toast format ("Approved · report at <path>") and similar
     # "key1 · key2" UI strings. Widely available in system fonts.
     MIDDOT = "·"
+    # Spec 29 play history: the favourite heart, and the mark on a list that
+    # fills itself.
+    HEART = "♥"                 # U+2665 - favourite
+    HEART_OUTLINE = "♡"         # U+2661 - not a favourite
+    AUTO_LIST = "↻"             # U+21BB - "refreshes itself"

@@ -68,6 +68,7 @@ from album_builder.services.export import ExportFailed
 from album_builder.services.library_watcher import LibraryWatcher
 from album_builder.services.lyrics_tracker import LyricsTracker
 from album_builder.services.mpris import MprisService
+from album_builder.services.play_history import PlayHistory
 from album_builder.services.playback_controller import PlaybackController
 from album_builder.services.player import Player, PlayerState
 from album_builder.services.playlist_store import PlaylistStore
@@ -218,6 +219,11 @@ class MainWindow(QMainWindow):
         # file degrades to an empty catalogue with load_failed set (toasted
         # once self._toast exists, below). Needs no library at construction.
         self._playlist_store = PlaylistStore(project_root, parent=self)
+        # Spec 29: hearts and play counts, in play_history.json beside it. It
+        # counts a play from the Player's own signals, in either tab.
+        self._play_history = PlayHistory(
+            project_root, self._player, library_watcher, parent=self,
+        )
 
         # UI-tier settings cached at startup (Spec 09 §The approve flow
         # step 6 + Spec 10 §`settings.json` schema). Re-reading on every
@@ -326,6 +332,17 @@ class MainWindow(QMainWindow):
                 "playlists.json was unreadable; started an empty list. "
                 "Your original file is preserved as playlists.json.corrupt.bak."
             ))
+        # Spec 29 §4.1: the same for play_history.json, and a newer app's file.
+        if self._play_history.load_failed:
+            self._show_toast(tr(
+                "play_history.json was unreadable; started with no hearts or play "
+                "counts. Your original file is preserved as play_history.json.corrupt.bak."
+            ))
+        elif self._play_history.read_only:
+            self._show_toast(tr(
+                "Hearts and play counts were saved by a newer Album Builder. "
+                "Changes will not be saved until you update the app."
+            ))
 
         # Debounced state-save timer for splitter / geometry mutations (TC-03-10).
         self._state_save_timer = QTimer(self)
@@ -398,6 +415,13 @@ class MainWindow(QMainWindow):
         self.playlists_pane.move_track_requested.connect(self._playlist_store.move_track)
         self.playlists_pane.remove_track_requested.connect(self._playlist_store.remove_track)
         self.playlists_pane.play_requested.connect(self._on_play_playlist)
+        # Spec 29: the Player tab's hearts, play counts and built-in lists.
+        self.player_library_pane.set_play_history(self._play_history)
+        self._player_pane.set_play_history(self._play_history)
+        self.playlists_pane.set_play_history(self._play_history)
+        self.player_library_pane.favourite_toggled.connect(self._play_history.set_favourite)
+        self._player_pane.favourite_toggled.connect(self._play_history.set_favourite)
+        self.playlists_pane.smart_play_requested.connect(self._on_play_smart_list)
         for pane in self._library_panes:
             pane.add_to_playlist_requested.connect(self._on_add_to_playlist)
             pane.choose_folder_requested.connect(self._on_choose_music_folder)
@@ -1080,6 +1104,13 @@ class MainWindow(QMainWindow):
             return
         self._controller.play_tracks(resolved)
 
+    def _on_play_smart_list(self, tracks: list[Track]) -> None:
+        if not tracks:
+            # As for an empty playlist: leave the queue alone (Spec 29 §4.5).
+            self._show_toast(tr("This list has no songs yet."))
+            return
+        self._controller.play_tracks(tracks)
+
     def _on_add_to_playlist(self, playlist_id: str | None, tracks: list[Track]) -> None:
         if playlist_id is None:
             name, ok = QInputDialog.getText(
@@ -1699,6 +1730,11 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             logger.exception("AlbumStore.flush() failed during closeEvent")
             failures.append(f"album-store flush: {_redact_home(exc)}")
+        try:
+            self._play_history.flush()
+        except Exception as exc:
+            logger.exception("PlayHistory.flush() failed during closeEvent")
+            failures.append(f"play-history flush: {_redact_home(exc)}")
         try:
             self._save_state_now(position)
         except Exception as exc:

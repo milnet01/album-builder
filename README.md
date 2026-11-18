@@ -47,6 +47,10 @@ See [`CHANGELOG.md`](CHANGELOG.md) for what changed in each release.
   a play queue, shuffle, repeat and saved playlists. Close the app and
   open it again, and it picks up where you left off: the same song at
   the same spot, the same queue, waiting for you to press play.
+  Mark songs you love with a heart. The player counts how often you
+  really listen to each song, and its Playlists list starts with three
+  lists that fill themselves: Favourites, Recently played and Most
+  played.
 - **Shows lyrics in time with the song.** Lyrics files (`.lrc`) scroll
   along as the song plays. The app can also line up plain lyrics with
   the song automatically; that part is an optional extra (see below).

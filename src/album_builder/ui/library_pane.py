@@ -9,6 +9,7 @@ from uuid import UUID
 
 from PyQt6.QtCore import (
     QAbstractTableModel,
+    QEvent,
     QModelIndex,
     QObject,
     QRectF,
@@ -19,6 +20,7 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QFrame,
     QHeaderView,
     QLabel,
@@ -39,6 +41,7 @@ from album_builder.i18n import N_, tr
 from album_builder.ui.theme import Glyphs, Palette
 
 if TYPE_CHECKING:
+    from album_builder.services.play_history import PlayHistory
     from album_builder.services.usage_index import UsageIndex
 
 # Mirror of `MISSING_ROLE` / `TITLE_ROLE` in album_order_pane.py: per-pane
@@ -99,11 +102,13 @@ COLUMNS: list[tuple[str, str]] = [
     ("▶", "_play"),   # PLAY glyph - Spec 06 per-row preview-play
     # Second, so it is on screen without a sideways scroll (Spec 04 TC-04-26).
     ("✓", "_toggle"),
+    ("♥", "_fav"),    # HEART - Spec 29 favourite, player mode only
     (N_("Title"), "title"),
     (N_("Artist"), "artist"),
     (N_("Album"), "album"),
     (N_("Composer"), "composer"),
     (N_("Duration"), "duration_seconds"),
+    (N_("Plays"), "_plays"),  # Spec 29 play count, player mode only
     (N_("Used"), "_used"),   # Spec 13 - cross-album popularity badge
 ]
 
@@ -134,6 +139,8 @@ class TrackTableModel(QAbstractTableModel):
         # Spec 13 §Layer placement: live reference to the UsageIndex.
         # None until LibraryPane.__init__ wires it via set_usage_index.
         self._usage_index: UsageIndex | None = None
+        # Spec 29: live reference for the heart and play-count columns.
+        self._history: PlayHistory | None = None
 
     def set_tracks(self, tracks: Sequence[Track]) -> None:
         # Contract: set_tracks() resets only the per-row enable cache,
@@ -179,6 +186,19 @@ class TrackTableModel(QAbstractTableModel):
         counts via usage_index.count_for(...). Spec 13 §Behavior rules.
         """
         self._usage_index = usage_index
+
+    def set_play_history(self, history: PlayHistory) -> None:
+        """Inject the PlayHistory the _fav and _plays columns read live."""
+        self._history = history
+
+    def has_history_key(self, row: int) -> bool:
+        """False for a song outside the music folder: its heart is disabled."""
+        return self._history is not None and self._history.has_key(self._tracks[row])
+
+    def is_favourite(self, row: int) -> bool:
+        if self._history is None:
+            return False
+        return self._history.stats_for(self._tracks[row]).favourited is not None
 
     def track_at(self, row: int) -> Track:
         return self._tracks[row]
@@ -241,8 +261,22 @@ class TrackTableModel(QAbstractTableModel):
             attr = COLUMNS[section][1]
             if attr == "_used":
                 return tr("Cross-album reuse count")
+            if attr == "_fav":
+                return tr("Favourite")
             return tr(COLUMNS[section][0])
         return None
+
+    def flags(self, index: QModelIndex) -> Qt.ItemFlag:
+        flags = super().flags(index)
+        # Spec 29: a song with no history key has a disabled heart.
+        if (
+            index.isValid()
+            and index.row() < len(self._tracks)
+            and COLUMNS[index.column()][1] == "_fav"
+            and not self.has_history_key(index.row())
+        ):
+            flags &= ~Qt.ItemFlag.ItemIsEnabled
+        return flags
 
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):
         if not index.isValid():
@@ -340,6 +374,38 @@ class TrackTableModel(QAbstractTableModel):
                 )
                 return _build_usage_tooltip(ids, usage.store)
             return None  # any other role: explicit None, never fall through
+
+        # Spec 29: like _used, Track has no such attribute - every role is
+        # answered here.
+        if attr == "_fav":
+            fav = self.is_favourite(index.row())
+            if role == Qt.ItemDataRole.DisplayRole:
+                return Glyphs.HEART if fav else Glyphs.HEART_OUTLINE
+            if role == Qt.ItemDataRole.AccessibleTextRole:
+                if fav:
+                    return tr("Favourite: {title}", title=track.title)
+                return tr("Not a favourite: {title}", title=track.title)
+            if role == Qt.ItemDataRole.ToolTipRole:
+                return tr("Remove from favourites") if fav else tr("Add to favourites")
+            if role == Qt.ItemDataRole.UserRole:
+                # Favourites first in ascending order, then by title.
+                return (not fav, track.title.casefold())
+            return None
+
+        if attr == "_plays":
+            history = self._history
+            plays = history.stats_for(track).plays if history is not None else 0
+            if role == Qt.ItemDataRole.DisplayRole:
+                return "" if plays == 0 else str(plays)
+            if role == Qt.ItemDataRole.UserRole:
+                return plays
+            if role == Qt.ItemDataRole.AccessibleTextRole:
+                if plays == 0:
+                    return ""
+                if plays == 1:
+                    return tr("Played once")
+                return tr("Played {count} times", count=plays)
+            return None
 
         value = getattr(track, attr)
         if role == Qt.ItemDataRole.DisplayRole:
@@ -543,6 +609,8 @@ class LibraryPane(QFrame):
     add_to_playlist_requested = pyqtSignal(object, object)  # Type: (str | None, list[Track])
     # Spec 01 (Choosing the music folder): the empty-library welcome's button.
     choose_folder_requested = pyqtSignal()
+    # Spec 29: the heart cell, Enter on it, or the context menu.
+    favourite_toggled = pyqtSignal(object, bool)        # Type: (Track, on)
 
     def __init__(self, parent=None, *, player_mode: bool = False):
         super().__init__(parent)
@@ -604,6 +672,10 @@ class LibraryPane(QFrame):
         self.table.setColumnWidth(_column_index("album"), 160)
         self.table.setColumnWidth(_column_index("duration_seconds"), 70)
         self.table.setColumnWidth(toggle_col, 30)
+        fav_col = _column_index("_fav")
+        plays_col = _column_index("_plays")
+        self.table.setColumnWidth(fav_col, 30)
+        self.table.setColumnWidth(plays_col, 50)
         # Spec 13 §The badge: column-scoped delegate attachment, so the badge
         # painter never reaches other cells (the table-wide RowAccentDelegate
         # below paints those).
@@ -628,6 +700,9 @@ class LibraryPane(QFrame):
         # so Enter routes through `_on_table_activated` which only handles
         # the _play and _toggle columns.
         self.table.activated.connect(self._on_table_activated)
+        # Spec 29: Enter on a heart cell toggles it. Caught before the view
+        # turns it into `activated`, which then only ever comes from a mouse.
+        self.table.installEventFilter(self)
         # Spec 15 (Phase B): right-click context menu with the playback actions.
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._on_context_menu)
@@ -642,6 +717,9 @@ class LibraryPane(QFrame):
                 ),
             )
         else:
+            # Spec 29: hearts and play counts belong to the Player tab.
+            self.table.setColumnHidden(fav_col, True)
+            self.table.setColumnHidden(plays_col, True)
             self.table.setAccessibleDescription(
                 tr(
                     "Searchable list of tracks. First column previews playback; "
@@ -698,6 +776,43 @@ class LibraryPane(QFrame):
         """
         self._model.set_usage_index(usage_index)
         usage_index.changed.connect(self._on_usage_changed)
+
+    def set_play_history(self, history: PlayHistory) -> None:
+        """Spec 29: inject the PlayHistory and repaint its columns on change."""
+        self._model.set_play_history(history)
+        history.changed.connect(self._on_history_changed)
+
+    def _on_history_changed(self) -> None:
+        # The proxy re-sorts on dataChanged itself (dynamicSortFilter), so a
+        # table sorted by either column follows the change.
+        n = self._model.rowCount()
+        if n == 0:
+            return
+        for name in ("_fav", "_plays"):
+            col = _column_index(name)
+            self._model.dataChanged.emit(
+                self._model.index(0, col), self._model.index(n - 1, col), [],
+            )
+
+    def _toggle_favourite(self, source_row: int) -> None:
+        if not self._model.has_history_key(source_row):
+            return
+        self.favourite_toggled.emit(
+            self._model.track_at(source_row), not self._model.is_favourite(source_row),
+        )
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        if (
+            obj is self.table
+            and event.type() == QEvent.Type.KeyPress
+            and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+            and self.table.state() != QAbstractItemView.State.EditingState
+        ):
+            index = self.table.currentIndex()
+            if index.isValid() and COLUMNS[index.column()][1] == "_fav":
+                self._toggle_favourite(self._proxy.mapToSource(index).row())
+                return True
+        return super().eventFilter(obj, event)
 
     def _on_usage_changed(self) -> None:
         """Repaint the Used column on UsageIndex.changed.
@@ -774,6 +889,9 @@ class LibraryPane(QFrame):
             track = self._model.track_at(row)
             self.preview_play_requested.emit(track.path)
             return
+        if col_attr == "_fav":
+            self._toggle_favourite(row)
+            return
         if col_attr == "_toggle":
             if not self._model.is_toggle_enabled(row):
                 return
@@ -796,7 +914,12 @@ class LibraryPane(QFrame):
         if not view_index.isValid():
             return
         if self._player_mode:
-            # Spec 18 MP-2: activation on any column plays from this row.
+            # Spec 29: a heart cell is toggled by its click. Enter never
+            # arrives here (eventFilter), so this is a mouse activation:
+            # neither play nor toggle a second time.
+            if COLUMNS[view_index.column()][1] == "_fav":
+                return
+            # Spec 18 MP-2: activation on any other column plays from this row.
             self.play_tracks_requested.emit(self.view_order_tracks(), view_index.row())
             return
         col_attr = COLUMNS[view_index.column()][1]
@@ -853,6 +976,15 @@ class LibraryPane(QFrame):
                 name,
                 lambda _checked=False, i=pl_id: self.add_to_playlist_requested.emit(i, [clicked]),
             )
+        if self._player_mode:
+            # Spec 29: acts on the clicked song, as the other actions do.
+            row = src.row()
+            fav = self._model.is_favourite(row)
+            action = menu.addAction(
+                tr("Remove from favourites") if fav else tr("Add to favourites"),
+                lambda: self._toggle_favourite(row),
+            )
+            action.setEnabled(self._model.has_history_key(row))
         return menu
 
     def _on_context_menu(self, pos) -> None:

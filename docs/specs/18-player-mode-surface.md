@@ -1,6 +1,6 @@
 # 18 — Player-mode surface (ui)
 
-**Status:** Implemented (Phase E of the music-player epic); **amended 2026-09-28 for Phase MP-2 (MUSI-0356), amendment accepted and implemented 2026-09-28 (a510398), shipped in v0.9.0** · **Last updated:** 2026-09-28 · **Depends on:** 00, 01, 06, 07, 11, 14, 15, 16, 17 (references Spec 10 persistence but does not extend it) · **Blocks:** music-player Phases F-G
+**Status:** Implemented (Phase E of the music-player epic); **amended 2026-09-28 for Phase MP-2 (MUSI-0356), amendment accepted and implemented 2026-09-28 (a510398), shipped in v0.9.0** · **Last updated:** 2026-11-18 · **Depends on:** 00, 01, 06, 07, 11, 14, 15, 16, 17 (references Spec 10 persistence but does not extend it) · **Blocks:** music-player Phases F-G
 
 > **Cold-eyes loop log (2026-07-04):** 5 loops, 3 independent reviewers per loop
 > (services-signals / UI-composition / cross-spec+tests lenses), all briefed cold (no
@@ -374,6 +374,12 @@ palette argument). Public surface:
   (`self.lyrics_panel.set_lyrics(None)`), mirroring `NowPlayingPane.set_track(None)` so
   the two surfaces clear symmetrically (the `MainWindow` `None`-branch then needs no
   separate lyrics-clear call — see §Concepts → now-playing surface).
+- *(Spec 29)* Its card is built `NowPlayingCard(with_heart=True)`: a checkable heart
+  button (accessible name "Favourite") showing the shown track's heart. The curation
+  card has none. `set_play_history(history)` lets the heart follow `set_track` and
+  `PlayHistory.changed`; it is disabled with no track or a track with no history key.
+  A click emits `favourite_toggled(track, on)`, which `MainWindow` sends to
+  `PlayHistory.set_favourite`.
 
 Layout (a `QSplitter(Horizontal)`, `setChildrenCollapsible(False)`):
 - **Library** *(MP-2)* — the handed-in player-mode `library_pane`, first (left-most)
@@ -401,13 +407,15 @@ persistence in Spec 10 is untouched and not extended).
 ### `ui/library_pane.py` — player mode *(MP-2)*
 
 `LibraryPane(parent=None, *, player_mode: bool = False)`. The default builds the
-curation pane exactly as today. `player_mode=True` changes four things and nothing
+curation pane exactly as today. `player_mode=True` changes the following and nothing
 else:
 
 - **Columns.** The `_toggle` and `_used` columns are hidden
   (`table.setColumnHidden`). They belong to album curation: a tick adds a track to the
   current album, and the badge counts approved albums. `COLUMNS` and the model are
-  unchanged, so column indices stay shared between the two modes.
+  unchanged, so column indices stay shared between the two modes. *(Spec 29)* The
+  heart `_fav` and play-count `_plays` columns are the reverse: shown here, hidden
+  in the curation pane.
 - **Activation plays.** `table.activated` on any column of row *r* emits `play_tracks_requested(view_order_tracks(), r)` — "play from here" in view
   order, honouring the search filter and sort. Qt decides what activates: double-click
   and Enter / Return, and a single click where the desktop style sets
@@ -417,7 +425,10 @@ else:
   column's click (`preview_play_requested`, load-or-toggle) and then the activation
   (measured offscreen: `clicked`, `doubleClicked`, `activated`, in that order), so it
   ends with row *r* playing from here. The curation pane keeps its activation rule
-  (only `_play` / `_toggle` react).
+  (only `_play` / `_toggle` react). *(Spec 29)* `_fav` is the exception: a click on it,
+  or Enter with it current, toggles the heart and never plays. An event filter takes
+  Enter on `_fav` before the view turns it into `activated`, so an activation of
+  `_fav` is always a mouse one, and it does nothing.
 - **No row-body preview.** A click on a row body never emits `row_body_clicked`.
   Where the style does not activate on single click, the click only selects the row. The Spec 06 preview-without-play rule exists to
   let a curator read metadata without committing to playback. In the Player the row
@@ -427,6 +438,9 @@ else:
   "Searchable list of tracks. Double-click a track or press Enter to play from it.
   Click the first column to play or pause that track." — the curation text describes the
   selection column, which is hidden here.
+- **Favourites menu item** *(Spec 29)*. The right-click menu gains "Add to
+  favourites", or "Remove from favourites" when the clicked song is one; it is
+  disabled for a song with no history key.
 
 A player-mode pane is never given a `UsageIndex` (`set_usage_index` is not called).
 The model already treats a missing index as a count of zero for every role
@@ -827,7 +841,8 @@ Two-bar sync tests build two `TransportBar(player, controller)` on one real
   constructed with `player_mode=True`, and is a different object from
   `MainWindow.library_pane`.
 - **TC-18-26** *(MP-2)* — In a player-mode pane the `_toggle` and `_used` columns are
-  hidden and every other column is shown; in a curation pane no column is hidden.
+  hidden and every other column is shown; in a curation pane only Spec 29's `_fav`
+  and `_plays` columns are hidden.
 - **TC-18-27** *(MP-2, INV-18-2)* — Both library panes list the same tracks at
   startup, and after `library_watcher.tracks_changed` emits a changed `Library` both
   list the new set.

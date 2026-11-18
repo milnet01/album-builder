@@ -10,6 +10,20 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Added
 
+- **Favourite hearts, play counts, and three lists that fill themselves** (MUSI-0356)
+  In the Player tab, click the heart beside a song, or on the
+  now-playing card, to mark it as a favourite. Right-click a song to
+  do the same. A new Plays column counts how often you have really
+  listened to each song: a play counts once half the song, or 4
+  minutes, has played. Songs of 30 seconds or less are not counted.
+  The Playlists list now starts with Favourites, Recently played and
+  Most played. They fill themselves and can be played like any
+  playlist, but not renamed or deleted.
+  Hearts and counts are kept in `play_history.json` next to your
+  other app files, never in your song files. Renaming or moving one
+  song file loses its heart and count; moving the whole music folder
+  keeps them.
+
 - **A Windows MSI installer, for installing on every account of a PC** (MUSI-0407)
   A third Windows download, `AlbumBuilder-<version>-windows-x64.msi`,
   installs Album Builder into Program Files for everyone who uses the

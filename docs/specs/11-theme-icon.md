@@ -1,6 +1,6 @@
 # 11 — Theme & Icon Assets
 
-**Status:** Implemented (Phase 1 + 2 + 4) · **Last updated:** 2026-05-18 · **Depends on:** 00 · **Used by:** 03, 04, 05, 06, 07, 09, 12 (every UI-bearing spec)
+**Status:** Implemented (Phase 1 + 2 + 4) · **Last updated:** 2026-11-18 · **Depends on:** 00 · **Used by:** 03, 04, 05, 06, 07, 09, 12 (every UI-bearing spec)
 
 ## Purpose
 
@@ -64,6 +64,8 @@ Single-source the symbolic glyphs that other UI specs reference. These are Unico
 | `🔇` / `🔊` | `U+1F507` / `U+1F50A` | Spec 06 mute / unmute glyphs (mute toggle, also keyboard shortcut M visualiser) | 14 px, `text-primary`; muted state uses `text-secondary` |
 | `x` | `U+0078` (ASCII letter — the source character; visually rendered as multiplication-like via QSS font-size + close-button context) | Toast close affordance | 12 px, `text-secondary`; hover → `text-primary` |
 | `·` | `U+00B7` (middle dot) | Spec 09 §The approve flow step 5 success-toast separator (`Approved · report at <path>`); Spec 13 tooltip per-line bullet for usage-indicator album-name list | 11–13 px inline, `text-secondary` |
+| `♥` / `♡` | `U+2665` / `U+2661` | Spec 29 favourite heart (on / off): the Player tab's song-list column and now-playing card | inherits the cell or button text style |
+| `↻` | `U+21BB` | Spec 29 prefix on the Playlists tab's self-filling lists | inline with the list name |
 
 The choice of Unicode (over icon fonts or SVG) keeps the app dependency-free for these UI affordances. The `🔒` and `🔍` glyphs require a font with emoji coverage; on openSUSE Plasma the default `Noto Color Emoji` provides this; the QSS `font-family` stack falls back gracefully.
 
@@ -88,6 +90,9 @@ The single-source `theme.Glyphs` namespace publishes one named constant per row 
 | `Glyphs.UNMUTE` | `U+1F50A` | `"\U0001F50A"` escape |
 | `Glyphs.CLOSE` | `U+0078` (`x`) | literal ASCII letter (toast close — pragma: existing `theme.Glyphs.CLOSE = "x"` was kept rather than churning the prior Theme J closure for cosmetic perfection. The visual `×` rendering is achieved via QSS font-size + the close-button context, which most users read as a multiplication sign anyway.) |
 | `Glyphs.MIDDOT` | `U+00B7` (`·`) | literal codepoint (BMP, ASCII-source convention applies) |
+| `Glyphs.HEART` | `U+2665` (`♥`) | literal codepoint |
+| `Glyphs.HEART_OUTLINE` | `U+2661` (`♡`) | literal codepoint |
+| `Glyphs.AUTO_LIST` | `U+21BB` (`↻`) | literal codepoint |
 
 A consumer that wants the codepoint imports the name; a consumer that wants the rendered glyph reads the same name via the `theme.Glyphs` namespace. There is no other source of truth for these symbols anywhere in the codebase. (Names match the existing `theme.Glyphs` class verbatim — forward-only convention per CLAUDE.md, no retroactive rename.)
 

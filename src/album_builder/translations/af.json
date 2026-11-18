@@ -235,5 +235,20 @@
  "LRC: waiting...": "LRC: wag...",
  "No singing was heard in this song, so the lyrics could not be timed.": "Geen sang is in hierdie liedjie gehoor nie, dus kon die lirieke nie gesinchroniseer word nie.",
  "The update could not finish. You are still on {version}.": "Die bywerking kon nie klaarmaak nie. Jy is steeds op {version}.",
- "Open download page": "Maak aflaaibladsy oop"
+ "Open download page": "Maak aflaaibladsy oop",
+ "Add to favourites": "Voeg by gunstelinge",
+ "Favourite": "Gunsteling",
+ "Favourite: {title}": "Gunsteling: {title}",
+ "Fills itself from what you play": "Vul homself met wat jy speel",
+ "Hearts and play counts were saved by a newer Album Builder. Changes will not be saved until you update the app.": "Harte en speeltellings is deur 'n nuwer Album Builder gestoor. Veranderinge sal nie gestoor word voordat jy die app opdateer nie.",
+ "Not a favourite: {title}": "Nie 'n gunsteling nie: {title}",
+ "Played {count} times": "{count} keer gespeel",
+ "Played once": "Een keer gespeel",
+ "Plays": "Speelkere",
+ "Remove from favourites": "Verwyder uit gunstelinge",
+ "This list has no songs yet.": "Hierdie lys het nog geen liedjies nie.",
+ "play_history.json was unreadable; started with no hearts or play counts. Your original file is preserved as play_history.json.corrupt.bak.": "play_history.json was onleesbaar; begin sonder harte of speeltellings. Jou oorspronklike lêer word bewaar as play_history.json.corrupt.bak.",
+ "{icon} Favourites": "{icon} Gunstelinge",
+ "{icon} Recently played": "{icon} Onlangs gespeel",
+ "{icon} Most played": "{icon} Meeste gespeel"
 }

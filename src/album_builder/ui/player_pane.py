@@ -12,11 +12,12 @@ into its tab group (their signals are unaffected by reparenting).
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QFrame, QSplitter, QTabWidget, QVBoxLayout, QWidget
 
 from album_builder.domain.track import Track
 from album_builder.i18n import tr
+from album_builder.services.play_history import PlayHistory
 from album_builder.services.playback_controller import PlaybackController
 from album_builder.services.player import Player
 from album_builder.ui.library_pane import LibraryPane
@@ -28,6 +29,9 @@ from album_builder.ui.transport_bar import TransportBar
 
 
 class PlayerPane(QWidget):
+    # Spec 29: the card's heart was clicked for the shown track.
+    favourite_toggled = pyqtSignal(object, bool)  # Type: (Track, on)
+
     def __init__(
         self,
         player: Player,
@@ -39,7 +43,10 @@ class PlayerPane(QWidget):
     ) -> None:
         super().__init__(parent)
 
-        self.card = NowPlayingCard()
+        self.card = NowPlayingCard(with_heart=True)
+        self.card.favourite_toggled.connect(self._on_heart_toggled)
+        self._track: Track | None = None
+        self._history: PlayHistory | None = None
         self.lyrics_panel = LyricsPanel()
         self.transport = TransportBar(player, controller)
 
@@ -78,10 +85,32 @@ class PlayerPane(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(splitter)
 
+    def set_play_history(self, history: PlayHistory) -> None:
+        """Spec 29: the card heart reads this, and follows its changes."""
+        self._history = history
+        history.changed.connect(self._sync_heart)
+        self._sync_heart()
+
     def set_track(self, track: Track | None) -> None:
+        self._track = track
         self.card.set_track(track)
+        self._sync_heart()
         if track is None:
             # Symmetric with NowPlayingPane.set_track(None): this surface clears
             # its own lyrics panel, so MainWindow's None-branch needs no separate
             # lyrics-clear call (Spec 18 §Concepts - now-playing surface).
             self.lyrics_panel.set_lyrics(None)
+
+    def _sync_heart(self) -> None:
+        track, history = self._track, self._history
+        if track is None or history is None:
+            self.card.set_favourite(False, enabled=False)
+            return
+        self.card.set_favourite(
+            history.stats_for(track).favourited is not None,
+            enabled=history.has_key(track),
+        )
+
+    def _on_heart_toggled(self, on: bool) -> None:
+        if self._track is not None:
+            self.favourite_toggled.emit(self._track, on)

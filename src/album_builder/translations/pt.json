@@ -235,5 +235,20 @@
  "LRC: waiting...": "LRC: aguardando...",
  "No singing was heard in this song, so the lyrics could not be timed.": "Nenhum canto foi ouvido nesta música, por isso a letra não pôde ser sincronizada.",
  "The update could not finish. You are still on {version}.": "Não foi possível concluir a atualização. Você continua na versão {version}.",
- "Open download page": "Abrir a página de download"
+ "Open download page": "Abrir a página de download",
+ "Add to favourites": "Adicionar aos favoritos",
+ "Favourite": "Favorito",
+ "Favourite: {title}": "Favorito: {title}",
+ "Fills itself from what you play": "Preenche-se sozinha com o que você ouve",
+ "Hearts and play counts were saved by a newer Album Builder. Changes will not be saved until you update the app.": "Os corações e as contagens de reprodução foram salvos por uma versão mais recente do Album Builder. As alterações não serão salvas até você atualizar o aplicativo.",
+ "Not a favourite: {title}": "Não é favorito: {title}",
+ "Played {count} times": "Tocada {count} vezes",
+ "Played once": "Tocada uma vez",
+ "Plays": "Reproduções",
+ "Remove from favourites": "Remover dos favoritos",
+ "This list has no songs yet.": "Esta lista ainda não tem músicas.",
+ "play_history.json was unreadable; started with no hearts or play counts. Your original file is preserved as play_history.json.corrupt.bak.": "Não foi possível ler play_history.json; o app começou sem corações nem contagens de reprodução. Seu arquivo original está preservado como play_history.json.corrupt.bak.",
+ "{icon} Favourites": "{icon} Favoritos",
+ "{icon} Recently played": "{icon} Tocadas recentemente",
+ "{icon} Most played": "{icon} Mais tocadas"
 }

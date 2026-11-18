@@ -1,6 +1,6 @@
 # 06 — Audio Playback
 
-**Status:** Implemented (Phase 3A + 3B + v0.5.2 follow-up) · **Last updated:** 2026-11-05 · **Depends on:** 00, 01, 10, 11 · **Blocks:** 07
+**Status:** Implemented (Phase 3A + 3B + v0.5.2 follow-up) · **Last updated:** 2026-11-18 · **Depends on:** 00, 01, 10, 11 · **Blocks:** 07
 
 ## Purpose
 
@@ -52,6 +52,7 @@ Play tracks for preview and karaoke-style listening. Provide play/pause, seek, p
 - `signal ended()` — natural end-of-track pulse, emitted on `MediaStatus.EndOfMedia`. Distinct from `state_changed(STOPPED)`, which also fires on user-stop; consumers needing to distinguish the two (e.g. future autoplay) subscribe here.
 - `signal volume_changed(percent: int)` / `signal muted_changed(muted: bool)` — the state owner announces its own volume/mute change so a second transport bar (Spec 18) stays coherent across two live surfaces on one `Player`.
 - `signal seeked(seconds: float)` — the **discontinuous-jump** pulse, emitted at the end of `seek()` with the clamped landing position. Distinct from the continuous `position_changed`: it fires only on a user scrub, not on natural progress. Its sole consumer (Spec 20 Phase G) is the MPRIS `Seeked` D-Bus relay. `seek()` also exposes a `_set_duration_for_test(seconds)` seam (test-only, paralleling `_set_state_for_test`) so the upper-clamp branch is testable without poking the private duration field.
+- `signal source_changed(path: Path | None)` — emitted at the end of every `set_source` call, the same path included, with `None` for a clear. Spec 29 starts a new listen on it, so a repeat-one replay counts again.
 - `last_played_track_path` written to `.album-builder/state.json` (canonical schema in Spec 10 §`state.json`). On app restart the session is restored paused, at the saved position (Spec 26).
 
 ## Implementation notes

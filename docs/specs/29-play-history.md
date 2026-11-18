@@ -1,7 +1,7 @@
 <!-- ants-spec-format: 1 -->
 # 29 — Play history: favourites, play counts, recently and most played
 
-**Status:** accepted (2026-11-18).
+**Status:** implemented (2026-11-18).
 **Kind:** implement.
 **Source:** ROADMAP MUSI-0356 Phase MP-4 (user request 2026-07-25; owner decisions 2026-11-18).
 **Depends on:** 01, 06, 10, 11, 15, 17, 18, 25, 26. **Amends:** 00, 06, 10, 11, 17, 18.
@@ -122,6 +122,7 @@ class ListenMeter:
     def position(self, seconds: float, *, playing: bool) -> None: ...
     def seeked(self, seconds: float) -> None: ...
     def reached(self, duration: float) -> bool: ...           # True once per listen
+    heard: float                                              # seconds, read-only
 
 def favourites(stats: Mapping[str, SongStats]) -> list[str]: ...
 def recently_played(stats: Mapping[str, SongStats], limit: int = 50) -> list[str]: ...
@@ -138,12 +139,15 @@ class SmartList(Enum):
     RECENTLY_PLAYED = "recently_played"
     MOST_PLAYED = "most_played"
 
+def song_key(path: Path, library: Library) -> str | None: ...       # §4.1 Keying
+
 class PlayHistory(QObject):
     changed = pyqtSignal()
     load_failed: bool
     read_only: bool
     def __init__(self, project_root: Path, player: Player,
                  library_watcher: LibraryWatcher, parent: QObject | None = None): ...
+    def has_key(self, track: Track) -> bool: ...              # False: heart disabled
     def stats_for(self, track: Track) -> SongStats: ...
     def set_favourite(self, track: Track, on: bool) -> None: ...
     def smart_list(self, which: SmartList) -> list[Track]: ...
@@ -152,6 +156,17 @@ class PlayHistory(QObject):
 # ui/playlists_pane.py
 class PlaylistsPane:
     smart_play_requested = pyqtSignal(object)  # Type: list[Track], the shown songs
+
+# ui/library_pane.py, ui/player_pane.py - intent signals; MainWindow sends
+# both to PlayHistory.set_favourite
+class LibraryPane:
+    favourite_toggled = pyqtSignal(object, bool)  # Type: (Track, on)
+class PlayerPane:
+    favourite_toggled = pyqtSignal(object, bool)  # Type: (Track, on)
+
+# ui/now_playing_card.py
+class NowPlayingCard:
+    def __init__(self, parent=None, *, with_heart: bool = False): ...
 ```
 
 `PlayHistory` owns a `ListenMeter`, feeds it from `Player`, and maps the source path to a key through `library_watcher.library()`. Every change (a heart, a counted play) updates memory, emits `changed`, and schedules a write through a `DebouncedWriter` (250 ms, Spec 10 §Debounce). `MainWindow` builds it beside `PlaylistStore` and calls `flush()` in `closeEvent`.
@@ -160,8 +175,8 @@ class PlaylistsPane:
 
 `favourites`, `recently_played` and `most_played` return keys. `PlayHistory.smart_list` passes them only the entries whose key has a track in the current library, then maps the keys to `Track`s, so a missing song does not shorten a limited list. Missing songs stay in the file and come back if the file returns.
 
-- **Favourites:** `favourited` not `null`, newest `favourited` first.
-- **Recently played:** `last_played` not `null`, newest first, at most 50.
+- **Favourites:** `favourited` not `null`, newest `favourited` first, ties by key.
+- **Recently played:** `last_played` not `null`, newest first, ties by key, at most 50.
 - **Most played:** `plays >= 1`, most plays first, ties broken by newest `last_played`, then by key, at most 50.
 
 ### 4.5 Player tab

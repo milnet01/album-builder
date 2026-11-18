@@ -192,8 +192,9 @@ def test_rename_to_empty_reverts(main_window, tmp_path: Path) -> None:
     assert len(win._playlist_store.playlists()) == 1
     win._playlist_store.flush()
     assert [p.name for p in load_playlists(tmp_path)] == ["Keep"]
-    # Pane re-rendered so the row shows the prior name.
-    assert win.playlists_pane.playlists_list.item(0).text() == "Keep"
+    # Pane re-rendered so the row shows the prior name. It is the first row
+    # after Spec 29's three built-in lists.
+    assert win.playlists_pane.playlists_list.item(3).text() == "Keep"
 
 
 # Spec: TC-17-26

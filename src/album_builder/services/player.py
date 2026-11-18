@@ -92,6 +92,9 @@ class Player(QObject):
     # consumer is the MPRIS `Seeked` relay; distinct from the continuous
     # `position_changed` (which MPRIS clients poll, not react to).
     seeked = pyqtSignal(float)               # Type: seconds (clamped landing)
+    # Spec 29: every set_source call, the same path included, so a repeat-one
+    # replay starts a new listen. None for a clear.
+    source_changed = pyqtSignal(object)      # Type: Path | None
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -161,6 +164,7 @@ class Player(QObject):
             self._player.setSource(QUrl())
         else:
             self._player.setSource(QUrl.fromLocalFile(str(self._source)))
+        self.source_changed.emit(self._source)
 
     def source(self) -> Path | None:
         return self._source

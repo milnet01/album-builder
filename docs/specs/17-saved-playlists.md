@@ -1,6 +1,6 @@
 # 17 — Saved playlists (persistence + ui)
 
-**Status:** Implemented (Phase D of the music-player epic) · **Last updated:** 2026-07-03 · **Depends on:** 00, 01, 02, 03, 10, 11, 14, 15, 16 · **Blocks:** music-player Phases E-G
+**Status:** Implemented (Phase D of the music-player epic) · **Last updated:** 2026-11-18 · **Depends on:** 00, 01, 02, 03, 10, 11, 14, 15, 16 · **Blocks:** music-player Phases E-G
 
 > **Cold-eyes loop log (2026-07-03):** 7 loops, 2 independent reviewers per loop
 > (accuracy/conflicts + completeness/testability lenses), briefed cold every pass
@@ -301,6 +301,13 @@ confirm/prompt dialog itself (those live in `MainWindow`, matching the
   tracks (e.g. an unrelated playlist was renamed), the track-row selection is
   preserved by index; a re-render that does change the current playlist's track list
   re-applies the move/remove rule above.
+- **Built-in rows (Spec 29 §4.5).** After `set_play_history(history)`, three rows -
+  Favourites, Recently played, Most played - sit above the user's playlists. They
+  carry a `SmartList` under their own item role and no playlist id, so
+  `current_playlist_id()` is `None` on them and no id-carrying signal fires. Their
+  name is not editable; Delete, Up, Down and Remove are disabled; Play emits
+  `smart_play_requested(list[Track])` with the shown songs. When the prior selection
+  is gone, `set_playlists` selects the first user playlist, not a built-in row.
 
 ### `ui/library_pane.py` additions
 
@@ -468,6 +475,9 @@ Player tab, two stacked surfaces (saved playlists above the live Up Next queue):
 Player tab
 +-----------------------------------------------------+
 |  Playlists            [New] [Delete]                |   (rename: double-click a row)
+|     ↻ Favourites                                    |   (built-in, Spec 29)
+|     ↻ Recently played                               |
+|     ↻ Most played                                   |
 |   > Happy                                           |
 |     Energetic                                       |
 |  --------------------------------------------------  |

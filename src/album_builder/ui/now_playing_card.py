@@ -9,16 +9,20 @@ and player_pane.py).
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout
+from PyQt6.QtWidgets import QFrame, QLabel, QPushButton, QVBoxLayout
 
 from album_builder.domain.track import Track
 from album_builder.i18n import tr
+from album_builder.ui.theme import Glyphs
 
 
 class NowPlayingCard(QFrame):
-    def __init__(self, parent=None) -> None:
+    # Spec 29: the heart button was clicked; the payload is the new state.
+    favourite_toggled = pyqtSignal(bool)
+
+    def __init__(self, parent=None, *, with_heart: bool = False) -> None:
         super().__init__(parent)
         self.setObjectName("NowPlayingCard")
         # Spec 18: an id-scoped transparent background so the card inherits its
@@ -44,6 +48,16 @@ class NowPlayingCard(QFrame):
         self.title_label.setWordWrap(True)
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.title_label)
+
+        # Spec 29: only the Player tab's card has the favourite heart.
+        self.heart_button: QPushButton | None = None
+        if with_heart:
+            self.heart_button = QPushButton(objectName="FavouriteButton")
+            self.heart_button.setCheckable(True)
+            self.heart_button.setAccessibleName(tr("Favourite"))
+            self.heart_button.toggled.connect(self.favourite_toggled.emit)
+            layout.addWidget(self.heart_button, alignment=Qt.AlignmentFlag.AlignCenter)
+            self.set_favourite(False, enabled=False)
 
         # Spec 18 MP-2: Title / Artist / Album, the order common players use.
         self.artist_label = QLabel("", objectName="NowPlayingMeta")
@@ -93,6 +107,18 @@ class NowPlayingCard(QFrame):
             self.comment_label.setText(track.comment)
         else:
             self.comment_label.setText("")
+
+    def set_favourite(self, on: bool, *, enabled: bool) -> None:
+        """Show the heart's state without emitting favourite_toggled."""
+        button = self.heart_button
+        if button is None:
+            return
+        button.blockSignals(True)
+        button.setChecked(on)
+        button.blockSignals(False)
+        button.setEnabled(enabled)
+        button.setText(Glyphs.HEART if on else Glyphs.HEART_OUTLINE)
+        button.setToolTip(tr("Remove from favourites") if on else tr("Add to favourites"))
 
     def _set_cover(self, track: Track) -> None:
         if not track.cover_data:

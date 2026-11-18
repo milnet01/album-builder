@@ -84,7 +84,8 @@ The **domain layer is strictly pure Python** (no Qt imports). All data-shape log
 │           ├── <album> - YYYY-MM-DD.pdf
 │           └── <album> - YYYY-MM-DD.html
 ├── .album-builder/                      # app-private project state (gitignored)
-│   └── state.json                       # current album id, last-played track
+│   ├── state.json                       # current album id, last-played track
+│   └── play_history.json                # hearts and play counts (Spec 29)
 ├── docs/specs/                          # this directory
 └── src/album_builder/                   # source (added during implementation)
 ```
