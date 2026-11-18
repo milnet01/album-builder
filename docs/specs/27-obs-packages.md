@@ -4,7 +4,7 @@
 **Status:** implemented (2026-11-05); accepted 2026-11-05 with no review gate (cheap to redo; owner-gated publish). The first publish (obs-setup.sh, then obs-submit.sh) waits for the owner.
 **Kind:** package.
 **Source:** ROADMAP MUSI-0394 Phase Dist-5 (owner decision 2026-11-04: store listings after 1.0, each phase with its own spec).
-**Depends on:** 22, 23. **Amends:** none.
+**Depends on:** 22, 23. **Amends:** none. **Amended by:** 28 (INV-3 name map).
 
 **Layman:** People on openSUSE Tumbleweed can install Album Builder with the normal package manager, and it updates along with the rest of their system.
 
@@ -143,7 +143,7 @@ After `cut-release` publishes the GitHub release, run `packaging/obs/obs-submit.
   *Test:* `tests/packaging/test_TC_27_packaging.py::test_wheel_metadata`.
   *Breaks when:* dependencies are declared a second time in `pyproject.toml`, or `[project.scripts]` is removed.
 
-- **INV-3** (TC-27-03) — Every package in `requirements.txt` has a `Requires:` and a `BuildRequires:` line in `packaging/obs/album-builder.spec` with the same floor, under the name map `PyQt6`→`python3-PyQt6`, `mutagen`→`python3-mutagen`, `platformdirs`→`python3-platformdirs`, `Jinja2`→`python3-Jinja2`, `weasyprint`→`python3-weasyprint`, `Pillow`→`python3-Pillow`; and the spec requires nothing named `torch` or `whisperx`.
+- **INV-3** (TC-27-03) — Every package in `requirements.txt` has a `Requires:` and a `BuildRequires:` line in `packaging/obs/album-builder.spec` with the same floor, under the name map `PyQt6`→`python3-PyQt6`, `mutagen`→`python3-mutagen`, `platformdirs`→`python3-platformdirs`, `Jinja2`→`python3-Jinja2`, `weasyprint`→`python3-weasyprint`, `Pillow`→`python3-Pillow`, `cryptography`→`python3-cryptography`, `certifi`→`python3-certifi`; and the spec requires nothing named `torch` or `whisperx`.
   *Test:* `tests/packaging/test_TC_27_packaging.py::test_rpm_requires_match_requirements`.
   *Breaks when:* `requirements.txt` gains a dependency or raises a floor and the spec is not changed with it.
 

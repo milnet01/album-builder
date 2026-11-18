@@ -1,12 +1,12 @@
 # 00 — Album Builder: App Overview
 
-**Status:** Implemented (v0.6.1) · **Last updated:** 2026-11-05 · **Owner:** ants
+**Status:** Implemented (v0.6.1) · **Last updated:** 2026-11-18 · **Owner:** ants
 
 ## Purpose
 
 Album Builder is a single-user desktop app for curating an album from a folder of audio recordings. The user toggles songs on/off for each album, sets a target song count, drags to reorder, and previews each track with synchronized scrolling lyrics. When an album is approved, the app exports an organized symlink folder, an M3U playlist, and a professional PDF + HTML report suitable for sending to the artist.
 
-This is a small, local, offline-capable tool. There is no cloud, no account, no server, no telemetry.
+This is a small, local, offline-capable tool. There is no cloud, no account, no server, no telemetry. The AppImage and the installed Windows copy check GitHub once a day for a newer release, and a setting switches that off (Spec 28).
 
 ## Non-goals
 
@@ -188,8 +188,8 @@ The asymmetry is intentional, not historical drift.
 - **Memory:** under 300 MB resident with library loaded, excluding Whisper model.
 - **Responsiveness:** no operation in the UI thread blocks for more than 100 ms; long work runs in QThread workers.
 - **Crash recovery:** the canonical state on disk is always valid. An ungraceful exit never loses the album definition (atomic JSON writes per Spec 10). The listening session — song, position, queue, shuffle and repeat — is saved on quit and every 10 s while playing (Spec 26 §4.4), so a crash loses at most 10 s of position.
-- **Data integrity:** Album Builder never writes to source audio files. The app's writes are confined to `Albums/`, `*.lrc` sidecars next to audio, and `.album-builder/`.
-- **Offline:** the app starts and runs offline. The only network use is the one-time Whisper model download (with explicit user prompt before triggering).
+- **Data integrity:** Album Builder never writes to source audio files. The app's writes are confined to `Albums/`, `*.lrc` sidecars next to audio, and `.album-builder/`. An update the user accepts also writes outside them: it replaces the AppImage file, or on Windows downloads the installer into the settings folder (Spec 28 §4.6).
+- **Offline:** the app starts and runs offline. It uses the network for two things only: the one-time Whisper model download (with explicit user prompt before triggering), and the daily update check of Spec 28. That check runs only on the AppImage and the installed Windows copy, can be switched off, and fails silently when offline.
 
 ## Roadmap (deferred — explicitly not v1)
 

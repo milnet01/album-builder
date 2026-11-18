@@ -1,6 +1,6 @@
 # 10 — Persistence & Live Save
 
-**Status:** Implemented (Phase 1 + 2 + 4 + v0.6.1 two-variant atomic-pair amendment) · **Last updated:** 2026-11-05 · **Depends on:** 00 · **Used by:** 02, 03, 04, 05, 06, 07, 08, 09 · **Canonical for:** every JSON schema in this app (`album.json`, `state.json`, `settings.json`) + the atomic-pair invariant for multi-file transactions
+**Status:** Implemented (Phase 1 + 2 + 4 + v0.6.1 two-variant atomic-pair amendment) · **Last updated:** 2026-11-18 · **Depends on:** 00 · **Used by:** 02, 03, 04, 05, 06, 07, 08, 09, 28 · **Canonical for:** every JSON schema in this app (`album.json`, `state.json`, `settings.json`) + the atomic-pair invariant for multi-file transactions
 
 ## Purpose
 
@@ -285,6 +285,11 @@ Spec 12 owns *what settings exist*; this spec owns the bytes. Lives at `<config-
   "ui": {
     "open_report_folder_on_approve": true,
     "theme": "dark-colourful"
+  },
+  "updates": {
+    "auto_check": true,
+    "last_check": "2026-11-18T09:30:00.000Z",
+    "skipped_version": null
   }
 }
 ```
@@ -302,6 +307,11 @@ Spec 12 owns *what settings exist*; this spec owns the bytes. Lives at `<config-
 | `ui.theme` | string | one of `theme.THEMES` (`"dark-colourful"`, `"light"`, `"dark-ocean"`, `"dark-ember"`, `"dark-slate"`); unknown values fall back to `"dark-colourful"` (Spec 19) |
 | `ui.language` | string | `"system"` (default) or a code in `i18n.SUPPORTED`; unknown values read as `"system"`. Takes effect on restart (Spec 25) |
 | `ui.open_report_folder_on_approve` | bool | true |
+| `updates.auto_check` | bool | true (Spec 28) |
+| `updates.last_check` | string \| null | null; when set, an ISO-8601 ms-precision UTC timestamp (§Timestamps) of the last daily update check (Spec 28) |
+| `updates.skipped_version` | string \| null | null; when set, the `X.Y.Z` release the user chose to skip (Spec 28) |
+
+A malformed `updates` value reads as its default (Spec 28 §4.8). The block is optional, so adding it needs no `schema_version` bump.
 
 ## Errors & edge cases
 

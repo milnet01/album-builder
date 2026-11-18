@@ -6,6 +6,7 @@
 **Depends on:** 22 (portability groundwork - the read/write-path fallbacks this bundle relies on).
 **References (does not extend):** 00, 09.
 **Supersedes:** 12 (its AppImage *Out of scope (v1)* deferral only; Spec 12's venv-and-launcher source-install approach stands - see §12).
+**Amended by:** 28 (update information and the `.zsync` upload, §4.1 and §4.5).
 **Blocked by:** 22 (shipped 2026-07-28).
 **Blocker for:** nothing (Dist-3 Windows / Dist-4 Flatpak are independent packaging phases).
 
@@ -143,7 +144,9 @@ container):
 6. Package with `appimagetool` to `dist/AlbumBuilder-<version>-x86_64.AppImage`.
    `appimagetool` is itself distributed as an AppImage, and a plain container has
    no `/dev/fuse`, so it is run with `--appimage-extract-and-run` (the same
-   extract-don't-mount pattern as stage 2's `python-appimage`).
+   extract-don't-mount pattern as stage 2's `python-appimage`). It is passed
+   `-u` with the update information of Spec 28 §4.7, and writes
+   `dist/AlbumBuilder-<version>-x86_64.AppImage.zsync` beside the AppImage.
 
 ### 4.2 WeasyPrint native library bundling
 
@@ -300,8 +303,8 @@ INV-23-1/3) and `--selftest` (INV-23-2). A green `--selftest` there proves the
 native libraries are genuinely bundled, not borrowed from the host. Finally a
 best-effort `appimagelint` report (post-build, `continue-on-error` - it never
 enters the artifact and only ships a rolling `continuous` build). On a tag push,
-upload the AppImage to the tag's GitHub Release (creating the Release if it does
-not exist yet). **All of these are verification steps, not build stages** - the
+upload the AppImage and its `.zsync` file to the tag's GitHub Release (creating
+the Release if it does not exist yet). **All of these are verification steps, not build stages** - the
 artifact is assembled entirely inside `build-appimage.sh` (INV-23-9); a
 verification step *may* `apt-get` base libs into a throwaway clean-room container,
 which is a test fixture, not a build of the shipped file.
@@ -537,8 +540,7 @@ only this catcher.
   follow-up under the Distribution epic.
 - **Windows `.exe`** - Phase Dist-3. **Flatpak/Flathub** - Phase Dist-4.
   **RPM/DEB via OBS** - Phase Dist-5.
-- **Auto-update (AppImageUpdate / zsync)** - deferred; the epic may revisit once
-  releases are regular.
+- **Auto-update** - Spec 28 owns it.
 
 ## 10. Resource cost
 
