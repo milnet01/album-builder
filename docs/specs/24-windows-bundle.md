@@ -1,15 +1,15 @@
 # 24 - Windows bundle (PyInstaller .exe distribution)
 
-**Status:** accepted (2026-07-28); amended 2026-11-18 to add the installer (§4.7, MUSI-0406).
+**Status:** accepted (2026-07-28); amended 2026-11-18 to add the installer (§4.7, MUSI-0406) and the MSI (§4.8, MUSI-0407).
 **Kind:** implement.
-**Source:** ROADMAP "Distribution & cross-platform packaging" epic, Phase Dist-3 (user-request-2026-07-25, resequenced 2026-07-28); the installer, ROADMAP MUSI-0406 (owner, 2026-11-18).
+**Source:** ROADMAP "Distribution & cross-platform packaging" epic, Phase Dist-3 (user-request-2026-07-25, resequenced 2026-07-28); the installer, ROADMAP MUSI-0406 (owner, 2026-11-18); the MSI, ROADMAP MUSI-0407 (owner, 2026-11-18).
 **Depends on:** 22 (portability groundwork - the config-path + symlink-or-playlist fallbacks this bundle relies on).
 **References (does not extend):** 00, 23.
 **Amends:** 09 (adds the PDF-less report state to the approve sequence), 10 (adds a single-file report to the atomic-pair scan) - each only when the PDF render fails; the two-file pair is unchanged wherever the PDF renders. See §12.
 **Blocked by:** 22 (shipped 2026-07-28).
 **Blocker for:** Spec 28's Windows half (self-update runs the installer, §4.7).
 
-> **Layman:** produces one download for Windows - `AlbumBuilder-<version>-windows-x64.zip` - that you unzip and double-click to run Album Builder, with no Python and no install. It carries the same printable-PDF engine as Linux; if that engine ever fails, the app still writes the report as a web page instead of crashing. A second download, `AlbumBuilder-<version>-windows-x64-setup.exe`, installs the same app like any other Windows program, with a Start menu entry and an uninstaller, and lets it update itself.
+> **Layman:** produces one download for Windows - `AlbumBuilder-<version>-windows-x64.zip` - that you unzip and double-click to run Album Builder, with no Python and no install. It carries the same printable-PDF engine as Linux; if that engine ever fails, the app still writes the report as a web page instead of crashing. A second download, `AlbumBuilder-<version>-windows-x64-setup.exe`, installs the same app like any other Windows program, with a Start menu entry and an uninstaller, and lets it update itself. A third, `AlbumBuilder-<version>-windows-x64.msi`, installs it for everyone on the PC, the way IT departments install software; that copy tells you about a new version but does not install it.
 
 ## 1. Goal
 
@@ -112,6 +112,14 @@ Linux-only. There is no artifact a Windows user can run:
   starts the app in. The zip keeps the working-folder fallback.
 - **Per-user install** (design default; the owner did not choose between
   per-user and all-users): no admin prompt, under `%LOCALAPPDATA%\Programs`.
+- **An MSI as well, beside the installer and the zip** (owner, 2026-11-18,
+  MUSI-0407). It installs for every account on the PC, after one
+  administrator approval. A copy it installs tells the user about a new
+  release and opens the download page; it never installs one itself.
+- **WiX Toolset 7 builds the MSI, and the build accepts its licence**
+  (owner, 2026-11-18). That licence charges a fee only for
+  revenue-generating use by a user with US$10,000 or more of annual
+  revenue; Album Builder earns none.
 - **Author's calls, cheap to change:** Inno Setup builds the installer (free,
   scriptable, widely used); its wizard offers English plus the six Inno
   translations matching the app's languages, so Afrikaans users see English.
@@ -126,8 +134,9 @@ Linux-only. There is no artifact a Windows user can run:
 
 A single PowerShell script (PowerShell is the `windows-2025` default shell), run
 on the runner by `windows.yml` (§4.5), producing
-`dist/AlbumBuilder-<version>-windows-x64.zip` and
-`dist/AlbumBuilder-<version>-windows-x64-setup.exe`. It cannot be run on the Linux
+`dist/AlbumBuilder-<version>-windows-x64.zip`,
+`dist/AlbumBuilder-<version>-windows-x64-setup.exe` and
+`dist/AlbumBuilder-<version>-windows-x64.msi`. It cannot be run on the Linux
 dev machine (§3). Ordered stages:
 
 1. Read the version from the single runtime source,
@@ -160,6 +169,11 @@ dev machine (§3). Ordered stages:
    file's SHA-256 against the one the script holds (INV-24-10), install it into
    the stage folder, and compile `packaging/windows/album-builder.iss` against
    `dist/AlbumBuilder/` into the installer (§4.7).
+7. Download the WiX Toolset package (`wix.<version>.nupkg` from nuget.org) at a
+   pinned version, check its SHA-256 against the one the script holds
+   (INV-24-10), unpack it into the stage folder, and run its `wix.dll` with the
+   runner's `dotnet` to build `packaging/windows/album-builder.wxs` against
+   `dist/AlbumBuilder/` into the MSI (§4.8).
 
 The build installs only `requirements.txt`, so WhisperX/torch never enter the
 bundle (INV-24-5).
@@ -304,7 +318,13 @@ the built folder directly):
   `--version` equals the setup file name's version and `--selftest` exits 0; the
   Start menu entry exists; the uninstaller removes the `.exe` and leaves
   `%LOCALAPPDATA%\album-builder` in place (INV-24-12).
-- On a `v*` tag, upload the zip and the installer to the tag's Release
+- **MSI smoke-test:** install the `.msi` with `msiexec /i ... /qn`;
+  `install-kind.txt` in `%ProgramFiles%\Album Builder` reads `msi`; the
+  installed `.exe`'s `--version` equals the MSI file name's version and
+  `--selftest` exits 0; the all-users Start menu entry exists; `msiexec /x`
+  removes the `.exe` and leaves `%LOCALAPPDATA%\album-builder` in place
+  (INV-24-15).
+- On a `v*` tag, upload the zip, the installer and the MSI to the tag's Release
   (`softprops/action-gh-release@v2`, as `appimage.yml` does), creating it if absent
   (INV-24-8).
 
@@ -318,7 +338,8 @@ cover.
 Windows has no `.desktop` file. The `.exe` carries an embedded icon
 (`packaging/album-builder.ico`, converted from `assets/album-builder.svg` at build
 time or checked in). The zip creates no shortcut; the installer (§4.7) adds a
-Start menu entry, an optional desktop shortcut and an uninstaller. Neither
+Start menu entry, an optional desktop shortcut and an uninstaller; the MSI
+(§4.8) adds a Start menu entry for all users and an uninstall entry. None
 registers file associations. Windows "now playing" / MPRIS integration is explicitly not part
 of this phase (Spec 20 §out-of-scope already defers it).
 
@@ -366,6 +387,35 @@ version, the bundle folder, the checkout and the output folder.
 - **Trust.** The installer is unsigned, like the `.exe` (§3), so SmartScreen
   warns on a manual run. Self-update runs it only after Spec 28's signed checksum
   matches.
+
+### 4.8 The MSI - `packaging/windows/album-builder.wxs`
+
+A WiX Toolset 7 source, built by stage 7 of §4.1 with `-d` defines for the
+version, the bundle folder and the checkout, and with `-arch x64` and
+`-acceptEula wix7` (§3).
+
+- **Where it installs.** `Scope="perMachine"`, into
+  `%ProgramFiles%\Album Builder`, for every account on the PC. Windows asks for
+  administrator approval once. A fixed `UpgradeCode` and `<MajorUpgrade>` make
+  each later MSI remove the earlier copy whole and install over it; an older MSI
+  over a newer copy is refused.
+- **What it installs.** The whole of `dist\AlbumBuilder\`, plus
+  `packaging/windows/install-kind-msi.txt` installed as `install-kind.txt`,
+  which reads `msi`. Spec 28 §4.2 reads it to call the copy `WINDOWS_MSI`. A
+  Start menu entry for all users. No desktop shortcut and no wizard pages
+  (author's call, cheap to change): a double-click shows Windows' own progress
+  window.
+- **Uninstall** removes what it installed, plus `fontconfig-cache` inside the
+  install folder, as §4.7's uninstall does. Settings and albums live in each
+  user's profile and stay.
+- **Albums.** As §4.7: with no `albums_folder`, `Music\Album Builder`
+  (INV-24-14). A normal user cannot write to `%ProgramFiles%`.
+- **Updates.** An MSI copy never installs an update. It says when one is out
+  and opens the release page (Spec 28 §4.6).
+- **Beside the installer.** Both may be installed on one PC. Each is its own
+  copy with its own Start menu entry and uninstall entry; neither detects the
+  other.
+- **Trust.** Unsigned, like the `.exe` (§3).
 
 ## 5. Invariants
 
@@ -438,11 +488,12 @@ version, the bundle folder, the checkout and the output folder.
   `pip` dependencies stay floors-only per the dependency-currency policy, and the
   MSYS2 GTK packages are rolling (like Dist-2's un-pinned `apt` point releases,
   Spec 23 §9) - the guarantee is a working DLL set proven by `--selftest`, not a
-  bit-reproducible build. Inno Setup (§4.7) is pinned by version and by the
-  SHA-256 of its download. *Test:* inspect the pin lines in `build-windows.ps1` /
+  bit-reproducible build. Inno Setup (§4.7) and WiX (§4.8) are each pinned by
+  version and by the SHA-256 of the download. *Test:* inspect the pin lines in `build-windows.ps1` /
   `windows.yml` - PyInstaller is fetched at a fixed version and no tooling line uses
   a floating `latest`/branch reference; TC-24-05
-  `::test_build_pins_inno_setup_by_version_and_hash` checks the Inno pin. *Breaks when:* a tooling input is fetched by
+  `::test_build_pins_inno_setup_by_version_and_hash` checks the Inno pin and
+  TC-24-07 `::test_build_pins_wix_by_version_and_hash` the WiX pin. *Breaks when:* a tooling input is fetched by
   a moving reference, so a changed upstream silently enters an artifact users run
   unsigned.
 - **INV-24-11** - The bundle can save a file the way the app saves its data.
@@ -465,13 +516,27 @@ version, the bundle folder, the checkout and the output folder.
   only under `IsUpdate`. The real run is Spec 28 INV-8's manual recipe. *Breaks
   when:* either side renames a switch, so an update installs and never restarts the
   app, or replaces files while the old copy still holds them.
-- **INV-24-14** - An installed copy with no `albums_folder` uses
-  `Music\Album Builder` as its project root; the zip keeps the working folder.
+- **INV-24-14** - An installed copy, from the installer or the MSI, with no
+  `albums_folder` uses `Music\Album Builder` as its project root; the zip keeps
+  the working folder.
   *Test:* TC-24-06
-  (`tests/test_app.py::test_resolve_project_root_installed_windows_copy_uses_music`).
+  (`tests/test_app.py::test_resolve_project_root_installed_windows_copy_uses_music`),
+  for `WINDOWS` and `WINDOWS_MSI`.
   *Breaks when:* the rule keys on "frozen on Windows" alone, moving a portable
   user's albums, or is dropped, so an installed copy writes albums into its
   install folder.
+- **INV-24-15** - The MSI installs for all users, writes the `msi` marker, is
+  named as Spec 28 expects, keeps one `UpgradeCode` for good, and its uninstall
+  keeps the user's settings. *Test:* TC-24-07
+  (`tests/packaging/test_TC_24_07_msi.py`) reads the source:
+  `Scope="perMachine"`, the fixed `UpgradeCode`, a `MajorUpgrade`, the marker
+  file reading `msi` and installed as `install-kind.txt`, and the build's output
+  name equal to `release_manifest.asset_name(..., "windows-msi")`; and
+  `windows.yml`'s MSI smoke-test (§4.5) installs, runs and uninstalls it.
+  *Breaks when:* the `UpgradeCode` changes (a later MSI installs a second copy
+  beside the first), the marker is left out or reads `installer` (the copy tries
+  to run the setup `.exe`), the output name drifts from Spec 28's, or uninstall
+  deletes `%LOCALAPPDATA%\album-builder`.
 
 ## 6. Failure modes
 
@@ -499,6 +564,13 @@ version, the bundle folder, the checkout and the output folder.
   path. Both run in the normal pytest suite, independent of a real Windows build.
 - **The Inno Setup download fails or its hash differs.** Stage 6 of §4.1 stops
   the build before anything is uploaded.
+- **The WiX download fails or its hash differs.** Stage 7 of §4.1 stops the
+  build before anything is uploaded.
+- **The MSI is run by a user without administrator rights.** Windows asks for
+  an administrator's approval; refused, nothing is installed.
+- **Both the installer and the MSI are installed.** Two copies, two Start menu
+  entries named Album Builder. Each updates as its own kind does; uninstalling
+  one leaves the other.
 - **The app is still running when the update's wait ends.** Setup goes on; any
   file still held open meets Inno Setup's own in-use handling. Spec 28 §6 covers
   an install that then fails: the old copy stays, and the next start says so.
@@ -529,8 +601,15 @@ Unit-testable in `tests/` (run in the normal suite, no Windows build needed):
   name, marker, quiet-update switches, the Inno pin, and both workflows naming
   the installer. Locks INV-24-12, INV-24-13 and INV-24-10's Inno half.
 - **TC-24-06** (`tests/test_app.py::test_resolve_project_root_installed_windows_copy_uses_music`) -
-  with `install_kind()` returning `WINDOWS`, `_resolve_project_root` gives
-  `Music/Album Builder`; with `NONE`, the working folder. Locks INV-24-14.
+  with `install_kind()` returning `WINDOWS` or `WINDOWS_MSI`,
+  `_resolve_project_root` gives `Music/Album Builder`; with `NONE`, the working
+  folder. Locks INV-24-14.
+- **TC-24-07** (`tests/packaging/test_TC_24_07_msi.py`) - reads
+  `packaging/windows/album-builder.wxs`, `install-kind-msi.txt`,
+  `build-windows.ps1`, `windows.yml` and `release-sign.yml`: all-users scope,
+  fixed `UpgradeCode`, `MajorUpgrade`, marker, output name, the WiX pin and
+  licence switch, and both workflows naming the MSI. Locks INV-24-15 and
+  INV-24-10's WiX half.
 
 **Two existing atomic-pair recovery tests are updated (a Step-8 fold-back, not new
 coverage):** `test_TC_10_26_artist_only_on_disk_half_pair_is_repaired` and
@@ -560,6 +639,8 @@ an actual tagged release. See §11.
 is the leg CI cannot cover (§3) and gates "shipped". For the installer, on the
 Windows test machine: install from a test build, start it from the Start menu,
 check albums land in `Music\Album Builder`, uninstall, and check settings remain.
+The same for the MSI, installed by double-click with the administrator prompt,
+plus one report approved, so the PDF engine runs from `%ProgramFiles%`.
 
 ## 8. Alternatives considered (and rejected)
 
@@ -582,6 +663,12 @@ check albums land in `Music\Album Builder`, uninstall, and check settings remain
   PyInstaller under Wine is unsupported and produces unreliable binaries; it would
   trade a real Windows build for a fragile emulated one. Rejected - the runner build
   plus the user's manual test is the honest verification path (§3).
+- **Build the MSI with msitools' `wixl` on Linux.** No licence to accept, but it
+  reads only part of WiX's language and would need a second job fed the
+  Windows bundle. Owner chose WiX 7 (2026-11-18).
+- **WiX 5, the last release without the OSMF licence.** No longer updated, so a
+  standing exception to the dependency-currency rule. Owner chose WiX 7
+  (2026-11-18).
 - **OS-branch the fallback (`if sys.platform == "win32"`).** Rejected in favour of
   the point-of-use catch (§3): a Linux install missing GTK should degrade too, and a
   `try`/`except` at the render site is simpler than a platform switch.
@@ -591,8 +678,9 @@ check albums land in `Music\Album Builder`, uninstall, and check settings remain
 - **Windows code-signing / Authenticode certificate** - deferred; unsigned ships
   with a documented SmartScreen click-through. Tracked by the Distribution epic
   (post-Dist-5 hardening).
-- **An MSI, an all-users install, file associations** - the installer is a
-  per-user Inno Setup one (§4.7).
+- **File associations** - neither installer registers any (§4.6).
+- **An MSI copy installing its own updates** - owner, 2026-11-18: it does not
+  (§4.8).
 - **True single-file `.exe`** - §8; revisitable under the Distribution epic once the
   one-folder bundle is proven.
 - **32-bit and Windows 7/8 support** - Windows 10 64-bit floor (§6).
@@ -602,8 +690,8 @@ check albums land in `Music\Album Builder`, uninstall, and check settings remain
 
 ## 10. Resource cost
 
-- **New build-time tooling (not runtime deps):** PyInstaller and Inno Setup
-  (pinned, INV-24-10) and the MSYS2 GTK packages, all on the runner only; no
+- **New build-time tooling (not runtime deps):** PyInstaller, Inno Setup and
+  WiX Toolset (pinned, INV-24-10; WiX runs on the runner's own `dotnet`) and the MSYS2 GTK packages, all on the runner only; no
   addition to `requirements.txt`.
 - **New build host:** a `windows-2025` GitHub runner. No local prerequisite is
   added for Linux developers, who cannot build this artifact regardless (§3).
@@ -636,6 +724,7 @@ check albums land in `Music\Album Builder`, uninstall, and check settings remain
 | INV-24-12 | `tests/packaging/test_TC_24_05_installer.py` (TC-24-05) + `windows.yml`'s installer smoke-test (CI-only) |
 | INV-24-13 | Partial: `test_TC_24_05_installer.py::test_quiet_update_mode_matches_the_updater` checks both sides name the same switches; only Spec 28 INV-8's manual recipe runs a real update |
 | INV-24-14 | `tests/test_app.py::test_resolve_project_root_installed_windows_copy_uses_music` (TC-24-06) |
+| INV-24-15 | `tests/packaging/test_TC_24_07_msi.py` (TC-24-07) + `windows.yml`'s MSI smoke-test (CI-only) |
 
 The bolded `nothing` rows are the honest error budget (§0 of the format
 standard): release-plumbing invariants with no per-run automated catcher, the
@@ -673,6 +762,10 @@ same class Spec 23 carried (its INV-23-8/9/10).
   point here now that the installer exists.
 - **`README.md`** (installer amendment) - the Windows download section gains the
   installer and the Updates section gains Windows, in the release that ships it.
+- **Spec 28** (MSI amendment, MUSI-0407) - a third install kind, `WINDOWS_MSI`,
+  that checks and offers but never installs (its §4.2, §4.6).
+- **`README.md`** (MSI amendment) - the Windows download section gains the MSI,
+  in the release that ships it.
 - **No other sibling-spec contract changes** - Spec 24 adds a Windows package around
   Spec 22's portable code and the Spec 23-added flags; it does not alter Specs
   08/22/23.

@@ -1,16 +1,16 @@
 <!-- ants-spec-format: 1 -->
 # 28 — The app updates itself to the newest release
 
-**Status:** accepted (2026-11-18). Linux half built 2026-11-18; Windows half built 2026-11-18 with the installer (Spec 24 §4.7, MUSI-0406).
+**Status:** accepted (2026-11-18). Linux half built 2026-11-18; Windows half built 2026-11-18 with the installer (Spec 24 §4.7, MUSI-0406). Amended 2026-11-18 for the MSI (`WINDOWS_MSI`, MUSI-0407).
 **Kind:** feature.
-**Source:** ROADMAP MUSI-0389 (user request 2026-10-10; owner decisions 2026-11-04 and 2026-11-18).
+**Source:** ROADMAP MUSI-0389 (user request 2026-10-10; owner decisions 2026-11-04 and 2026-11-18); the MSI, MUSI-0407 (owner, 2026-11-18).
 **Depends on:** 10, 22, 23, 24, 27. **Amends:** 00 (network use), 10 (`settings.json` schema), 23 (§9 out-of-scope line; update information in the build), 27 (INV-3's name map).
 
 **Layman:** Once a day the app looks for a newer version. If there is one, it asks you, then downloads it, checks it is genuine, and installs it.
 
 ## 1. Goal
 
-A copy of Album Builder running from the AppImage or installed by the Windows installer learns that a newer release exists, asks the user, and installs it. It installs only a download whose checksum is listed in a file signed with the project's key. Copies installed any other way never check and never update themselves.
+A copy of Album Builder running from the AppImage or installed by the Windows installer learns that a newer release exists, asks the user, and installs it. It installs only a download whose checksum is listed in a file signed with the project's key. A copy installed from the Windows MSI learns of the release and opens its download page, but never installs it. Copies installed any other way never check and never update themselves.
 
 ## 2. Problem
 
@@ -35,6 +35,7 @@ All by the owner, recorded on MUSI-0389.
 - **The offer has three buttons: Install now, Remind me tomorrow, Skip this version** — 2026-11-18.
 - **Windows gets an installer (MUSI-0406) before Windows self-update, and a Windows update runs the signed installer quietly.** The zip stays as a portable version that does not update itself — 2026-11-18.
 - **`SHA256SUMS.sig` may carry several signatures**, so a copy that missed a key change still verifies — 2026-11-18.
+- **A copy installed from the MSI (Spec 24 §4.8) tells the user about a new release and opens the download page; it never installs one** — 2026-11-18, MUSI-0407.
 
 Author's calls, cheap to change: the signature is a raw Ed25519 signature in a one-line file of this project's own format (§8 says why not minisign or GPG); the signing job polls for the release's assets rather than restructuring the two build workflows (§8).
 
@@ -60,6 +61,7 @@ New runtime dependencies: `cryptography` (Ed25519) and `certifi` (§2 item 5). B
 class InstallKind(StrEnum):
     APPIMAGE = "appimage"
     WINDOWS = "windows"
+    WINDOWS_MSI = "windows-msi"
     NONE = "none"
 
 def install_kind() -> InstallKind: ...
@@ -67,13 +69,14 @@ def install_kind() -> InstallKind: ...
 
 - `APPIMAGE` when the `APPIMAGE` environment variable names an existing file **and** the resolved `album_builder` package directory lies inside the resolved `APPDIR`. The second test stops a copy started from a terminal that another AppImage launched, which inherits that AppImage's `APPIMAGE`.
 - `WINDOWS` when `sys.platform == "win32"`, `getattr(sys, "frozen", False)` is true, and the file `install-kind.txt` beside `sys.executable` reads `installer` once surrounding whitespace is stripped. The installer (MUSI-0406) writes that file; the portable zip carries none.
+- `WINDOWS_MSI` under the same conditions when `install-kind.txt` reads `msi`, which the MSI (Spec 24 §4.8) writes. It checks and offers like `WINDOWS`, and never downloads or starts an installer (§4.6).
 - `NONE` otherwise: the portable zip, the openSUSE package, a pip install, `install.sh`'s launcher, `PYTHONPATH=src` runs.
 
 Under `NONE` the app makes no update request and the Help menu shows neither update entry.
 
 ### 4.3 What a release publishes
 
-Four assets come from the build workflows: `AlbumBuilder-<V>-x86_64.AppImage`, `AlbumBuilder-<V>-x86_64.AppImage.zsync` (new, §4.7), `AlbumBuilder-<V>-windows-x64.zip` and `AlbumBuilder-<V>-windows-x64-setup.exe` (new, MUSI-0406). `release-sign.yml` adds two:
+Four assets come from the build workflows: `AlbumBuilder-<V>-x86_64.AppImage`, `AlbumBuilder-<V>-x86_64.AppImage.zsync` (new, §4.7), `AlbumBuilder-<V>-windows-x64.zip`, `AlbumBuilder-<V>-windows-x64-setup.exe` (MUSI-0406) and `AlbumBuilder-<V>-windows-x64.msi` (MUSI-0407). `release-sign.yml` adds two:
 
 `SHA256SUMS` — GNU `sha256sum` text format, ASCII, LF line ends, one line per asset above, sorted by name:
 
@@ -104,7 +107,7 @@ A release is **on offer** when all of these hold:
 
 1. `tag_name` matches `^v(\d+)\.(\d+)\.(\d+)$`, and that version is greater, as an integer triple, than the running `album_builder.version.__version__`.
 2. The release lists `SHA256SUMS` and `SHA256SUMS.sig`. Both download, and `SHA256SUMS.sig` is accepted (§4.3) over the downloaded `SHA256SUMS` bytes.
-3. `SHA256SUMS` parses, and lists this kind's asset for that version: `AlbumBuilder-<V>-x86_64.AppImage` or `AlbumBuilder-<V>-windows-x64-setup.exe`. The release also lists that asset.
+3. `SHA256SUMS` parses, and lists this kind's asset for that version: `AlbumBuilder-<V>-x86_64.AppImage`, `AlbumBuilder-<V>-windows-x64-setup.exe`, or for `WINDOWS_MSI` `AlbumBuilder-<V>-windows-x64.msi`. The release also lists that asset.
 4. For the daily check only: `V` is not `updates.skipped_version`.
 
 A release failing 2 or 3 is treated as **not ready**, not as an error: the daily check stays silent, and a manual check says "A new version is being prepared. Try again later."
@@ -133,13 +136,15 @@ The offer dialog names both versions and shows the release body as plain text (n
 
 **Windows.** Only an installed copy updates (§4.2). The download goes to `<settings_dir()>\updates\AlbumBuilder-<V>-windows-x64-setup.exe.part`, a folder only this user writes. After the hash matches it is renamed without `.part`. The app tells the user "Album Builder will close and reopen to finish updating", starts the installer in the quiet update mode Spec 24 §4.7 defines, and closes through the normal close path. That mode asks nothing, shows progress, waits for the running app to exit, installs over the existing install, and starts the new version. Spec 24 §4.7 sets its flags. At the next start the app deletes the `updates` folder. When it finds an installer there named for a version newer than its own, the install did not happen, and it shows once "The update could not finish. You are still on X.Y.Z." first.
 
+**Windows MSI.** The offer's first button reads **Open download page** instead of Install now. It opens the release page (`html_url`) in the browser and closes the dialog; nothing is downloaded, written or started. The other two buttons are as above. Installing an MSI needs an administrator, which the app cannot be.
+
 ### 4.7 Publishing: zsync data and the signature
 
 `build-appimage.sh` passes appimagetool `-u "gh-releases-zsync|milnet01|album-builder|latest|AlbumBuilder-*x86_64.AppImage.zsync"`, and keeps the `.zsync` file it writes beside the AppImage. `appimage.yml` uploads both.
 
 `release-sign.yml` runs on `push: tags: ['v*']`, and by hand (`workflow_dispatch`) with a required `tag` input naming the release to sign, with `permissions: contents: write`. Its one job:
 
-1. polls the tag's release every 60 seconds, for up to 120 minutes, until every build asset of §4.3 that exists yet is present with `state` `uploaded`: the AppImage, its `.zsync`, the zip and the installer. `release-sign.yml` holds that list (a failed build means it times out and fails, so nothing is signed);
+1. polls the tag's release every 60 seconds, for up to 120 minutes, until every build asset of §4.3 that exists yet is present with `state` `uploaded`: the AppImage, its `.zsync`, the zip, the installer and the MSI. `release-sign.yml` holds that list (a failed build means it times out and fails, so nothing is signed);
 2. downloads them into a folder under `$RUNNER_TEMP`, outside the checkout, writes `SHA256SUMS`, and runs `packaging/release-signing.py sign SHA256SUMS` with the secret in the environment variable `RELEASE_SIGNING_KEY`;
 3. runs `release-signing.py verify SHA256SUMS`, which checks the signature against `TRUSTED_KEYS` imported from `album_builder.domain.release_manifest`, so a secret that does not match the shipped key fails the job;
 4. uploads `SHA256SUMS` and `SHA256SUMS.sig` to the release.
@@ -164,8 +169,8 @@ A malformed value reads as its default. No `schema_version` bump: every field is
 
 The domain and services tests inject a fetcher, a clock and a test key pair; none touches the network.
 
-- **INV-1** (TC-28-01) — The app makes an update request only when `install_kind()` is `APPIMAGE` or `WINDOWS`; under `NONE` neither Help entry exists. `APPIMAGE` needs both the `APPIMAGE` file and the package inside `APPDIR`.
-  *Test:* `tests/services/test_TC_28_updater.py::test_install_kind` — cases: no variables; `APPIMAGE` set to a file with `APPDIR` elsewhere (inherited); both matching; `sys.frozen` on `win32` with `install-kind.txt` reading `installer`, reading `portable`, and absent; `sys.frozen` off `win32`. And `::test_no_request_when_kind_none`, which counts fetcher calls.
+- **INV-1** (TC-28-01) — The app makes an update request only when `install_kind()` is `APPIMAGE`, `WINDOWS` or `WINDOWS_MSI`; under `NONE` neither Help entry exists. `APPIMAGE` needs both the `APPIMAGE` file and the package inside `APPDIR`.
+  *Test:* `tests/services/test_TC_28_updater.py::test_install_kind` — cases: no variables; `APPIMAGE` set to a file with `APPDIR` elsewhere (inherited); both matching; `sys.frozen` on `win32` with `install-kind.txt` reading `installer`, reading `msi`, reading `portable`, and absent; `sys.frozen` off `win32`. And `::test_no_request_when_kind_none`, which counts fetcher calls.
   *Breaks when:* detection trusts `APPIMAGE` alone, or the startup check runs before consulting the kind.
 
 - **INV-2** (TC-28-02) — The daily check runs at most once per 24 hours, writes `last_check` before the request, and makes none when `auto_check` is false.
@@ -193,7 +198,7 @@ The domain and services tests inject a fetcher, a clock and a test key pair; non
   *Breaks when:* the new file is written under the new versioned name, or the mode is not copied.
 
 - **INV-8** (TC-28-08) — On Windows the app starts the downloaded installer only after its hash matches, only from `<settings_dir()>\updates\`, and only on an installed copy; the portable zip never starts one.
-  *Test:* `tests/services/test_TC_28_updater.py::test_windows_install_gate`, with the process launch replaced by a recorder: a matching download records one launch of the renamed file in that folder; a wrong hash records none and leaves no file; an `install-kind.txt` that is missing or reads anything but `installer` records no request at all. On the Windows test machine (`ssh wintest`), a manual recipe on two test builds whose `TRUSTED_KEYS` and release URL are patched, before the build runs, to a test key and a test repository (release builds carry no such patch): install the older with its installer, update it to the newer from inside the app, and confirm the newer starts, the albums and settings remain, and `updates\` is gone at the following start.
+  *Test:* `tests/services/test_TC_28_updater.py::test_windows_install_gate`, with the process launch replaced by a recorder: a matching download records one launch of the renamed file in that folder; a wrong hash records none and leaves no file; an `install-kind.txt` that is missing or reads anything but `installer` or `msi` records no request at all. A copy reading `msi` is INV-14's. On the Windows test machine (`ssh wintest`), a manual recipe on two test builds whose `TRUSTED_KEYS` and release URL are patched, before the build runs, to a test key and a test repository (release builds carry no such patch): install the older with its installer, update it to the newer from inside the app, and confirm the newer starts, the albums and settings remain, and `updates\` is gone at the following start.
   *Breaks when:* the launch happens before the rename that follows the hash check, or detection treats every frozen Windows build as installed.
 
 - **INV-9** (TC-28-09) — Every update request is HTTPS on every redirect hop, and every response is read to a fixed cap: release JSON 1 MiB, `SHA256SUMS` 64 KiB, `.sig` 1 KiB, asset the smaller of its listed size and 1 GiB.
@@ -215,6 +220,10 @@ The domain and services tests inject a fetcher, a clock and a test key pair; non
 - **INV-13** (TC-28-13) — The `updates` block reads its defaults from a missing block and from each malformed field, and `write_updates` keeps every other top-level key.
   *Test:* `tests/persistence/test_TC_28_settings_updates.py` — absent block; `auto_check: "yes"`; `last_check: 5`; `skipped_version: "x"`; a round trip that leaves `audio` and `ui` unchanged.
   *Breaks when:* a field is read without a type check, or the writer rebuilds the file from the `updates` block alone.
+
+- **INV-14** (TC-28-14) — A `WINDOWS_MSI` copy offers a release only when the signed `SHA256SUMS` lists that release's `.msi`, and its offer downloads, writes and starts nothing: the first button opens the release page.
+  *Test:* `tests/services/test_TC_28_updater.py::test_msi_check_wants_the_msi` — a release whose signed `SHA256SUMS` lists the `.msi` is on offer for `WINDOWS_MSI`; one listing only the setup `.exe` is not ready. And `tests/ui/test_TC_28_update_dialog.py::test_msi_offer_opens_release_page` — the first button reads Open download page; choosing it opens the release page through a recorded `QDesktopServices.openUrl`, and the transport records no asset request.
+  *Breaks when:* `WINDOWS_MSI` falls through to another kind's install path, or the check asks for the setup `.exe`'s entry.
 
 ## 6. Failure modes
 
@@ -240,8 +249,8 @@ The domain and services tests inject a fetcher, a clock and a test key pair; non
 Each invariant's *Test:* clause names its test; §10 maps them. The test files are new except `tests/test_TC_23_appimage.py`. Each test is seen failing before the code it locks exists.
 
 - `tests/domain/test_TC_28_release_manifest.py` — INV-4, INV-5.
-- `tests/services/test_TC_28_updater.py` — INV-1, INV-2, INV-6, INV-7, INV-8, INV-9.
-- `tests/ui/test_TC_28_update_dialog.py` — INV-3.
+- `tests/services/test_TC_28_updater.py` — INV-1, INV-2, INV-6, INV-7, INV-8, INV-9, INV-14.
+- `tests/ui/test_TC_28_update_dialog.py` — INV-3, INV-14.
 - `tests/persistence/test_TC_28_settings_updates.py` — INV-13.
 - `tests/packaging/test_TC_28_release_signing.py` — INV-10, INV-11.
 - INV-12: the `appimage.yml` smoke step and `tests/test_TC_23_appimage.py`.
@@ -268,6 +277,7 @@ INV-8's real install runs only on the Windows test machine, and INV-12's `readel
 - Pre-release channels — `releases/latest` excludes them; deferred, not yet queued.
 - Rolling back to the previous version from inside the app — deferred; not yet queued.
 - The portable Windows zip updating itself — owner, 2026-11-18: it does not.
+- An MSI copy installing its own update — owner, 2026-11-18: it opens the download page instead (§4.6).
 - The installer itself — Spec 24 §4.7.
 - Updating an arm64 AppImage — none is built (Spec 23 §9).
 
@@ -288,7 +298,8 @@ INV-8's real install runs only on the Windows test machine, and INV-12's `readel
 | INV-11 | `test_TC_28_release_signing.py::test_workflow_shape` |
 | INV-12 | `appimage.yml` smoke step (tag and manual runs only) and `test_TC_23_appimage.py` |
 | INV-13 | `test_TC_28_settings_updates.py` |
-| A real release is signed and offered end to end | **nothing** automated — proven by the first tagged release after this ships, updating an AppImage and an installed Windows copy of the previous release |
+| INV-14 | `test_TC_28_updater.py::test_msi_check_wants_the_msi`, `test_TC_28_update_dialog.py::test_msi_offer_opens_release_page` |
+| A real release is signed and offered end to end | **nothing** automated — proven by the first tagged release after this ships, updating an AppImage and an installed Windows copy of the previous release, and an MSI copy offering it |
 | No private key in the tree | Partial: `generate` refuses the work tree (INV-10); `gitleaks` in `/audit` scans commits; a key pasted into a file by hand is caught only by that scan |
 
 ## 11. Cross-doc impact

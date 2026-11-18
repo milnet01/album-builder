@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: MUSI=406 -->
+<!-- ants-roadmap-id-high-water: MUSI=407 -->
 
 # Album Builder — Roadmap
 
@@ -416,6 +416,22 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: package.
   Source: user-request-2026-11-18.
   Lanes: packaging.
+
+- 🚧 [MUSI-0407] **A Windows MSI installer beside the EXE installer and the portable zip.**
+  Decided (owner, 2026-11-18): keep the EXE installer and the
+  portable zip, and add an MSI. The MSI installs for everyone on the
+  PC (asks for the administrator password once). A copy installed
+  from the MSI tells the user when a new version is out and links to
+  the download page; it never installs an update itself. Build it
+  before MP-4 (MUSI-0356), so the next release ships all three
+  Windows downloads. Build tool: WiX Toolset 7; the build accepts its
+  OSMF licence (owner's choice; the fee applies only from US$10,000
+  a year of revenue-generating use, and Album Builder earns nothing).
+  Amends Spec 24 (§4.8) and Spec 28 (a third install kind).
+  **Layman:** Windows users get a third download: an MSI installer, the kind IT departments use, which installs Album Builder for everyone on the PC.
+  Kind: package.
+  Source: user-request-2026-11-18.
+  Lanes: packaging, services, ui.
 
 ## DeepSeek review fixes (2026-11-05)
 
