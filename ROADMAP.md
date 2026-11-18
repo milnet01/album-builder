@@ -185,6 +185,17 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   on by default. (6) The offer has three buttons: Install now,
   Remind me tomorrow, Skip this version.
   Spec: docs/specs/28-self-update.md.
+  Spec 28 reviewed (review-contract, 2026-11-18): 2 loops of 2,
+  capped calm; 20 findings verified, 18 fixed, Status accepted. Two
+  design questions wait for the owner, written in Spec 28 §14 with
+  recommendations: (1) a Windows copy with no albums folder set
+  keeps Albums/ and state.json in its working directory, so §4.6's
+  "install folder holds only the app" check can refuse it -
+  recommended: the swap replaces only AlbumBuilder.exe and
+  _internal\ and the check goes; (2) a copy that misses the
+  key-rotation release can never verify a later one - recommended:
+  SHA256SUMS.sig may carry one line per key. Loop log:
+  docs/reviews/28-self-update-loop-log.md. Commits 66002a2, e6f67e5.
   **Layman:** The app tells you when a newer version is out and can install it for you, so you never have to download it by hand.
   Kind: feature.
   Source: user-request-2026-10-10.
