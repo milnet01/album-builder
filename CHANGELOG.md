@@ -8,9 +8,13 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-18
+
+**Theme:** Self-update on Linux
+
 ### Added
 
-- **The Linux AppImage can update itself** (MUSI-0389)
+- **The Linux AppImage can update itself** (part of MUSI-0389)
   Once a day it asks GitHub whether a newer version is out, and asks you
   before installing anything. It only installs a download it can prove
   came from this project. You can also check by hand from the Help menu,

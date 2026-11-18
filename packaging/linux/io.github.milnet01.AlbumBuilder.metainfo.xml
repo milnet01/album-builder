@@ -40,6 +40,15 @@
     <category>Audio</category>
   </categories>
   <releases>
+    <release version="1.2.0" date="2026-11-18">
+      <description>
+        <p>The Linux AppImage can update itself. Once a day it asks whether a
+        newer version is out, and asks you before installing anything. It only
+        installs a download it can prove came from this project. You can also
+        check by hand from the Help menu, or switch the daily check off there.
+        The Windows download does not update itself yet.</p>
+      </description>
+    </release>
     <release version="1.1.0" date="2026-11-13">
       <description>
         <p>The player picks up where you left off: reopen the app and your

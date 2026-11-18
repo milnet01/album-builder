@@ -15,11 +15,13 @@ right.](docs/screenshots/album-builder-curate.png)
 
 ## Status
 
-**v1.1.0 (2026-11-13): the player picks up where you left off.**
-Close the app and open it again, and your song, your place in it
-and the play queue are back. Ctrl+F jumps to the search box, and
-synced lyrics light up at the right moment more often.
-Version 1.0.0 added undoing a removed song with Ctrl+Z and
+**v1.2.0 (2026-11-18): self-update on Linux.**
+Once a day the Linux AppImage asks whether a newer version is out,
+and asks you before installing anything. It only installs a download
+it can prove came from this project. The Windows download does not
+update itself yet.
+Version 1.1.0 brought back your song, your place in it and the play
+queue when you reopen the app. Version 1.0.0 added undoing a removed song with Ctrl+Z and
 printed album reports on white paper. The 0.9 releases brought finding songs you have twice
 (File → Find Duplicates...); adding music by dragging songs
 onto the window or with File → Add Music...; more
