@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: MUSI=407 -->
+<!-- ants-roadmap-id-high-water: MUSI=408 -->
 
 # Album Builder — Roadmap
 
@@ -446,6 +446,21 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: package.
   Source: user-request-2026-11-18.
   Lanes: packaging, services, ui.
+
+- 📋 [MUSI-0408] **A playlists.json that is not valid UTF-8 crashes launch.**
+  persistence/playlist_io.py::load_playlists runs raw_bytes.decode("utf-8")
+  before json.loads. PlaylistStore.__init__ catches (json.JSONDecodeError,
+  UnreadableSchemaError, SchemaTooNewError, OSError), which does not
+  include UnicodeDecodeError, so it escapes and launch fails. Reproduced
+  2026-11-18: a playlists.json starting with bytes FF FE, then
+  PlaylistStore(root) -> UnicodeDecodeError. Spec 17 §Persistence & schema
+  promises start-empty + .corrupt.bak for a corrupt file. Fix: treat
+  UnicodeDecodeError as unreadable (decode inside load_playlists and raise
+  UnreadableSchemaError, or add it to the tuple), with a regression test.
+  Spec 29's PlayHistory must not copy the narrow tuple.
+  **Layman:** If the saved playlists file gets garbled, the app refuses to start instead of starting with no playlists and keeping the bad file aside.
+  Kind: review-fix.
+  Source: review-contract-2026-11-18 (Spec 29 loop 2).
 
 ## DeepSeek review fixes (2026-11-05)
 
