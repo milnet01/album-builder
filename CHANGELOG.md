@@ -10,6 +10,16 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Added
 
+- **A Windows MSI installer, for installing on every account of a PC** (MUSI-0407)
+  A third Windows download, `AlbumBuilder-<version>-windows-x64.msi`,
+  installs Album Builder into Program Files for everyone who uses the
+  PC. It asks for an administrator's approval once. This is the kind
+  of installer IT departments use to set up many PCs.
+  A copy installed this way tells you when a new version is out and
+  opens the download page; it does not install the update itself.
+  Uninstalling keeps each person's albums and settings.
+  The other installer and the zip work as before.
+
 - **Windows installer, and Windows updates itself** (MUSI-0406)
   A new Windows download, `AlbumBuilder-<version>-windows-x64-setup.exe`,
   installs Album Builder like any other program: no admin password, a

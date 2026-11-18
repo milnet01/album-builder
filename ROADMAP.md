@@ -417,7 +417,7 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Source: user-request-2026-11-18.
   Lanes: packaging.
 
-- 🚧 [MUSI-0407] **A Windows MSI installer beside the EXE installer and the portable zip.**
+- ✅ [MUSI-0407] **A Windows MSI installer beside the EXE installer and the portable zip.**
   Decided (owner, 2026-11-18): keep the EXE installer and the
   portable zip, and add an MSI. The MSI installs for everyone on the
   PC (asks for the administrator password once). A copy installed
@@ -428,6 +428,16 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   OSMF licence (owner's choice; the fee applies only from US$10,000
   a year of revenue-generating use, and Album Builder earns nothing).
   Amends Spec 24 (§4.8) and Spec 28 (a third install kind).
+  Built 2026-11-18 (294a13a specs, ddc7bbe code). Windows build run
+  44332140796 green, including its MSI install/run/uninstall step.
+  Checked on the Windows test machine: installs for all users (exit
+  0, marker msi, all-users Start menu and Installed-apps entries);
+  as a normal user the self-test's PDF render passes from Program
+  Files and the app opens from the Start menu, albums folder in
+  Music\Album Builder; uninstall removes the program and keeps the
+  settings. Owed at the next release: README's Windows download
+  section gains the MSI (beside MUSI-0389's installer and Updates
+  lines).
   **Layman:** Windows users get a third download: an MSI installer, the kind IT departments use, which installs Album Builder for everyone on the PC.
   Kind: package.
   Source: user-request-2026-11-18.
