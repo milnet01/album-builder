@@ -155,7 +155,9 @@ weasy_libs_optional="libharfbuzz-subset.so.0"
 # that must come from the host (libGL is driver-coupled; libc/ld are the base).
 copy_with_closure() {
     local soname="$1" optional="${2:-}" src
-    src="$(ldconfig -p | awk -v n="$soname" '$1==n {print $NF; exit}')"
+    # Take the first match but read to the end: an awk `exit` closes the pipe
+    # early, ldconfig dies of SIGPIPE, and pipefail stops the build (exit 141).
+    src="$(ldconfig -p | awk -v n="$soname" '$1==n && !found {print $NF; found=1}')"
     if [ -z "$src" ]; then
         [ -n "$optional" ] && { echo "stage 4: $soname absent (optional) - skipping" >&2; return 0; }
         echo "stage 4: $soname not found after apt-get" >&2; exit 1
