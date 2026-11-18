@@ -1,6 +1,6 @@
 <!-- ants-roadmap-format: 1 -->
 <!-- Generated from the Ants Terminal roadmap store. Edit it with roadmap_log; hand edits are discarded by the next write. -->
-<!-- ants-roadmap-id-high-water: MUSI=405 -->
+<!-- ants-roadmap-id-high-water: MUSI=406 -->
 
 # Album Builder — Roadmap
 
@@ -196,10 +196,18 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   key-rotation release can never verify a later one - recommended:
   SHA256SUMS.sig may carry one line per key. Loop log:
   docs/reviews/28-self-update-loop-log.md. Commits 66002a2, e6f67e5.
+  Decided (owner, 2026-11-18, after the review): (7) SHA256SUMS.sig
+  may carry one signature line per key. (8) Windows gets an
+  installer first (MUSI-0406); a Windows update downloads and
+  quietly runs the signed installer. The zip stays as a portable
+  version that does not update itself. Both written into Spec 28;
+  its §14 questions are closed. Blocked by MUSI-0406 for the Windows
+  half only; the Linux half can be built now.
   **Layman:** The app tells you when a newer version is out and can install it for you, so you never have to download it by hand.
   Kind: feature.
   Source: user-request-2026-10-10.
   Lanes: services, ui, packaging.
+  Blocked-by: MUSI-0406.
 
 - 💭 [MUSI-0391] **Report PDFs with Chinese, Japanese or Korean lyrics embed a font some printers reject.**
   Measured 2026-10-15: text no named report font covers falls back per
@@ -295,6 +303,30 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   **Layman:** Pressing play on a track whose file is gone now shows one message, "Track file not found", with the file's location.
   Kind: fix.
   Source: found-2026-11-05-fixing-MUSI-0395.
+
+- 📋 [MUSI-0406] **A Windows installer for Album Builder.**
+  Owner, 2026-11-18: build an installer before Windows self-update
+  (MUSI-0389); Windows updates then download and quietly run the
+  signed installer. The zip stays as a portable download that does
+  not update itself. Amends Spec 24, whose deliverable is a portable
+  unzip-and-run folder with no installer.
+  Spec 28 binds to: the asset name
+  AlbumBuilder-<V>-windows-x64-setup.exe; an install-kind.txt reading
+  "installer" beside AlbumBuilder.exe (the zip has none); a quiet
+  mode that asks nothing, closes the running app, installs, and
+  starts the new version.
+  For the design: per-user install (no admin prompt, under
+  %LOCALAPPDATA%\Programs); Inno Setup is the usual free tool; where
+  albums go when no albums_folder is set (app.py
+  _resolve_project_root falls back to the working directory, which a
+  Start menu shortcut would make the install folder); uninstall keeps
+  the user's albums and settings. The unsigned installer still shows
+  SmartScreen's unknown-publisher warning (code signing deferred by
+  Spec 24).
+  **Layman:** Windows users install Album Builder like any other program, with a Start menu entry and an uninstaller, and updates install themselves.
+  Kind: package.
+  Source: user-request-2026-11-18.
+  Lanes: packaging.
 
 ## DeepSeek review fixes (2026-11-05)
 
