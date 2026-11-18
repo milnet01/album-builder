@@ -103,6 +103,16 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   no real "added" date, only the file's last-change time, which a tag
   edit resets. (b) Group by artist or album waits for MP-4 (favourites,
   play counts); browsing is then designed as one piece.
+  Decided (owner, 2026-11-18) for Phase MP-4: (a) a favourite heart,
+  not star ratings; (b) play counts, last-played times and hearts live
+  in the app's own file, never in the song files' tags, so renaming or
+  moving a song file loses them; (c) a song counts as played once half
+  of it, or 4 minutes, has played (Last.fm's rule); (d) the Player tab
+  offers three ready-made lists: Favourites, Recently played, Most
+  played. Checked 2026-11-18: no play count, favourite or rating exists
+  in src/ yet; state.json keeps only last_played_track_path. Next:
+  write the MP-4 spec (new saved data, so likely the review-contract
+  gate).
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 
