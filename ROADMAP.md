@@ -203,6 +203,11 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   version that does not update itself. Both written into Spec 28;
   its §14 questions are closed. Blocked by MUSI-0406 for the Windows
   half only; the Linux half can be built now.
+  Decided (owner, 2026-11-18, question round): (9) Next: apply
+  Spec 28 §11's amendments, then build the Linux half. (10) Signing
+  key: the claude-config session backs up all keys; generate the key
+  and hand the private half to claude-config for backup before
+  uploading it as RELEASE_SIGNING_KEY.
   **Layman:** The app tells you when a newer version is out and can install it for you, so you never have to download it by hand.
   Kind: feature.
   Source: user-request-2026-10-10.
@@ -323,6 +328,10 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   the user's albums and settings. The unsigned installer still shows
   SmartScreen's unknown-publisher warning (code signing deferred by
   Spec 24).
+  Decided (owner, 2026-11-18): with no albums_folder set, albums
+  go in Music\Album Builder. The installer is Windows-only; Linux
+  keeps the AppImage. Per-user install stays the design default
+  (the owner did not pick between per-user and all-users).
   **Layman:** Windows users install Album Builder like any other program, with a Start menu entry and an uninstaller, and updates install themselves.
   Kind: package.
   Source: user-request-2026-11-18.
