@@ -174,6 +174,17 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   refuses a download whose signature or checksum does not match. Also
   settled by Spec 27: a copy installed from the openSUSE package never
   updates itself; zypper does that. Next: write the spec.
+  Decided (owner, 2026-11-18, while specifying):
+  (3) The release workflow signs automatically with a key held as a
+  GitHub Actions secret; uploading the secret waits for the owner's
+  go-ahead. (4) The AppImage downloads the whole new file and checks
+  its signature; the release also publishes zsync data so outside
+  AppImage updater tools can do small updates (replaces the
+  2026-11-04 "uses zsync" answer: in-app zsync needs a second
+  bundled program). (5) A "Check for updates automatically" switch,
+  on by default. (6) The offer has three buttons: Install now,
+  Remind me tomorrow, Skip this version.
+  Spec: docs/specs/28-self-update.md.
   **Layman:** The app tells you when a newer version is out and can install it for you, so you never have to download it by hand.
   Kind: feature.
   Source: user-request-2026-10-10.
