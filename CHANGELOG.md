@@ -44,6 +44,12 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
   installs the update itself, closing and reopening the app.
   The zip download still works as before and does not update itself.
 
+### Fixed
+
+- **A playlist change made just before closing the app is now kept** (MUSI-0409)
+  Before, a change to a saved playlist made in the last quarter of a
+  second before you closed the app could be lost.
+
 ## [1.2.0] - 2026-11-18
 
 **Theme:** Self-update on Linux

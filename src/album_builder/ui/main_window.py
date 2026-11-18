@@ -1736,6 +1736,12 @@ class MainWindow(QMainWindow):
             logger.exception("PlayHistory.flush() failed during closeEvent")
             failures.append(f"play-history flush: {_redact_home(exc)}")
         try:
+            # MUSI-0409: the debounce timer never fires once the app has quit.
+            self._playlist_store.flush()
+        except Exception as exc:
+            logger.exception("PlaylistStore.flush() failed during closeEvent")
+            failures.append(f"playlist-store flush: {_redact_home(exc)}")
+        try:
             self._save_state_now(position)
         except Exception as exc:
             logger.exception("save_state_now() failed during closeEvent")

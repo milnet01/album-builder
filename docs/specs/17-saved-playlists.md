@@ -246,8 +246,9 @@ to the `.album-builder/` dir it imports from `state_io`:
   catalogue, last-writer-wins (the `AlbumStore` debounced-writer pattern, adapted
   to a single catalogue key rather than `AlbumStore`'s per-album-UUID key).
 - `flush(self)` - force the pending debounced write immediately
-  (`self._writer.flush_all()`); used by tests to assert the persisted bytes
-  (mirrors `AlbumStore.flush`).
+  (`self._writer.flush_all()`), as `AlbumStore.flush` does. `MainWindow.closeEvent`
+  calls it so a pending write lands before exit (TC-17-31); tests call it to assert
+  the persisted bytes.
 
 ### `ui/playlists_pane.py` - `PlaylistsPane(QFrame)`
 
@@ -379,6 +380,8 @@ modal loop):
     `pl_id = store.create(name).id`. Then unconditionally `store.add_track(pl_id,
     t.path)` for each track. (The existing-playlist branch, `pl_id is not None`,
     skips the prompt and adds directly.)
+- In `closeEvent`, call `self._playlist_store.flush()` beside the other store
+  flushes, in its own `try`, so a failure there skips none of them (TC-17-31).
 
 ## Behavior rules
 
@@ -680,6 +683,9 @@ tests build real widgets under the offscreen QPA and monkeypatch
   track 0 and press Down twice; the same track advances two slots (selection follows
   it) and the persisted order matches. After `remove_track`, selection lands on the
   entry now at the removed index (or the last row if the last was removed).
+- **TC-17-31** - Closing the window writes a pending change: create a playlist,
+  then close `MainWindow` at once, before the debounce timer fires;
+  `load_playlists(project_root)` returns that playlist.
 
 ## Out of scope (later phases)
 

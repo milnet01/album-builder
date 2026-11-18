@@ -470,13 +470,18 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: review-fix.
   Source: review-contract-2026-11-18 (Spec 29 loop 2).
 
-- 📋 [MUSI-0409] **Saved playlists are not written on quit, so an edit just before closing can be lost.**
+- ✅ [MUSI-0409] **Saved playlists are not written on quit, so an edit just before closing can be lost.**
   Read 2026-11-18: MainWindow.closeEvent flushes AlbumStore, state
   and (since Spec 29) PlayHistory, but nothing calls
   PlaylistStore.flush(); its DebouncedWriter waits 250 ms, and its
   timer never fires once the app has quit. Unverified by a run.
   Fix: flush it in closeEvent beside PlayHistory.flush(), with a
   test that edits a playlist and closes at once.
+  Fixed 2026-11-18: closeEvent now calls PlaylistStore.flush()
+  in its own try, after PlayHistory.flush(). TC-17-31
+  (tests/ui/test_TC_17_31_close_flushes_playlists.py) failed
+  before the fix (playlists.json held no playlists) and passes
+  after. Spec 17 amended.
   **Layman:** A change to a saved playlist made in the last quarter-second before you close the app may not be kept.
   Kind: fix.
   Source: found-while-building-spec-29-2026-11-18.
