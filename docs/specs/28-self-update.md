@@ -45,12 +45,12 @@ Author's calls, cheap to change: the signature is a raw Ed25519 signature in a o
 | domain | new `domain/release_manifest.py` | version parsing, `SHA256SUMS` and signature parsing, signature check, `TRUSTED_KEYS`, expected asset names |
 | services | new `services/updater.py` | install-kind detection, HTTPS fetches, the check and download workers (`QThread`), applying the update |
 | persistence | `persistence/settings.py` | `read_updates()` / `write_updates()` for the `updates` block |
-| ui | new `ui/update_dialog.py`; `ui/main_window.py` Help menu | the offer, progress and result dialogs; two menu entries |
+| ui | new `ui/update_dialog.py`; `ui/main_window.py` Help menu and `closeEvent` | the offer, progress and result dialogs; two menu entries; the close-time wait for the update worker |
 | packaging | `packaging/release-signing.py`, `.github/workflows/release-sign.yml`, `packaging/build-appimage.sh` | key generation, signing, update information in the AppImage |
 
 Layer rules are `docs/design.md`'s: the domain module imports no PyQt6; network work runs in a `QThread` worker in the shape of `services/duplicates.py::DuplicateWorker` and reports by signal.
 
-New runtime dependencies: `cryptography` (Ed25519) and `certifi` (§2 item 5). Both go in `requirements.txt` with floors at the release current when this is built (`docs/standards/dependency-currency.md`).
+New runtime dependencies: `cryptography` (Ed25519) and `certifi` (§2 item 5). Both go in `requirements.txt` with floors as `docs/standards/dependency-currency.md` sets them.
 
 ### 4.2 Install kind
 
@@ -88,7 +88,7 @@ album-builder-signature-v1 <key id> <base64 signature>\n
 - `<key id>`: the first 16 lowercase hex characters of SHA-256 over the 32-byte raw public key.
 - `<base64 signature>`: standard base64 (with padding) of the 64-byte Ed25519 signature over the exact bytes of `SHA256SUMS`.
 
-`release_manifest.TRUSTED_KEYS: dict[str, str]` maps key id to base64 raw public key. It holds one key; a list lets a later release introduce a successor.
+`release_manifest.TRUSTED_KEYS: dict[str, str]` maps key id to base64 raw public key. It may hold several, so a release can introduce a successor (§6).
 
 ### 4.4 Checking
 
@@ -111,7 +111,7 @@ A release failing 2 or 3 is treated as **not ready**, not as an error: the daily
 
 Help ▸ *Check for updates automatically* is a checkable entry bound to `updates.auto_check`.
 
-Only one check or download runs at a time; a manual check while one runs waits for that one's result.
+Only one check or download runs at a time; a manual check started meanwhile runs when the other ends.
 
 ### 4.6 The offer and the install
 
@@ -123,14 +123,14 @@ The offer dialog names both versions and shows the release body as plain text (n
 
 **Download.** The worker streams the asset into a temporary file beside the target (below) and hashes it as it goes, stopping at INV-9's cap. A progress dialog shows bytes received and a Cancel button. Only when the SHA-256 equals the `SHA256SUMS` entry does anything change on disk outside the temporary file. On any failure or cancel the temporary file is deleted and the running copy is untouched.
 
-**AppImage.** The target is `Path(os.environ["APPIMAGE"]).resolve()`. The temporary file is `.<target name>.update` in the same folder. If the folder is not writable, the app says so before downloading and offers to open the release page. After the hash matches: copy the target's permission bits (adding execute), `fsync`, then `os.replace` onto the target. The path stays the same, so shortcuts keep working; the file name keeps its old version number. The dialog then offers **Restart now** (start the target with `QProcess.startDetached`, then close through the normal close path so state is saved) or **Later** (the next start runs the new version).
+**AppImage.** The target is `Path(os.environ["APPIMAGE"]).resolve()`. The temporary file is `.<target name>.update` in the same folder. If the folder is not writable, the app says so before downloading and offers to open the release page. After the hash matches: copy the target's permission bits (adding execute), `fsync`, then `os.replace` onto the target. The path stays the same, so shortcuts keep working; the file name keeps its old version number. The dialog then offers **Restart now** (close through the normal close path so state is saved; `app.run()` starts the target with `QProcess.startDetached` only after it releases the single-instance lock, because a copy started earlier finds the lock held and exits) or **Later** (the next start runs the new version).
 
-**Windows.** The install folder is `Path(sys.executable).parent`. The download goes to `<parent>\AlbumBuilder-update-<V>.zip.part`, beside the install folder. After the hash matches, the zip is extracted into the staging folder `<parent>\.albumbuilder-update-<V>\`. Extraction refuses any entry whose resolved path leaves the staging folder. The staged copy is the one folder in it holding `AlbumBuilder.exe`. A running exe cannot be overwritten, so the app writes `swap.cmd` into the staging folder, tells the user "Album Builder will close and reopen to finish updating", starts the script with `CREATE_NO_WINDOW`, and closes through the normal close path. `swap.cmd`:
+**Windows.** The install folder `<install>` is `Path(sys.executable).parent`, and `<parent>` is the folder holding it. Before downloading, the app checks that `<install>` holds only `AlbumBuilder.exe` and `_internal\`. Otherwise (the zip was unpacked into a shared folder such as Downloads) it says so and offers the release page, because the swap renames and later deletes the whole folder. The download goes to `<parent>\AlbumBuilder-update-<V>.zip.part`. The zip holds `AlbumBuilder.exe` and `_internal\` at its top level (`build-windows.ps1` zips the folder's contents). After the hash matches, it is extracted into `app\` inside the staging folder `<parent>\.albumbuilder-update-<V>\`; `app\` is the staged copy. Extraction refuses any entry whose resolved path leaves `app\`. A running exe cannot be overwritten, so the app writes `swap.cmd` into the staging folder, tells the user "Album Builder will close and reopen to finish updating", starts the script with `CREATE_NO_WINDOW` and the staging folder as its working directory, and closes through the normal close path. `swap.cmd`:
 
 1. waits until the app's process id has exited (up to 60 seconds);
-2. renames the install folder to `<name>.old`, deleting an older `<name>.old` first;
-3. moves the staged copy to the install folder's name;
-4. on a failure in step 3, renames `<name>.old` back;
+2. renames `<install>` to `<install>.old`, deleting an older `<install>.old` first;
+3. moves `app\` to `<install>`;
+4. on a failure in step 3, renames `<install>.old` back;
 5. writes `result.txt` (`ok` or `failed <step>`) into the staging folder, then starts `AlbumBuilder.exe` from the install folder.
 
 At the next start, a Windows copy deletes `<install>.old` and any staging folder with `result.txt` = `ok`. If it finds `failed`, it shows once "The update could not finish. You are still on X.Y.Z." and deletes the staging folder. Settings live in `%LOCALAPPDATA%` (Spec 22), so replacing the install folder loses none.
@@ -148,7 +148,7 @@ At the next start, a Windows copy deletes `<install>.old` and any staging folder
 
 `RELEASE_SIGNING_KEY` holds the standard base64 of the 32-byte raw Ed25519 private key. It reaches only step 2's environment.
 
-`packaging/release-signing.py` has three commands: `generate --out PATH` (writes the private key file with mode 0600, refuses a path inside the git work tree, and prints the `TRUSTED_KEYS` entry), `sign FILE` and `verify FILE`.
+`packaging/release-signing.py` has three commands: `generate --out PATH` (writes the private key file, in `RELEASE_SIGNING_KEY`'s format, with mode 0600, refuses a path inside the git work tree, and prints the `TRUSTED_KEYS` entry), `sign FILE` and `verify FILE`.
 
 ### 4.8 Settings
 
@@ -157,8 +157,8 @@ A new optional `updates` block in `settings.json`, read by `read_updates()` and 
 | Field | Type | Default |
 |---|---|---|
 | `updates.auto_check` | bool | `true` |
-| `updates.last_check` | ISO-8601 string (Spec 10 § Encoding rules) | absent |
-| `updates.skipped_version` | string `X.Y.Z` | absent |
+| `updates.last_check` | ISO-8601 string (Spec 10 § Encoding rules) or `null` | `null` |
+| `updates.skipped_version` | string `X.Y.Z` or `null` | `null` |
 
 A malformed value reads as its default. No `schema_version` bump: every field is optional, as Spec 26 did for its fields.
 
@@ -170,7 +170,7 @@ The domain and services tests inject a fetcher, a clock and a test key pair; non
   *Test:* `tests/services/test_TC_28_updater.py::test_install_kind` — cases: no variables; `APPIMAGE` set to a file with `APPDIR` elsewhere (inherited); both matching; `sys.frozen` on `win32`; `sys.frozen` off `win32`. And `::test_no_request_when_kind_none`, which counts fetcher calls.
   *Breaks when:* detection trusts `APPIMAGE` alone, or the startup check runs before consulting the kind.
 
-- **INV-2** (TC-28-02) — The daily check makes at most one request per 24 hours, writes `last_check` before the request, and makes none when `auto_check` is false.
+- **INV-2** (TC-28-02) — The daily check runs at most once per 24 hours, writes `last_check` before the request, and makes none when `auto_check` is false.
   *Test:* `tests/services/test_TC_28_updater.py::test_daily_due` — a fake clock at last_check +23 h (no request), +24 h (one), a failing request followed by +1 h (no request), last_check two hours in the future (one), `auto_check` false (none).
   *Breaks when:* `last_check` is written only on success, so an offline start retries every launch.
 
@@ -194,8 +194,8 @@ The domain and services tests inject a fetcher, a clock and a test key pair; non
   *Test:* `tests/services/test_TC_28_updater.py::test_appimage_replace` — mode 0755 target; after the update the path holds the new bytes with mode 0755.
   *Breaks when:* the new file is written under the new versioned name, or the mode is not copied.
 
-- **INV-8** (TC-28-08) — Windows extraction refuses any zip entry whose path resolves outside the staging folder, and `swap.cmd` restores the old folder when the move of the new one fails.
-  *Test:* `tests/services/test_TC_28_updater.py::test_zip_containment` (entries `../x`, `C:/x`, `/x` refused) and `::test_swap_script_steps`, which reads the generated script's text for the five steps of §4.6 in order. On the Windows test machine (`ssh wintest`), a manual recipe: update 1.x to a locally signed build (pointing at a test key), then with a file in the install folder held open, repeat and confirm the old folder is back and the message shows.
+- **INV-8** (TC-28-08) — Windows extraction refuses any zip entry whose path resolves outside the folder it extracts into, and `swap.cmd` restores the old folder when the move of the new one fails.
+  *Test:* `tests/services/test_TC_28_updater.py::test_zip_containment` (entries `../x`, `C:/x`, `/x` refused) and `::test_swap_script_steps`, which reads the generated script's text for the five steps of §4.6 in order. On the Windows test machine (`ssh wintest`), a manual recipe: update 1.x to a locally signed build (pointing at a test key), then repeat with a file inside the staged `app\` held open while the close-and-reopen message shows, so step 3 fails, and confirm the old folder is back and the next start shows the could-not-finish message.
   *Breaks when:* extraction trusts entry names, or the script deletes the old folder before the new one is in place.
 
 - **INV-9** (TC-28-09) — Every update request is HTTPS on every redirect hop, and every response is read to a fixed cap: release JSON 1 MiB, `SHA256SUMS` 64 KiB, `.sig` 1 KiB, asset the smaller of its listed size and 1 GiB.
@@ -211,7 +211,7 @@ The domain and services tests inject a fetcher, a clock and a test key pair; non
   *Breaks when:* the secret is interpolated into a `run:` line, which puts it in the shell command text.
 
 - **INV-12** (TC-28-12) — The AppImage carries the update information string of §4.7, and the release workflow uploads the `.zsync` file.
-  *Test:* a new smoke step in `appimage.yml`: `readelf --string-dump=.upd_info <AppImage>` contains `gh-releases-zsync|milnet01|album-builder|latest|AlbumBuilder-*x86_64.AppImage.zsync`; and `tests/test_TC_23_appimage.py` gains a check that `appimage.yml`'s upload `files` names the `.zsync`.
+  *Test:* a new smoke step in `appimage.yml`: `readelf --string-dump=.upd_info <AppImage>` contains `gh-releases-zsync|milnet01|album-builder|latest|AlbumBuilder-*x86_64.AppImage.zsync`, and the `.zsync` file exists beside the AppImage; and `tests/test_TC_23_appimage.py` gains a check that `appimage.yml`'s upload `files` names the `.zsync`.
   *Breaks when:* the `-u` flag is dropped from the appimagetool call, or the build writes no `.zsync` beside the AppImage.
 
 - **INV-13** (TC-28-13) — The `updates` block reads its defaults from a missing block and from each malformed field, and `write_updates` keeps every other top-level key.
@@ -228,12 +228,12 @@ The domain and services tests inject a fetcher, a clock and a test key pair; non
 | `release-sign.yml` times out (a build failed) | No signature; no copy offers the release. Re-run the workflow after fixing the build. |
 | Signing secret missing or not matching `TRUSTED_KEYS` | Step 3 fails the job; nothing is uploaded. |
 | Private key lost | Copies in the field can never verify a later release. Users must download one release by hand, and that release carries a new key. The owner keeps an offline copy of the key file. |
-| Private key leaked | An attacker who can also publish a release on the repository could ship a signed update. Ship a release whose `TRUSTED_KEYS` replaces the key, signed with the old one; rotate the secret. |
+| Private key leaked | An attacker who can also publish a release on the repository could ship a signed update. Ship a release whose `TRUSTED_KEYS` holds the old key and a new one, signed with the old one; then rotate the secret, and drop the old key from the next release. |
 | `TRUSTED_KEYS` empty (before the key exists) | Every release fails INV-5, so nothing is offered. Safe by default. |
 | Disk full during download | Write fails; temporary file deleted; old copy untouched; message names the folder. |
 | AppImage folder not writable (e.g. `/opt`) | Said before downloading; offers the release page. |
 | Windows: `swap.cmd` cannot run, or another process holds a file | Old folder restored (step 4) or never moved; next start shows the could-not-finish message once. |
-| App closed during a download | The worker honours `isInterruptionRequested`, deletes its temporary file; the window's close-time wait for workers covers it (MUSI-0371). |
+| App closed during a check or download | `closeEvent` requests interruption and waits, as it does for `_duplicate_worker`; the worker honours `isInterruptionRequested` and deletes its temporary file. |
 | User replaces the AppImage by hand while it runs | `os.replace` acts on whatever is at the path; the new hash was verified, so the result is the signed release. |
 
 ## 7. Tests
