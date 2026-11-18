@@ -219,6 +219,16 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   release-sign.yml fails at Sign and nothing is offered. (b) The first
   signed release proves the end-to-end row of Spec 28 §10. (c) The
   Windows half waits for MUSI-0406.
+  Key done (2026-11-18): generated to
+  ~/.config/album-builder-release/signing.key (600, dir 700; the
+  working copy, kept); public half in TRUSTED_KEYS (f45f667, key id
+  43f74035ce2eab1a); RELEASE_SIGNING_KEY secret set on GitHub. A
+  dummy SHA256SUMS signed with it verifies against TRUSTED_KEYS.
+  Backup: path sent to claude-config, which adds it to
+  ~/.claude/key-backup/make-backup.sh and runs it when the owner is at
+  the machine (passphrase pop-up); confirmation pending. Remaining: the
+  next tagged release is the first signed one and proves Spec 28 §10's
+  end-to-end row; the Windows half waits for MUSI-0406.
   **Layman:** The app tells you when a newer version is out and can install it for you, so you never have to download it by hand.
   Kind: feature.
   Source: user-request-2026-10-10.
