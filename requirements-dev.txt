@@ -9,3 +9,5 @@ ruff>=0.5
 # Spec 27: the TC-27 tests build a wheel with --no-build-isolation.
 setuptools>=77
 wheel>=0.45
+# Spec 28: TC-28-11 parses release-sign.yml.
+pyyaml>=6

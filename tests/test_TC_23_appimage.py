@@ -113,3 +113,27 @@ def test_python_base_follows_the_minor_not_a_pinned_patch() -> None:
     assert 'PYTHON_APPIMAGE_TAG="python3.13"' in code
     assert not re.search(r"python3\.13\.\d+-cp313", code), "a patch-level asset is pinned"
     assert "api.github.com/repos/niess/python-appimage/releases/tags/" in code
+
+
+def test_release_upload_includes_the_zsync_file() -> None:
+    # Spec: TC-28-12. Outside AppImage updaters read the .zsync file the
+    # update information names, so the release must publish it with the
+    # AppImage. The readelf half runs in appimage.yml on the real build.
+    import yaml
+
+    workflow = yaml.safe_load(
+        (PROJECT_ROOT / ".github" / "workflows" / "appimage.yml").read_text(encoding="utf-8")
+    )
+    upload = next(
+        s for s in workflow["jobs"]["appimage"]["steps"]
+        if "action-gh-release" in s.get("uses", "")
+    )
+    files = upload["with"]["files"].split()
+    assert "dist/AlbumBuilder-*-x86_64.AppImage.zsync" in files
+    assert "dist/AlbumBuilder-*-x86_64.AppImage" in files
+    script = (PROJECT_ROOT / "packaging" / "build-appimage.sh").read_text(encoding="utf-8")
+    assert '-u "$UPDATE_INFO"' in script
+    assert (
+        'UPDATE_INFO="gh-releases-zsync|milnet01|album-builder|latest|'
+        'AlbumBuilder-*x86_64.AppImage.zsync"'
+    ) in script

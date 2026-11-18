@@ -1,0 +1,85 @@
+name: Release signing
+
+# Spec 28 §4.7: once a tag's build workflows have uploaded their assets,
+# publish SHA256SUMS and SHA256SUMS.sig, signed with the project key. The app
+# installs only a download listed in a SHA256SUMS whose signature it trusts.
+# Polls rather than restructuring appimage.yml / windows.yml (Spec 28 §8); a
+# failed build means the poll times out and nothing is signed.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write   # upload SHA256SUMS and SHA256SUMS.sig to the Release
+
+concurrency:
+  group: release-sign-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sign:
+    runs-on: ubuntu-24.04
+    # 120 min of polling plus download, sign and upload.
+    timeout-minutes: 135
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install the signing library
+        # Only cryptography: the script imports the app's domain module alone.
+        run: python -m pip install -q "$(grep -E '^cryptography' requirements.txt)"
+
+      - name: Wait for the build assets, then download them
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        # The assets the build workflows upload. The Windows installer
+        # (AlbumBuilder-<V>-windows-x64-setup.exe) joins this list when
+        # MUSI-0406 ships it.
+        run: |
+          set -euo pipefail
+          v="${TAG#v}"
+          want=("AlbumBuilder-$v-x86_64.AppImage"
+                "AlbumBuilder-$v-x86_64.AppImage.zsync"
+                "AlbumBuilder-$v-windows-x64.zip")
+          for attempt in $(seq 1 120); do
+            have=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
+                     --jq '.assets[] | select(.state == "uploaded") | .name' 2>/dev/null || true)
+            missing=0
+            for name in "${want[@]}"; do
+              grep -qxF "$name" <<<"$have" || missing=1
+            done
+            if [ "$missing" = 0 ]; then break; fi
+            if [ "$attempt" = 120 ]; then
+              echo "gave up: the release still lacks some of: ${want[*]}"; exit 1
+            fi
+            sleep 60
+          done
+          mkdir assets
+          for name in "${want[@]}"; do
+            gh release download "$TAG" --pattern "$name" --dir assets
+          done
+
+      - name: Write SHA256SUMS
+        run: |
+          set -euo pipefail
+          (cd assets && sha256sum -- *) | LC_ALL=C sort -k2 > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Sign
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: python packaging/release-signing.py sign SHA256SUMS
+
+      - name: Verify against the key the app ships with
+        run: python packaging/release-signing.py verify SHA256SUMS
+
+      - name: Upload SHA256SUMS and SHA256SUMS.sig
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release upload "$TAG" SHA256SUMS SHA256SUMS.sig --clobber

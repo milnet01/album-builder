@@ -233,10 +233,14 @@ wget -q "https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETO
 chmod +x "$BUILD/appimagetool.AppImage"
 ( cd "$BUILD" && ./appimagetool.AppImage --appimage-extract >/dev/null )
 OUT="/out/AlbumBuilder-${VERSION}-x86_64.AppImage"
-ARCH=x86_64 "$BUILD/squashfs-root/AppRun" "$APPDIR" "$OUT"
+# Spec 28 §4.7: embed update information, so outside AppImage updaters find
+# the newest release, and write the .zsync file they read beside the AppImage.
+UPDATE_INFO="gh-releases-zsync|milnet01|album-builder|latest|AlbumBuilder-*x86_64.AppImage.zsync"
+( cd /out && ARCH=x86_64 "$BUILD/squashfs-root/AppRun" -u "$UPDATE_INFO" "$APPDIR" "$OUT" )
+test -s "$OUT.zsync" || { echo "appimagetool wrote no $OUT.zsync" >&2; exit 1; }
 
 # Hand the artifact back to the invoking user when the container ran as real root
 # (rootful, e.g. Docker); under rootless podman it is already user-owned, so a
 # chown would break it (Spec 23 Section 6).
-[ "${CHOWN_OUTPUT:-1}" = "1" ] && chown "${HOST_UID:-0}:${HOST_GID:-0}" "$OUT"
+[ "${CHOWN_OUTPUT:-1}" = "1" ] && chown "${HOST_UID:-0}:${HOST_GID:-0}" "$OUT" "$OUT.zsync"
 echo "done: $OUT"

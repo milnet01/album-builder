@@ -41,6 +41,10 @@ jobs:
         run: |
           set -euo pipefail
           app=$(echo dist/AlbumBuilder-*-x86_64.AppImage)
+          # TC-28-12: the update information and the .zsync file beside it.
+          readelf --string-dump=.upd_info "$app" \
+            | grep -qF 'gh-releases-zsync|milnet01|album-builder|latest|AlbumBuilder-*x86_64.AppImage.zsync'
+          test -s "$app.zsync"
           # INV-23-3 (source): stage 1 reads version.py, not pyproject.toml.
           grep -q "version.py" packaging/build-appimage.sh
           "$app" --appimage-extract >/dev/null
@@ -102,8 +106,10 @@ jobs:
           chmod +x appimagelint.AppImage
           ./appimagelint.AppImage --appimage-extract-and-run "$app"
 
-      - name: Upload the AppImage to the Release
+      - name: Upload the AppImage and its .zsync file to the Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
-          files: dist/AlbumBuilder-*-x86_64.AppImage
+          files: |
+            dist/AlbumBuilder-*-x86_64.AppImage
+            dist/AlbumBuilder-*-x86_64.AppImage.zsync
