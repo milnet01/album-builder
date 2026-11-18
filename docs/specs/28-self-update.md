@@ -1,10 +1,10 @@
 <!-- ants-spec-format: 1 -->
 # 28 — The app updates itself to the newest release
 
-**Status:** accepted (2026-11-18). Linux half built 2026-11-18; the Windows half waits for MUSI-0406, and until then only the AppImage checks for updates.
+**Status:** accepted (2026-11-18). Linux half built 2026-11-18; Windows half built 2026-11-18 with the installer (Spec 24 §4.7, MUSI-0406).
 **Kind:** feature.
 **Source:** ROADMAP MUSI-0389 (user request 2026-10-10; owner decisions 2026-11-04 and 2026-11-18).
-**Depends on:** 10, 22, 23, 24, 27. **Blocked by:** MUSI-0406 (the Windows installer), for the Windows half only. **Amends:** 00 (network use), 10 (`settings.json` schema), 23 (§9 out-of-scope line; update information in the build), 27 (INV-3's name map).
+**Depends on:** 10, 22, 23, 24, 27. **Amends:** 00 (network use), 10 (`settings.json` schema), 23 (§9 out-of-scope line; update information in the build), 27 (INV-3's name map).
 
 **Layman:** Once a day the app looks for a newer version. If there is one, it asks you, then downloads it, checks it is genuine, and installs it.
 
@@ -131,7 +131,7 @@ The offer dialog names both versions and shows the release body as plain text (n
 
 **AppImage.** The target is `Path(os.environ["APPIMAGE"]).resolve()`. The temporary file is `.<target name>.update` in the same folder. If the folder is not writable, the app says so before downloading and offers to open the release page. After the hash matches: copy the target's permission bits (adding execute), `fsync`, then `os.replace` onto the target. The path stays the same, so shortcuts keep working; the file name keeps its old version number. The dialog then offers **Restart now** (close through the normal close path so state is saved; `app.run()` starts the target with `QProcess.startDetached` only after it releases the single-instance lock, because a copy started earlier finds the lock held and exits) or **Later** (the next start runs the new version).
 
-**Windows.** Only an installed copy updates (§4.2). The download goes to `<settings_dir()>\updates\AlbumBuilder-<V>-windows-x64-setup.exe.part`, a folder only this user writes. After the hash matches it is renamed without `.part`. The app tells the user "Album Builder will close and reopen to finish updating", starts the installer in the quiet update mode MUSI-0406 defines, and closes through the normal close path. That mode asks nothing, shows progress, waits for the running app to exit, installs over the existing install, and starts the new version. Its exact flags are MUSI-0406's to set and this spec's implementer reads them there. At the next start the app deletes the `updates` folder. When it finds an installer there named for a version newer than its own, the install did not happen, and it shows once "The update could not finish. You are still on X.Y.Z." first.
+**Windows.** Only an installed copy updates (§4.2). The download goes to `<settings_dir()>\updates\AlbumBuilder-<V>-windows-x64-setup.exe.part`, a folder only this user writes. After the hash matches it is renamed without `.part`. The app tells the user "Album Builder will close and reopen to finish updating", starts the installer in the quiet update mode Spec 24 §4.7 defines, and closes through the normal close path. That mode asks nothing, shows progress, waits for the running app to exit, installs over the existing install, and starts the new version. Spec 24 §4.7 sets its flags. At the next start the app deletes the `updates` folder. When it finds an installer there named for a version newer than its own, the install did not happen, and it shows once "The update could not finish. You are still on X.Y.Z." first.
 
 ### 4.7 Publishing: zsync data and the signature
 
@@ -139,7 +139,7 @@ The offer dialog names both versions and shows the release body as plain text (n
 
 `release-sign.yml` runs on `push: tags: ['v*']`, and by hand (`workflow_dispatch`) with a required `tag` input naming the release to sign, with `permissions: contents: write`. Its one job:
 
-1. polls the tag's release every 60 seconds, for up to 120 minutes, until every build asset of §4.3 that exists yet is present with `state` `uploaded`: the AppImage, its `.zsync` and the zip, and the installer once MUSI-0406 ships it. `release-sign.yml` holds that list (a failed build means it times out and fails, so nothing is signed);
+1. polls the tag's release every 60 seconds, for up to 120 minutes, until every build asset of §4.3 that exists yet is present with `state` `uploaded`: the AppImage, its `.zsync`, the zip and the installer. `release-sign.yml` holds that list (a failed build means it times out and fails, so nothing is signed);
 2. downloads them into a folder under `$RUNNER_TEMP`, outside the checkout, writes `SHA256SUMS`, and runs `packaging/release-signing.py sign SHA256SUMS` with the secret in the environment variable `RELEASE_SIGNING_KEY`;
 3. runs `release-signing.py verify SHA256SUMS`, which checks the signature against `TRUSTED_KEYS` imported from `album_builder.domain.release_manifest`, so a secret that does not match the shipped key fails the job;
 4. uploads `SHA256SUMS` and `SHA256SUMS.sig` to the release.
@@ -268,7 +268,7 @@ INV-8's real install runs only on the Windows test machine, and INV-12's `readel
 - Pre-release channels — `releases/latest` excludes them; deferred, not yet queued.
 - Rolling back to the previous version from inside the app — deferred; not yet queued.
 - The portable Windows zip updating itself — owner, 2026-11-18: it does not.
-- The installer itself — MUSI-0406.
+- The installer itself — Spec 24 §4.7.
 - Updating an arm64 AppImage — none is built (Spec 23 §9).
 
 ## 10. What checks this
@@ -282,7 +282,7 @@ INV-8's real install runs only on the Windows test machine, and INV-12's `readel
 | INV-5 | `test_TC_28_release_manifest.py::test_signature` |
 | INV-6 | `test_TC_28_updater.py::test_download_gate` |
 | INV-7 | `test_TC_28_updater.py::test_appimage_replace` |
-| INV-8 | Partial: `test_TC_28_updater.py::test_windows_install_gate` checks the gate with a recorded launch; only the manual Windows recipe runs a real installer |
+| INV-8 | Partial: `test_TC_28_updater.py::test_windows_install_gate` checks the gate with a recorded launch, and `::test_windows_update_cleanup` the next start's cleanup; only the manual Windows recipe runs a real installer |
 | INV-9 | `test_TC_28_updater.py::test_transport_limits` |
 | INV-10 | `test_TC_28_release_signing.py` |
 | INV-11 | `test_TC_28_release_signing.py::test_workflow_shape` |

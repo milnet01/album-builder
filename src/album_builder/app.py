@@ -105,14 +105,14 @@ def run() -> int:
         # leak.
         server.close()
         lock.detach()
-    # Spec 28 §4.6: "Restart now" after an update starts the new AppImage only
-    # now, because a copy started while the lock was held would exit at once.
-    restart = updater.take_restart_request()
-    if restart is not None:
-        started, _pid = QProcess.startDetached(str(restart), [])
+    # Spec 28 §4.6: the new AppImage ("Restart now") or the Windows installer
+    # starts only now, because a copy started while the lock was held would
+    # exit at once, and the installer waits for this process to end.
+    launch = updater.take_restart_request()
+    if launch is not None:
+        started, _pid = QProcess.startDetached(str(launch.program), list(launch.arguments))
         if not started:
-            print(f"album-builder: could not start the updated copy at {restart}",
-                  file=sys.stderr)
+            print(f"album-builder: could not start {launch.program}", file=sys.stderr)
     return rc
 
 
@@ -166,6 +166,14 @@ def _selftest() -> int:
                 return 1
     except Exception as exc:
         print(f"selftest: save failed: {exc}", file=sys.stderr)
+        return 1
+
+    # Spec 28: every update check reads certifi's CA file. A bundle missing it
+    # would fail each daily check silently.
+    import certifi
+
+    if not Path(certifi.where()).is_file():
+        print(f"selftest: certificate file missing: {certifi.where()}", file=sys.stderr)
         return 1
 
     try:
@@ -330,7 +338,9 @@ def _resolve_project_root() -> Path:
        — the location the user configured. Used in production.
     2. The repository root if running from a source checkout (``pyproject.toml``
        sibling to the package OR ``ALBUM_BUILDER_DEV_MODE=1``) — the dev convention.
-    3. ``Path.cwd()`` with a stderr warning — last-resort fallback. Without this,
+    3. ``~/Music/Album Builder`` for a copy the Windows installer put in place
+       (Spec 24 §4.7), whose shortcut starts it in its install folder.
+    4. ``Path.cwd()`` with a stderr warning — last-resort fallback. Without this,
        an installed launcher inheriting the Plasma session CWD silently writes
        Albums/ + state.json into ``~/`` (L8-C1 from the 2026-04-30 indie-review).
     """
@@ -339,6 +349,8 @@ def _resolve_project_root() -> Path:
         return configured.parent
     if _in_dev_mode():
         return Path(__file__).resolve().parent.parent.parent
+    if updater.install_kind() is updater.InstallKind.WINDOWS:
+        return USER_MUSIC_DIR / "Album Builder"
     print(
         "album-builder: no albums_folder configured in settings.json; using "
         f"{Path.cwd()} for Albums/ and state.json. Set albums_folder in "

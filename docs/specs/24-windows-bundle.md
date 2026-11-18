@@ -1,15 +1,15 @@
 # 24 - Windows bundle (PyInstaller .exe distribution)
 
-**Status:** accepted (2026-07-28).
+**Status:** accepted (2026-07-28); amended 2026-11-18 to add the installer (§4.7, MUSI-0406).
 **Kind:** implement.
-**Source:** ROADMAP "Distribution & cross-platform packaging" epic, Phase Dist-3 (user-request-2026-07-25, resequenced 2026-07-28).
+**Source:** ROADMAP "Distribution & cross-platform packaging" epic, Phase Dist-3 (user-request-2026-07-25, resequenced 2026-07-28); the installer, ROADMAP MUSI-0406 (owner, 2026-11-18).
 **Depends on:** 22 (portability groundwork - the config-path + symlink-or-playlist fallbacks this bundle relies on).
 **References (does not extend):** 00, 23.
 **Amends:** 09 (adds the PDF-less report state to the approve sequence), 10 (adds a single-file report to the atomic-pair scan) - each only when the PDF render fails; the two-file pair is unchanged wherever the PDF renders. See §12.
 **Blocked by:** 22 (shipped 2026-07-28).
-**Blocker for:** nothing (Dist-4 Flatpak / Dist-5 OBS are independent packaging phases).
+**Blocker for:** Spec 28's Windows half (self-update runs the installer, §4.7).
 
-> **Layman:** produces one download for Windows - `AlbumBuilder-<version>-windows-x64.zip` - that you unzip and double-click to run Album Builder, with no Python and no install. It carries the same printable-PDF engine as Linux; if that engine ever fails, the app still writes the report as a web page instead of crashing.
+> **Layman:** produces one download for Windows - `AlbumBuilder-<version>-windows-x64.zip` - that you unzip and double-click to run Album Builder, with no Python and no install. It carries the same printable-PDF engine as Linux; if that engine ever fails, the app still writes the report as a web page instead of crashing. A second download, `AlbumBuilder-<version>-windows-x64-setup.exe`, installs the same app like any other Windows program, with a Start menu entry and an uninstaller, and lets it update itself.
 
 ## 1. Goal
 
@@ -22,6 +22,11 @@ as on Linux. If the PDF cannot be produced at runtime - the native stack fails t
 load, or a specific report fails to render - report generation degrades to writing
 the HTML report alone rather than aborting the approve. Cutting a version tag builds the zip on a Windows CI runner and attaches
 it to the matching GitHub Release. This is the project's first Windows artifact.
+
+The same build also produces an installer, `AlbumBuilder-<version>-windows-x64-setup.exe`
+(§4.7). It installs the bundle for the current user, adds a Start menu entry and an
+uninstaller, and marks the copy as installed so Spec 28's self-update applies to it.
+The zip stays as the portable download, which never updates itself.
 
 ## 2. Problem
 
@@ -98,6 +103,18 @@ Linux-only. There is no artifact a Windows user can run:
   ("Windows protected your PC" -> More info -> Run anyway). Buying and wiring a
   code-signing certificate is out of scope; the README documents the click-through
   (§8, §12). Roadmap-locked in the Phase Dist-3 bullet.
+- **An installer, beside the zip** (owner, 2026-11-18, MUSI-0406). Windows
+  self-update (Spec 28) runs the installer rather than swapping a running
+  folder's files; the zip stays portable and does not update itself. The
+  installer is Windows-only; Linux keeps the AppImage.
+- **Installed copies keep albums in `Music\Album Builder`** when no
+  `albums_folder` is set (owner, 2026-11-18), not in the folder the shortcut
+  starts the app in. The zip keeps the working-folder fallback.
+- **Per-user install** (design default; the owner did not choose between
+  per-user and all-users): no admin prompt, under `%LOCALAPPDATA%\Programs`.
+- **Author's calls, cheap to change:** Inno Setup builds the installer (free,
+  scriptable, widely used); its wizard offers English plus the six Inno
+  translations matching the app's languages, so Afrikaans users see English.
 - **One local build script is the single source of truth; CI invokes it** (same
   discipline as Dist-2's `build-appimage.sh` / `ci.yml`'s `local-CI.sh`).
   `packaging/build-windows.ps1` is the whole build; `windows.yml` calls it,
@@ -109,8 +126,9 @@ Linux-only. There is no artifact a Windows user can run:
 
 A single PowerShell script (PowerShell is the `windows-2025` default shell), run
 on the runner by `windows.yml` (§4.5), producing
-`dist/AlbumBuilder-<version>-windows-x64.zip`. It cannot be run on the Linux dev
-machine (§3). Ordered stages:
+`dist/AlbumBuilder-<version>-windows-x64.zip` and
+`dist/AlbumBuilder-<version>-windows-x64-setup.exe`. It cannot be run on the Linux
+dev machine (§3). Ordered stages:
 
 1. Read the version from the single runtime source,
    `album_builder.version.__version__` (INV-24-3), into `$Version`.
@@ -138,6 +156,10 @@ machine (§3). Ordered stages:
 5. Compress `dist/AlbumBuilder/` (the one-folder output) to
    `dist/AlbumBuilder-<version>-windows-x64.zip`
    (`Compress-Archive`).
+6. Download Inno Setup at a pinned version from its GitHub release, check the
+   file's SHA-256 against the one the script holds (INV-24-10), install it into
+   the stage folder, and compile `packaging/windows/album-builder.iss` against
+   `dist/AlbumBuilder/` into the installer (§4.7).
 
 The build installs only `requirements.txt`, so WhisperX/torch never enter the
 bundle (INV-24-5).
@@ -277,7 +299,12 @@ the built folder directly):
   proves the bundled DLLs load rather than borrowing the build's system GTK. The
   structural DLL-presence check (INV-24-2 (b)) runs alongside as the mask-proof
   half.
-- On a `v*` tag, upload the zip to the tag's Release
+- **Installer smoke-test:** install the setup `.exe` silently into a temporary
+  folder; `install-kind.txt` there reads `installer`; the installed `.exe`'s
+  `--version` equals the setup file name's version and `--selftest` exits 0; the
+  Start menu entry exists; the uninstaller removes the `.exe` and leaves
+  `%LOCALAPPDATA%\album-builder` in place (INV-24-12).
+- On a `v*` tag, upload the zip and the installer to the tag's Release
   (`softprops/action-gh-release@v2`, as `appimage.yml` does), creating it if absent
   (INV-24-8).
 
@@ -290,9 +317,9 @@ cover.
 
 Windows has no `.desktop` file. The `.exe` carries an embedded icon
 (`packaging/album-builder.ico`, converted from `assets/album-builder.svg` at build
-time or checked in). No Start-menu shortcut, installer, or file associations are
-created - the deliverable is a portable unzip-and-run folder (§8, a full installer
-is a follow-up). Windows "now playing" / MPRIS integration is explicitly not part
+time or checked in). The zip creates no shortcut; the installer (§4.7) adds a
+Start menu entry, an optional desktop shortcut and an uninstaller. Neither
+registers file associations. Windows "now playing" / MPRIS integration is explicitly not part
 of this phase (Spec 20 §out-of-scope already defers it).
 
 The exe is built **console-subsystem** (`console=True` +
@@ -305,6 +332,40 @@ normal launch shows no lingering console; a launch from an existing terminal
 reuses that terminal for the CLI flags. (Implementation fold-back - see the loop
 log; a windowed build plus an in-app `AttachConsole` stream-reattach shim was
 tried first and did not restore stdout under PowerShell output capture.)
+
+### 4.7 The installer - `packaging/windows/album-builder.iss`
+
+An Inno Setup script, compiled by stage 6 of §4.1 with `/D` defines for the
+version, the bundle folder, the checkout and the output folder.
+
+- **Where it installs.** `PrivilegesRequired=lowest` and
+  `DefaultDirName={autopf}\Album Builder`, which Inno resolves to
+  `%LOCALAPPDATA%\Programs\Album Builder`. No admin prompt. A fixed `AppId`
+  makes each later installer an upgrade of the same copy.
+- **What it installs.** The whole of `dist\AlbumBuilder\`, plus
+  `packaging/windows/install-kind.txt`, which reads `installer`. That file beside
+  `AlbumBuilder.exe` is what Spec 28 §4.2 reads to call the copy `WINDOWS`; the
+  zip carries none. A Start menu entry; a desktop shortcut only when ticked.
+- **Upgrades.** Installing over a copy first deletes `{app}\_internal`, the
+  bundle's libraries, so files an older version shipped do not linger.
+- **Uninstall** removes what it installed, plus `{app}\_internal` and
+  `{app}\fontconfig-cache`. Settings (`%LOCALAPPDATA%\album-builder`, Spec 22) and
+  albums live outside the install folder and stay.
+- **Albums.** An installed copy with no `albums_folder` uses
+  `Music\Album Builder` as its project root, so albums go in
+  `Music\Album Builder\Albums` (`app.py::_resolve_project_root`). The zip keeps
+  the working-folder fallback, so a portable user's albums do not move.
+- **Quiet update mode**, run by Spec 28 §4.6 Windows:
+  `setup.exe /SILENT /SUPPRESSMSGBOXES /NORESTART /UPDATE /WAITPID=<pid>`.
+  `/SILENT`, `/SUPPRESSMSGBOXES` and `/NORESTART` are Inno Setup's own: a
+  progress window, no questions, no reboot. `/WAITPID` makes `InitializeSetup`
+  wait up to 120 seconds for that process (the app) to exit. `/UPDATE` makes a
+  `[Run]` entry start the new version when the install ends; a silent install
+  without it starts nothing (`skipifsilent`). The switch list lives in
+  `updater.INSTALLER_UPDATE_SWITCHES`.
+- **Trust.** The installer is unsigned, like the `.exe` (§3), so SmartScreen
+  warns on a manual run. Self-update runs it only after Spec 28's signed checksum
+  matches.
 
 ## 5. Invariants
 
@@ -377,15 +438,40 @@ tried first and did not restore stdout under PowerShell output capture.)
   `pip` dependencies stay floors-only per the dependency-currency policy, and the
   MSYS2 GTK packages are rolling (like Dist-2's un-pinned `apt` point releases,
   Spec 23 §9) - the guarantee is a working DLL set proven by `--selftest`, not a
-  bit-reproducible build. *Test:* inspect the pin lines in `build-windows.ps1` /
+  bit-reproducible build. Inno Setup (§4.7) is pinned by version and by the
+  SHA-256 of its download. *Test:* inspect the pin lines in `build-windows.ps1` /
   `windows.yml` - PyInstaller is fetched at a fixed version and no tooling line uses
-  a floating `latest`/branch reference. *Breaks when:* a tooling input is fetched by
+  a floating `latest`/branch reference; TC-24-05
+  `::test_build_pins_inno_setup_by_version_and_hash` checks the Inno pin. *Breaks when:* a tooling input is fetched by
   a moving reference, so a changed upstream silently enters an artifact users run
   unsigned.
 - **INV-24-11** - The bundle can save a file the way the app saves its data.
   *Test:* `AlbumBuilder.exe --selftest` exits 0 on `windows-2025`; its save half
   (Spec 23 INV-23-11) fails it when `atomic_write_text` raises. *Breaks when:* the
   atomic-write path raises on Windows, as MUSI-0379's `os.O_DIRECTORY` did.
+- **INV-24-12** - The installer installs for the current user only, writes the
+  `installer` marker, is named as Spec 28 downloads it, and its uninstaller keeps
+  the user's settings. *Test:* TC-24-05 (`tests/packaging/test_TC_24_05_installer.py`)
+  reads the script: `PrivilegesRequired=lowest`, a fixed `AppId`, the output name
+  equal to `release_manifest.asset_name(..., "windows")`, the marker file reading
+  `installer` and installed to `{app}`; and `windows.yml`'s installer smoke-test
+  (§4.5) installs, runs and uninstalls it. *Breaks when:* the install needs admin,
+  the marker is left out (the copy never updates), the output name drifts from
+  Spec 28's, or uninstall deletes `%LOCALAPPDATA%\album-builder`.
+- **INV-24-13** - The quiet update mode accepts exactly the switches the app
+  passes. *Test:* TC-24-05 `::test_quiet_update_mode_matches_the_updater` -
+  `updater.INSTALLER_UPDATE_SWITCHES` is Inno's three plus `/UPDATE`, and the script
+  reads `/UPDATE` and `{param:WAITPID|0}`, waits on the process, and starts the app
+  only under `IsUpdate`. The real run is Spec 28 INV-8's manual recipe. *Breaks
+  when:* either side renames a switch, so an update installs and never restarts the
+  app, or replaces files while the old copy still holds them.
+- **INV-24-14** - An installed copy with no `albums_folder` uses
+  `Music\Album Builder` as its project root; the zip keeps the working folder.
+  *Test:* TC-24-06
+  (`tests/test_app.py::test_resolve_project_root_installed_windows_copy_uses_music`).
+  *Breaks when:* the rule keys on "frozen on Windows" alone, moving a portable
+  user's albums, or is dropped, so an installed copy writes albums into its
+  install folder.
 
 ## 6. Failure modes
 
@@ -411,6 +497,12 @@ tried first and did not restore stdout under PowerShell output capture.)
   load failure takes. INV-24-7's unit test locks the render-succeeds path so the
   fallback cannot regress the normal two-file report; INV-24-6 locks the degraded
   path. Both run in the normal pytest suite, independent of a real Windows build.
+- **The Inno Setup download fails or its hash differs.** Stage 6 of §4.1 stops
+  the build before anything is uploaded.
+- **The app is still running when the update's wait ends.** Setup goes on; any
+  file still held open meets Inno Setup's own in-use handling. Spec 28 §6 covers
+  an install that then fails: the old copy stays, and the next start says so.
+- **SmartScreen warns on the unsigned installer.** As for the `.exe` (§3).
 
 ## 7. Tests
 
@@ -430,6 +522,15 @@ Unit-testable in `tests/` (run in the normal suite, no Windows build needed):
   with `os.O_DIRECTORY` absent, as on Windows, `atomic_write_text` writes the file and
   raises nothing; the post-rename directory fsync is skipped. Found 2026-09-28: the
   v0.9.1 Windows bundle aborted on its first state save.
+
+- **TC-24-05** (`tests/packaging/test_TC_24_05_installer.py`) - reads
+  `packaging/windows/album-builder.iss`, `install-kind.txt`, `build-windows.ps1`,
+  `windows.yml` and `release-sign.yml`: per-user install, fixed `AppId`, output
+  name, marker, quiet-update switches, the Inno pin, and both workflows naming
+  the installer. Locks INV-24-12, INV-24-13 and INV-24-10's Inno half.
+- **TC-24-06** (`tests/test_app.py::test_resolve_project_root_installed_windows_copy_uses_music`) -
+  with `install_kind()` returning `WINDOWS`, `_resolve_project_root` gives
+  `Music/Album Builder`; with `NONE`, the working folder. Locks INV-24-14.
 
 **Two existing atomic-pair recovery tests are updated (a Step-8 fold-back, not new
 coverage):** `test_TC_10_26_artist_only_on_disk_half_pair_is_repaired` and
@@ -456,7 +557,9 @@ an actual tagged release. See §11.
 
 **Manual (the user, on real Windows):** download the published zip, unzip, run
 `AlbumBuilder.exe`, approve an album, confirm a PDF + HTML report are produced. This
-is the leg CI cannot cover (§3) and gates "shipped".
+is the leg CI cannot cover (§3) and gates "shipped". For the installer, on the
+Windows test machine: install from a test build, start it from the Start menu,
+check albums land in `Music\Album Builder`, uninstall, and check settings remain.
 
 ## 8. Alternatives considered (and rejected)
 
@@ -488,9 +591,8 @@ is the leg CI cannot cover (§3) and gates "shipped".
 - **Windows code-signing / Authenticode certificate** - deferred; unsigned ships
   with a documented SmartScreen click-through. Tracked by the Distribution epic
   (post-Dist-5 hardening).
-- **An installer (MSI / NSIS), Start-menu shortcut, file associations** - the
-  deliverable is a portable zip; a real installer is a follow-up under the
-  Distribution epic.
+- **An MSI, an all-users install, file associations** - the installer is a
+  per-user Inno Setup one (§4.7).
 - **True single-file `.exe`** - §8; revisitable under the Distribution epic once the
   one-folder bundle is proven.
 - **32-bit and Windows 7/8 support** - Windows 10 64-bit floor (§6).
@@ -500,8 +602,9 @@ is the leg CI cannot cover (§3) and gates "shipped".
 
 ## 10. Resource cost
 
-- **New build-time tooling (not runtime deps):** PyInstaller (pinned, INV-24-10) and
-  the MSYS2 GTK packages, both on the runner only; no addition to `requirements.txt`.
+- **New build-time tooling (not runtime deps):** PyInstaller and Inno Setup
+  (pinned, INV-24-10) and the MSYS2 GTK packages, all on the runner only; no
+  addition to `requirements.txt`.
 - **New build host:** a `windows-2025` GitHub runner. No local prerequisite is
   added for Linux developers, who cannot build this artifact regardless (§3).
 - **Artifact size budget:** target a few hundred MB (Qt + Python + the GTK DLL
@@ -530,10 +633,13 @@ is the leg CI cannot cover (§3) and gates "shipped".
 | INV-24-9 | **nothing mechanical** - the parity is structural (like `ci.yml` -> `local-CI.sh`); a cold reader confirms `windows.yml` only calls `build-windows.ps1` |
 | INV-24-10 | **nothing mechanical** - a cold reader (or a future CI lint) confirms PyInstaller and the action carry fixed versions in `build-windows.ps1` / `windows.yml` |
 | INV-24-11 | `windows.yml` `--selftest` on `windows-2025` (the save half, Spec 23 INV-23-11) + `tests/persistence/test_TC_24_04_atomic_write_without_o_directory.py` (TC-24-04) |
+| INV-24-12 | `tests/packaging/test_TC_24_05_installer.py` (TC-24-05) + `windows.yml`'s installer smoke-test (CI-only) |
+| INV-24-13 | Partial: `test_TC_24_05_installer.py::test_quiet_update_mode_matches_the_updater` checks both sides name the same switches; only Spec 28 INV-8's manual recipe runs a real update |
+| INV-24-14 | `tests/test_app.py::test_resolve_project_root_installed_windows_copy_uses_music` (TC-24-06) |
 
-Eleven rows, **three** bolded `nothing` - the honest error budget (§0 of the format
-standard). All three are release-plumbing invariants with no per-run automated
-catcher, the same class Spec 23 carried (its INV-23-8/9/10).
+The bolded `nothing` rows are the honest error budget (§0 of the format
+standard): release-plumbing invariants with no per-run automated catcher, the
+same class Spec 23 carried (its INV-23-8/9/10).
 
 ## 12. Cross-doc impact
 
@@ -562,19 +668,15 @@ catcher, the same class Spec 23 carried (its INV-23-8/9/10).
   the complete-single-file rule and the `pairs_completed` widening exactly as
   Spec 24 §4.3(c) states it (the crash-window rationale and branch ordering live
   there - do not restate them). Reference Spec 24 §4.3 / INV-24-6.
+- **Spec 28** (installer amendment, 2026-11-18) - §4.6 Windows reads its quiet
+  update flags from §4.7 here; its Status line and §9 "The installer itself" line
+  point here now that the installer exists.
+- **`README.md`** (installer amendment) - the Windows download section gains the
+  installer and the Updates section gains Windows, in the release that ships it.
 - **No other sibling-spec contract changes** - Spec 24 adds a Windows package around
   Spec 22's portable code and the Spec 23-added flags; it does not alter Specs
   08/22/23.
 
 ## 13. Cold-eyes loop log
 
-| Loop | Date | Lanes | CRIT | HIGH | MED | LOW | Outcome |
-|------|------|-------|------|------|-----|-----|---------|
-| 1 | 2026-07-28 | 3 cold (consistency/structure - doc-vs-code accuracy - architecture/currency) | 0 | 1 | 2 | 3 | 6 verified (0 unverified), all fixed. **HIGH:** §4.3 named `WEASYPRINT_DLL_DIRECTORIES` as the bundle's DLL mechanism, but WeasyPrint 69 guards its own `add_dll_directory`/env-var block with `not hasattr(sys, 'frozen')` (verified in `ffi.py`) - inert inside a PyInstaller bundle -> rewrote §4.3a to rely on the runtime hook's own `os.add_dll_directory` + WeasyPrint's `LOAD_LIBRARY_SEARCH_DEFAULT_DIRS` dlopen flag. **MED:** the cached `pdf_engine_available()` probe rendered only trivial HTML, so a real report failing after the probe passed still crashed approve (the exact failure §2.3 closes), and the probe's own logic was untested -> replaced the probe with a point-of-use `try`/`except` in `render_report` (covers load AND render failure; no probe to invert), updating INV-24-6/7, §4.4, §7, §10. **LOW:** "complete report" was defined two ways (§4.3 vs §12) -> made the `scan_reports_dir` rule pure file-presence on all platforms, left `has_complete_report` unchanged (no production caller), reframed the Spec 09/10 amendments as render-failure / presence-based. |
-| 2 | 2026-07-28 | 2 cold (contract-chain consistency - mechanism accuracy) | 0 | 0 | 1 | 2 | 3 verified, all fixed - all fix-collateral in loop-1's §12 rewording. Both lanes re-verified the loop-1 rewrite sound: `ffi.py` confirms the §4.3a `sys.frozen` guard + `LOAD_LIBRARY_SEARCH_DEFAULT_DIRS` exactly, and the "interrupted pair always leaves a `pdf.tmp`" crash-window claim holds against `render_report`'s real write order (line 294 render precedes both tmp writes). **MED:** §12's Spec-09 amendment said "`step:render-rename-pdf` is skipped", but the failure raises before any `.tmp` is written, so the whole pair sequence is bypassed with no `pdf.tmp` created (the imprecise wording would orphan a `pdf.tmp` and break the presence rule) -> reworded to "pair sequence bypassed, no `pdf.tmp` created". **LOW:** deduped the crash-window rationale (§12 now points to §4.3c); noted `pairs_completed` widens + the new keep-branch must precede Branch 3's delete. |
-| 3 | 2026-07-28 | 1 cold (fallback + atomic-pair contract chain; the rest of the doc accepted clean - both lanes verified it coherent at loop 2 and it was unchanged since) | 0 | 0 | 0 | 0 | **Clean - converged.** The cold lane re-verified §4.3(c) against `atomic_pair.py`, both §12 amendments against §4.3(b/c), and the whole point-of-use `try`/`except` + single-file-write + presence-rule chain: one mechanism throughout, no residual `pdf.tmp` contradiction, §11 count intact (10 rows / 3 `nothing`). Loop-2 fixes held. |
-| impl | 2026-07-28 | implementation fold-back (Step 8, NOT a review loop) | - | - | - | - | **Contract corrected by building it.** Implementation proved INV-24-7's "existing Spec 09/10 tests pass unmodified" too strong: `render_report`'s success path IS unchanged, but two atomic-pair recovery tests (`test_TC_10_26_artist_only_on_disk_half_pair_is_repaired`, `test_TC_09_30_artist_variant_recovery_independent_of_full`) asserted a lone `.html` with no `.tmp` is *deleted* - the exact state §4.3(c) now *keeps* as a complete single-file report. Their fixtures were updated to carry the `pdf.tmp` a genuine interrupted pair always leaves (still testing crash-recovery); INV-24-7 + §7 corrected to scope "unmodified" to the render path. Full pytest suite green (exit 0). Re-gated at loop 4. |
-| 4 | 2026-07-28 | 1 cold (re-gate of the Step-8 fold-back amendment) | 0 | 0 | 0 | 2 | **Polish-converged.** The cold lane confirmed the amended INV-24-7 + §7 note match the real tests (both updated recovery tests now carry a `pdf.tmp`; the 3 new TC-24 tests exist and lock their contracts; the §4.3(c) keep-branch matches `atomic_pair.py` Branch 2b before Branch 3). **LOW:** §5 mislabelled both updated tests "Spec 10" (TC-09-30 is Spec 09) -> "one Spec 10, one Spec 09"; §11 cited placeholder test-function names -> corrected to the real `test_TC_24_0N_*` names. No substantive findings; the amendment is coherent with the shipped code. |
-| impl | 2026-07-28 | implementation fold-back (Step 8, NOT a review loop) | - | - | - | - | **CI proved the exe must be console-subsystem.** The spec was silent on `console` mode; a windowed (`console=False`) build was the natural first choice for a GUI app - but on the `windows-latest` runner `AlbumBuilder.exe --version` raised `OSError` (EINVAL) writing to a dead stdout and the INV-24-1/3 smoke test read null (runs `30370758272`, `30373367197`). An in-app ctypes `AttachConsole` + `msvcrt.open_osfhandle` stream-reattach shim was tried and did *not* restore stdout under PowerShell output capture (run `30373367197`). Fixed by building `console=True` + `hide_console="hide-early"` (`packaging/album-builder.spec`) - the PyInstaller 6 dual GUI/CLI idiom: real capturable stdout, console window dismissed before Python starts on a GUI launch. §4.6 gains the decision + rationale. Verified: Windows dispatch build green end-to-end - build + static checks + `--version`/`--selftest` smoke test all pass (run `30373943934`). Re-gated at loop 5. |
-| 5 | 2026-07-28 | 1 cold (re-gate of the console-subsystem fold-back amendment) | 0 | 0 | 0 | 2 | **Polish-converged.** The cold lane verified §4.6's amendment byte-for-byte against `packaging/album-builder.spec` (`console=True` + `hide_console="hide-early"` + `EXE(icon=...)`), confirmed no other section (§4.1 stage 4, §4.4 smoke-test, the INVs) assumes a windowed/`console=False` build, and re-verified the §4.3(a/b/c) chain against `pyi_rth_weasyprint_dlls.py` / `report.py` / `atomic_pair.py` still holds. **LOW x2 (both pre-existing, not from the amendment):** §4.3(b) cited a stale `report.py` line 294 for `render_pdf_from_html` (now def 257 / call 308) -> dropped the bare line number (per the never-cite-line-numbers rule) and past-tensed the "today it renders unconditionally" baseline; §4.1 stage 4 said the icon is set via `--icon` but the build drives the checked-in spec's `EXE(icon=...)` -> corrected. **INFO (code-side, surfaced not fixed):** the runtime hook swallows `os.add_dll_directory` failures with `except OSError: pass`. No substantive findings; amendment coherent with the shipped code. |
-| amend | 2026-11-05 | owner amendment, NOT a review loop; no reviewer dispatched | - | - | - | - | **Runner pinned to `windows-2025`.** Ants MCP `ci_report` flagged `windows-latest` as moving with no commit (local-gate.md § 9, warm-containers row, condition 1). The owner chose the pin; `windows-2025` is the image `windows-latest` resolved to on the last build (`windows-2025-vs2026`), so behaviour is unchanged today. Every `windows-latest` mention became `windows-2025` except the 2026-07-28 `impl` row, which records history. |
+Rows live in `../reviews/24-windows-bundle-loop-log.md`.

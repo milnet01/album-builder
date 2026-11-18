@@ -8,8 +8,8 @@ services/duplicates.py's DuplicateWorker.
 GitHub's answers, redirects and asset bytes are untrusted until the signed
 SHA256SUMS check (domain/release_manifest.py) and the download's hash pass.
 
-The Windows half (running the installer, §4.6 Windows) waits for the
-installer, MUSI-0406; until then only the AppImage checks for updates.
+On Windows only a copy the installer put in place updates; it downloads the
+signed installer and runs it in its quiet update mode (Spec 24 §4.7).
 """
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ import hashlib
 import json
 import logging
 import os
+import re
+import shutil
 import ssl
 import sys
 import urllib.error
@@ -34,7 +36,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 import album_builder
 from album_builder.domain import release_manifest as rm
-from album_builder.persistence.settings import read_updates, write_updates
+from album_builder.persistence.settings import read_updates, settings_dir, write_updates
 from album_builder.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -57,9 +59,12 @@ class InstallKind(StrEnum):
     NONE = "none"
 
 
-# Kinds that check for updates today. WINDOWS joins when the installer and
-# its quiet update mode exist (MUSI-0406).
-_UPDATING_KINDS = frozenset({InstallKind.APPIMAGE})
+_UPDATING_KINDS = frozenset({InstallKind.APPIMAGE, InstallKind.WINDOWS})
+
+# The installer's quiet update mode (Spec 24 §4.7): no questions, a progress
+# window, then the new version starts. /WAITPID=<pid> is added at launch.
+INSTALLER_UPDATE_SWITCHES = ("/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/UPDATE")
+_INSTALLER_NAME = re.compile(r"AlbumBuilder-(\d+\.\d+\.\d+)-windows-x64-setup\.exe")
 
 
 class UpdateError(Exception):
@@ -360,20 +365,87 @@ def install_appimage(
         raise
 
 
-_restart_target: Path | None = None
+@dataclass(frozen=True)
+class Launch:
+    """A program app.run() starts after this process lets go of its lock."""
+
+    program: Path
+    arguments: tuple[str, ...] = ()
+
+
+def updates_dir() -> Path:
+    """Where a Windows update's installer is downloaded; only this user writes it."""
+    return settings_dir() / "updates"
+
+
+def install_windows(
+    transport: Transport,
+    offer: Offer,
+    folder: Path,
+    *,
+    pid: int,
+    should_stop: Callable[[], bool] = lambda: False,
+    progress: Callable[[int, int], None] = lambda done, total: None,
+) -> Launch:
+    """Download and verify the installer into `folder` (§4.6 Windows, INV-8).
+
+    Returns the launch that runs it in its quiet update mode, waiting for
+    process `pid` to exit first. The file loses its `.part` suffix only after
+    its hash matches, so nothing launchable exists before that.
+    """
+    folder.mkdir(parents=True, exist_ok=True)
+    final = folder / offer.asset_name
+    part = final.with_name(f"{final.name}.part")
+    download_verified(transport, offer, part, should_stop=should_stop, progress=progress)
+    try:
+        os.replace(part, final)
+    except BaseException:
+        part.unlink(missing_ok=True)
+        raise
+    return Launch(final, (*INSTALLER_UPDATE_SWITCHES, f"/WAITPID={pid}"))
+
+
+def finish_windows_update(folder: Path, running: str) -> bool:
+    """At start, delete the updates folder (§4.6 Windows).
+
+    True when it held an installer for a version newer than `running`: the
+    last update did not install. Deleting the folder makes that said once.
+    """
+    if not folder.is_dir():
+        return False
+    current = rm.parse_version(running)
+    failed = False
+    for entry in folder.iterdir():
+        match = _INSTALLER_NAME.fullmatch(entry.name)
+        if match and current is not None:
+            version = rm.parse_version(match[1])
+            failed = failed or (version is not None and version > current)
+    # The installer that just ran may still hold its file open; the next start
+    # deletes whatever is left.
+    shutil.rmtree(folder, ignore_errors=True)
+    return failed
+
+
+_after_exit: Launch | None = None
 
 
 def request_restart(target: Path) -> None:
     """Ask app.run() to start `target` once this process has released its
     single-instance lock (§4.6 AppImage, Restart now)."""
-    global _restart_target
-    _restart_target = target
+    request_launch(Launch(target))
 
 
-def take_restart_request() -> Path | None:
-    global _restart_target
-    target, _restart_target = _restart_target, None
-    return target
+def request_launch(launch: Launch) -> None:
+    """Ask app.run() to start `launch` once this process has released its
+    single-instance lock and is about to exit."""
+    global _after_exit
+    _after_exit = launch
+
+
+def take_restart_request() -> Launch | None:
+    global _after_exit
+    launch, _after_exit = _after_exit, None
+    return launch
 
 
 # ---- Workers ------------------------------------------------------------------
@@ -404,29 +476,28 @@ class UpdateCheckWorker(QThread):
             self.done.emit(result)
 
 
-class AppImageInstallWorker(QThread):
-    """Runs install_appimage off the ui thread.
+class InstallWorker(QThread):
+    """Runs one install job (install_appimage or install_windows, with its
+    arguments bound) off the ui thread.
 
-    Emits `progress(received, total)` while downloading, then `done(str)`
-    once: "" on success, "cancelled", or the error text.
+    The job takes `should_stop` and `progress` keywords. Emits
+    `progress(received, total)` while downloading, then `done(str)` once: ""
+    on success, "cancelled", or the error text. `result` holds what the job
+    returned.
     """
 
     progress = pyqtSignal(object, object)  # bytes received, bytes in total
     done = pyqtSignal(str)
 
-    def __init__(self, transport: Transport, offer: Offer, target: Path,
-                 parent=None) -> None:
+    def __init__(self, job: Callable[..., object], parent=None) -> None:
         super().__init__(parent)
-        self._transport = transport
-        self._offer = offer
-        self._target = target
+        self._job = job
+        self.result: object = None
 
     def run(self) -> None:
         try:
-            install_appimage(
-                self._transport, self._offer, self._target,
-                should_stop=self.isInterruptionRequested,
-                progress=self.progress.emit,
+            self.result = self._job(
+                should_stop=self.isInterruptionRequested, progress=self.progress.emit,
             )
         except UpdateCancelled:
             self.done.emit("cancelled")

@@ -11,6 +11,7 @@
  "Adding songs...": "מוסיף רצועות...",
  "Album": "אלבום",
  "Album Builder cannot replace itself, because it cannot write to its folder:\n{folder}\n\nOpen the release page to download the new version yourself?": "Album Builder לא יכול להחליף את עצמו, כי אין לו הרשאת כתיבה לתיקייה שלו:\n{folder}\n\nלפתוח את דף הגרסה כדי להוריד את הגרסה החדשה בעצמכם?",
+ "Album Builder will close and reopen to finish updating.": "Album Builder ייסגר וייפתח מחדש כדי להשלים את העדכון.",
  "Album Builder {new} is available. You have {current}.": "Album Builder {new} זמין. הגרסה שלכם היא {current}.",
  "Album Builder {version} is installed. Restart now to use it?": "Album Builder {version} הותקן. להפעיל מחדש עכשיו כדי להשתמש בו?",
  "Album cover": "עטיפת האלבום",
@@ -232,5 +233,6 @@
  "Couldn't rename the album folder: {error}": "לא ניתן היה לשנות את שם תיקיית האלבום: {error}",
  "Couldn't read your music folder: {error}": "לא ניתן היה לקרוא את תיקיית המוזיקה: {error}",
  "LRC: waiting...": "‏LRC: ממתין...",
- "No singing was heard in this song, so the lyrics could not be timed.": "לא נשמעה שירה בשיר הזה, ולכן לא ניתן היה לסנכרן את המילים."
+ "No singing was heard in this song, so the lyrics could not be timed.": "לא נשמעה שירה בשיר הזה, ולכן לא ניתן היה לסנכרן את המילים.",
+ "The update could not finish. You are still on {version}.": "לא ניתן היה להשלים את העדכון. אתם עדיין בגרסה {version}."
 }

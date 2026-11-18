@@ -1,5 +1,5 @@
 #requires -Version 5.1
-# Album Builder - Windows one-folder bundle (Spec 24 / Phase Dist-3).
+# Album Builder - Windows one-folder bundle and installer (Spec 24 / Phase Dist-3, MUSI-0406).
 #
 # One script, the single source of truth for the Windows build (INV-24-9).
 # .github/workflows/windows.yml calls it unchanged; it assembles the whole
@@ -9,7 +9,9 @@
 # it runs on, so this runs on a `windows-latest` runner and is verified by CI
 # `--selftest` + a manual Windows run (Spec 24 Section 3), never on Linux.
 #
-# Output: dist\AlbumBuilder-<version>-windows-x64.zip
+# Output: dist\AlbumBuilder-<version>-windows-x64.zip (the portable copy) and
+#         dist\AlbumBuilder-<version>-windows-x64-setup.exe (the installer,
+#         Spec 24 Section 4.7)
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
@@ -17,6 +19,10 @@ Set-StrictMode -Version Latest
 # sweep - never a floating `latest`. MSYS2 GTK packages are rolling, like the
 # AppImage's un-pinned apt point releases (Spec 23 Section 9). ------------------
 $PyInstallerVersion = "6.21.0"          # PyInstaller latest stable
+# Inno Setup, from its GitHub release (jrsoftware/issrc tag is-7_1_1); the
+# hash is the one GitHub lists for innosetup-7.1.1-x64.exe.
+$InnoSetupVersion   = "7.1.1"
+$InnoSetupSha256    = "8a5a6711c3766a6e5fb74f280ba0e3551e719ce94538d901fdbd1f8f9920b3f0"
 $MsysRoot           = "C:\msys64"       # preinstalled on windows-latest
 $MsysBin            = "$MsysRoot\mingw64\bin"
 
@@ -105,4 +111,27 @@ $env:WIN_FONT_DIR = $FontDir
 $Zip = Join-Path $Dist "AlbumBuilder-$Version-windows-x64.zip"
 if (Test-Path $Zip) { Remove-Item -Force $Zip }
 Compress-Archive -Path (Join-Path $Dist "AlbumBuilder\*") -DestinationPath $Zip
-Write-Host "done: $Zip"
+Write-Host "stage 7: $Zip"
+
+# --- Stage 8: the installer (Spec 24 Section 4.7). ------------------------------
+# Inno Setup is fetched at a pinned version and checked against its hash before
+# it runs, then installed into the stage folder only.
+Write-Host "stage 8: Inno Setup $InnoSetupVersion + installer"
+$InnoTag   = "is-" + ($InnoSetupVersion -replace '\.', '_')
+$InnoExe   = Join-Path $Stage "innosetup-$InnoSetupVersion-x64.exe"
+$InnoDir   = Join-Path $Stage "innosetup"
+Invoke-WebRequest -UseBasicParsing -OutFile $InnoExe `
+    "https://github.com/jrsoftware/issrc/releases/download/$InnoTag/innosetup-$InnoSetupVersion-x64.exe"
+$got = (Get-FileHash -Algorithm SHA256 $InnoExe).Hash.ToLowerInvariant()
+if ($got -ne $InnoSetupSha256) { throw "stage 8: Inno Setup hash mismatch: $got" }
+$p = Start-Process -Wait -PassThru -FilePath $InnoExe -ArgumentList `
+    "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/CURRENTUSER", "/DIR=`"$InnoDir`""
+if ($p.ExitCode -ne 0) { throw "stage 8: Inno Setup install failed ($($p.ExitCode))" }
+$Iscc = Join-Path $InnoDir "ISCC.exe"
+if (-not (Test-Path $Iscc)) { throw "stage 8: ISCC.exe not found in $InnoDir" }
+& $Iscc "/DAppVersion=$Version" "/DBundleDir=$(Join-Path $Dist 'AlbumBuilder')" `
+    "/DRepoRoot=$RepoRoot" "/DOutputDir=$Dist" "$RepoRoot\packaging\windows\album-builder.iss"
+if ($LASTEXITCODE -ne 0) { throw "stage 8: ISCC failed ($LASTEXITCODE)" }
+$Setup = Join-Path $Dist "AlbumBuilder-$Version-windows-x64-setup.exe"
+if (-not (Test-Path $Setup)) { throw "stage 8: $Setup was not written" }
+Write-Host "done: $Zip and $Setup"

@@ -19,7 +19,10 @@ invokes it + smoke-tests + uploads) — mirrors the `ci.yml` -> `local-CI.sh` pa
 
 `packaging/build-windows.ps1` (Spec 24) is the Windows analogue: a PyInstaller
 one-folder bundle zipped to `AlbumBuilder-<version>-windows-x64.zip`, with
-WeasyPrint's GTK/Pango DLLs sourced from MSYS2. PyInstaller cannot cross-compile,
+WeasyPrint's GTK/Pango DLLs sourced from MSYS2. Its last stage compiles
+`packaging/windows/album-builder.iss` with a pinned Inno Setup into
+`AlbumBuilder-<version>-windows-x64-setup.exe`, the per-user installer that
+Spec 28's Windows self-update runs (Spec 24 §4.7). PyInstaller cannot cross-compile,
 so it builds **only** on the `windows-2025` runner (`.github/workflows/windows.yml`)
 — *not* reproducible on this Linux machine; validated by CI `--version`/`--selftest`
 plus a manual Windows run. Spec 24 also adds a point-of-use fallback: if the PDF

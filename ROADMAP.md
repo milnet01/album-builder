@@ -340,7 +340,7 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: fix.
   Source: found-2026-11-05-fixing-MUSI-0395.
 
-- 📋 [MUSI-0406] **A Windows installer for Album Builder.**
+- 🚧 [MUSI-0406] **A Windows installer for Album Builder.**
   Owner, 2026-11-18: build an installer before Windows self-update
   (MUSI-0389); Windows updates then download and quietly run the
   signed installer. The zip stays as a portable download that does
@@ -369,6 +369,20 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   bundle missing either fails CI, but nothing checks that certifi's
   cacert.pem data file is bundled; a missing one makes every daily
   check fail silently. Check it in the Windows --selftest or by hand.
+  Progress (2026-11-18): BUILT. Spec 24 amended (§4.7, INV-24-12..14,
+  TC-24-05/06); Spec 28's Windows half built with it (TC-28-08).
+  packaging/windows/album-builder.iss, compiled by build-windows.ps1
+  stage 8 with Inno Setup 7.1.1 (pinned by version and SHA-256).
+  Per-user, %LOCALAPPDATA%\Programs\Album Builder; installs
+  install-kind.txt; quiet update mode /SILENT /SUPPRESSMSGBOXES
+  /NORESTART /UPDATE /WAITPID=<pid>. Installed copies with no
+  albums_folder use Music\Album Builder; the zip is unchanged.
+  windows.yml installs, runs and uninstalls it on the runner and
+  uploads it; release-sign.yml waits for it. --selftest now checks
+  certifi's CA file. Still owed: a test build on the Windows test
+  machine (install, Start menu launch, albums folder, uninstall).
+  The README's Windows and Updates sections change in the release
+  that ships the installer.
   **Layman:** Windows users install Album Builder like any other program, with a Start menu entry and an uninstaller, and updates install themselves.
   Kind: package.
   Source: user-request-2026-11-18.

@@ -74,11 +74,11 @@ def _url(name: str) -> str:
 
 def _release(raw: bytes, *, tag: str = "v1.2.0", asset: bytes = NEW,
              sums_version: str = "1.2.0", listed_size: int | None = None,
-             signed: bool = True) -> FakeTransport:
+             signed: bool = True, suffix: str = "x86_64.AppImage") -> FakeTransport:
     """A fake GitHub serving one signed release."""
-    name = f"AlbumBuilder-{sums_version}-x86_64.AppImage"
+    name = f"AlbumBuilder-{sums_version}-{suffix}"
     sums = f"{hashlib.sha256(asset).hexdigest()}  {name}\n".encode()
-    released_name = f"AlbumBuilder-{tag[1:]}-x86_64.AppImage"
+    released_name = f"AlbumBuilder-{tag[1:]}-{suffix}"
     assets = [
         {"name": released_name, "browser_download_url": _url(released_name),
          "size": len(asset) if listed_size is None else listed_size},
@@ -100,10 +100,10 @@ def _release(raw: bytes, *, tag: str = "v1.2.0", asset: bytes = NEW,
     return FakeTransport(routes)
 
 
-def _check(transport, trusted, *, skipped=None, running="1.1.0"):
+def _check(transport, trusted, *, skipped=None, running="1.1.0",
+           kind=InstallKind.APPIMAGE):
     return updater.check_release(
-        transport, running=running, kind=InstallKind.APPIMAGE, skipped=skipped,
-        trusted=trusted,
+        transport, running=running, kind=kind, skipped=skipped, trusted=trusted,
     )
 
 
@@ -263,6 +263,64 @@ def test_appimage_replace(tmp_path: Path, key, monkeypatch: pytest.MonkeyPatch) 
     assert target.read_bytes() == NEW
     assert target.stat().st_mode & 0o777 == 0o755
     assert replaces == [(str(tmp_path / f".{target.name}.update"), str(target))]
+
+
+# Spec: TC-28-08
+def test_windows_install_gate(tmp_path: Path, key) -> None:
+    raw, trusted = key
+    setup = "windows-x64-setup.exe"
+    folder = tmp_path / "updates"
+    assert updater.updates_enabled(InstallKind.WINDOWS)
+    # A portable zip (no install-kind.txt, or one not reading "installer")
+    # is NONE, which never checks, so it never reaches an installer.
+    exe = tmp_path / "zip" / "AlbumBuilder.exe"
+    exe.parent.mkdir()
+    for marker in (None, "portable"):
+        if marker is not None:
+            (exe.parent / "install-kind.txt").write_text(marker)
+        kind = updater.install_kind(environ={}, platform="win32", frozen=True,
+                                    executable=exe, package_dir=tmp_path)
+        assert not updater.updates_enabled(kind)
+
+    def install(transport):
+        result = _check(transport, trusted, kind=InstallKind.WINDOWS)
+        assert result.status is CheckStatus.OFFER
+        return updater.install_windows(transport, result.offer, folder, pid=4321)
+
+    # A wrong hash: nothing to launch, and no file left behind.
+    bad = _release(raw, suffix=setup)
+    bad.routes[_url(f"AlbumBuilder-1.2.0-{setup}")] = NEW[:-1] + b"!"
+    with pytest.raises(updater.UpdateError):
+        install(bad)
+    assert list(folder.iterdir()) == []
+
+    # A matching download is renamed without .part, and the launch names that
+    # file, in that folder, in the installer's quiet update mode.
+    launch = install(_release(raw, suffix=setup))
+    installer = folder / f"AlbumBuilder-1.2.0-{setup}"
+    assert sorted(folder.iterdir()) == [installer]
+    assert installer.read_bytes() == NEW
+    assert launch.program == installer
+    assert launch.arguments == (*updater.INSTALLER_UPDATE_SWITCHES, "/WAITPID=4321")
+
+
+# Spec: TC-28-08
+def test_windows_update_cleanup(tmp_path: Path) -> None:
+    folder = tmp_path / "updates"
+    # No folder: nothing to report.
+    assert not updater.finish_windows_update(folder, "1.2.0")
+    # The installer that just ran is this version: it worked.
+    folder.mkdir()
+    (folder / "AlbumBuilder-1.2.0-windows-x64-setup.exe").write_bytes(b"x")
+    assert not updater.finish_windows_update(folder, "1.2.0")
+    assert not folder.exists()
+    # A newer installer is still waiting: the update did not install. Said once.
+    folder.mkdir()
+    (folder / "AlbumBuilder-1.10.0-windows-x64-setup.exe").write_bytes(b"x")
+    (folder / "AlbumBuilder-1.10.0-windows-x64-setup.exe.part").write_bytes(b"x")
+    assert updater.finish_windows_update(folder, "1.9.0")
+    assert not folder.exists()
+    assert not updater.finish_windows_update(folder, "1.9.0")
 
 
 # Spec: TC-28-09

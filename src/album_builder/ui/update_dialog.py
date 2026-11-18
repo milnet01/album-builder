@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import html
 import logging
+import os
 from dataclasses import replace
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 from PyQt6.QtCore import QObject, Qt, QTimer, QUrl, pyqtSignal
@@ -31,15 +33,17 @@ from album_builder.i18n import tr
 from album_builder.persistence.settings import read_updates, write_updates
 from album_builder.services import updater
 from album_builder.services.updater import (
-    AppImageInstallWorker,
     CheckResult,
     CheckStatus,
     HttpsTransport,
     InstallKind,
+    InstallWorker,
+    Launch,
     Offer,
     Transport,
     UpdateCheckWorker,
 )
+from album_builder.version import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +112,7 @@ class UpdateController(QObject):
         self._check_worker: UpdateCheckWorker | None = None
         self._check_is_manual = False
         self._manual_pending = False
-        self._install_worker: AppImageInstallWorker | None = None
+        self._install_worker: InstallWorker | None = None
         self._progress: QProgressDialog | None = None
         self._daily_scheduled = False
         self.actions: list[QAction] = []
@@ -132,7 +136,17 @@ class UpdateController(QObject):
         """Call when the window first shows; later calls do nothing."""
         if self.enabled and not self._daily_scheduled:
             self._daily_scheduled = True
+            if self._kind is InstallKind.WINDOWS:
+                QTimer.singleShot(0, self._finish_windows_update)
             QTimer.singleShot(DAILY_DELAY_MS, self.run_daily_check)
+
+    def _finish_windows_update(self) -> None:
+        """Clear the last update's installer; say once if it did not install."""
+        if updater.finish_windows_update(updater.updates_dir(), __version__):
+            QMessageBox.warning(self._window, tr("Updates"), tr(
+                "The update could not finish. You are still on {version}.",
+                version=__version__,
+            ))
 
     def run_daily_check(self) -> None:
         if self._check_worker is not None or self._install_worker is not None:
@@ -209,8 +223,11 @@ class UpdateController(QObject):
     # ---- Installing ---------------------------------------------------------
 
     def _install(self, offer: Offer) -> None:
-        if self._kind is not InstallKind.APPIMAGE:
-            return  # the Windows installer path waits for MUSI-0406
+        if self._kind is InstallKind.WINDOWS:
+            job = partial(updater.install_windows, self._transport, offer,
+                          updater.updates_dir(), pid=os.getpid())
+            self._download(offer, job, self._on_windows_installer_ready)
+            return
         target = updater.appimage_path()
         if not updater.appimage_folder_writable(target):
             answer = QMessageBox.question(self._window, tr("Updates"), tr(
@@ -221,6 +238,12 @@ class UpdateController(QObject):
             if answer == QMessageBox.StandardButton.Yes and offer.page_url:
                 QDesktopServices.openUrl(QUrl(offer.page_url))
             return
+        job = partial(updater.install_appimage, self._transport, offer, target)
+        self._download(offer, job, lambda _result: self._on_appimage_installed(offer, target))
+
+    def _download(self, offer: Offer, job, on_success) -> None:
+        """Run `job` in an InstallWorker behind a cancellable progress dialog;
+        call `on_success(result)` when it finishes without error."""
         progress = QProgressDialog(
             tr("Downloading Album Builder {version}...", version=offer.version),
             tr("Cancel"), 0, max(offer.asset_size, 1), self._window,
@@ -228,9 +251,9 @@ class UpdateController(QObject):
         progress.setWindowTitle(tr("Updates"))
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(0)
-        worker = AppImageInstallWorker(self._transport, offer, target, parent=self)
+        worker = InstallWorker(job, parent=self)
         worker.progress.connect(self._on_progress)
-        worker.done.connect(lambda error: self._on_install_done(error, offer, target))
+        worker.done.connect(lambda error: self._on_install_done(error, worker, on_success))
         worker.finished.connect(worker.deleteLater)
         progress.canceled.connect(worker.requestInterruption)
         self._progress = progress
@@ -245,7 +268,7 @@ class UpdateController(QObject):
                 done=f"{received / 1e6:.1f}", total=f"{total / 1e6:.1f}",
             ))
 
-    def _on_install_done(self, error: str, offer: Offer, target: Path) -> None:
+    def _on_install_done(self, error: str, worker: InstallWorker, on_success) -> None:
         self._install_worker = None
         if self._progress is not None:
             self._progress.reset()
@@ -258,6 +281,17 @@ class UpdateController(QObject):
                 "The update could not be installed: {error}", error=error,
             ))
             return
+        on_success(worker.result)
+
+    def _on_windows_installer_ready(self, launch: Launch) -> None:
+        QMessageBox.information(self._window, tr("Updates"), tr(
+            "Album Builder will close and reopen to finish updating."))
+        # app.run() starts the installer once this copy lets go of its lock;
+        # the installer waits for this process to end, then installs.
+        updater.request_launch(launch)
+        self._window.close()
+
+    def _on_appimage_installed(self, offer: Offer, target: Path) -> None:
         box = QMessageBox(self._window)
         box.setWindowTitle(tr("Updates"))
         box.setText(tr("Album Builder {version} is installed. Restart now to use it?",

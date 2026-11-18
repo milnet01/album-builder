@@ -11,6 +11,7 @@
  "Adding songs...": "Adicionando faixas...",
  "Album": "Álbum",
  "Album Builder cannot replace itself, because it cannot write to its folder:\n{folder}\n\nOpen the release page to download the new version yourself?": "O Album Builder não pode se substituir porque não consegue gravar na própria pasta:\n{folder}\n\nAbrir a página da versão para baixar a nova versão você mesmo?",
+ "Album Builder will close and reopen to finish updating.": "O Album Builder vai fechar e abrir de novo para concluir a atualização.",
  "Album Builder {new} is available. You have {current}.": "O Album Builder {new} está disponível. Você tem a {current}.",
  "Album Builder {version} is installed. Restart now to use it?": "O Album Builder {version} foi instalado. Reiniciar agora para usá-lo?",
  "Album cover": "Capa do álbum",
@@ -232,5 +233,6 @@
  "Couldn't rename the album folder: {error}": "Não foi possível renomear a pasta do álbum: {error}",
  "Couldn't read your music folder: {error}": "Não foi possível ler sua pasta de músicas: {error}",
  "LRC: waiting...": "LRC: aguardando...",
- "No singing was heard in this song, so the lyrics could not be timed.": "Nenhum canto foi ouvido nesta música, por isso a letra não pôde ser sincronizada."
+ "No singing was heard in this song, so the lyrics could not be timed.": "Nenhum canto foi ouvido nesta música, por isso a letra não pôde ser sincronizada.",
+ "The update could not finish. You are still on {version}.": "Não foi possível concluir a atualização. Você continua na versão {version}."
 }

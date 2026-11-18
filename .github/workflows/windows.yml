@@ -1,10 +1,11 @@
 name: Windows
 
-# Build the downloadable Windows bundle (Spec 24 / Phase Dist-3) on a version tag
-# or on demand. It does NOT run on every push - ci.yml stays fast. The whole build
-# lives in packaging/build-windows.ps1; this workflow only invokes that script,
-# smoke-tests the artifact, verifies the built folder, and uploads to the Release
-# (INV-24-9: no build stages of its own).
+# Build the downloadable Windows bundle and installer (Spec 24 / Phase Dist-3,
+# MUSI-0406) on a version tag or on demand. It does NOT run on every push -
+# ci.yml stays fast. The whole build lives in packaging/build-windows.ps1;
+# this workflow only invokes that script, smoke-tests the artifacts, verifies
+# the built folder, and uploads to the Release (INV-24-9: no build stages of
+# its own).
 
 on:
   push:
@@ -66,6 +67,36 @@ jobs:
           & $exe --selftest                                                              # INV-24-2
           if ($LASTEXITCODE -ne 0) { throw "--selftest failed ($LASTEXITCODE)" }
 
+      - name: Install, run and uninstall the installer (INV-24-12)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $setup = Get-ChildItem dist -Filter 'AlbumBuilder-*-windows-x64-setup.exe' | Select-Object -First 1
+          $fver = ($setup.Name -replace '^AlbumBuilder-(.*)-windows-x64-setup\.exe$', '$1')
+          $dir = Join-Path $env:RUNNER_TEMP "ab-installed"
+          $p = Start-Process -Wait -PassThru $setup.FullName -ArgumentList `
+              "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=`"$dir`""
+          if ($p.ExitCode -ne 0) { throw "silent install failed ($($p.ExitCode))" }
+          # The marker Spec 28 reads, so this copy updates itself.
+          if ((Get-Content "$dir\install-kind.txt" -Raw).Trim() -ne "installer") {
+            throw "install-kind.txt does not read 'installer'"
+          }
+          $printed = (& "$dir\AlbumBuilder.exe" --version).Trim()
+          if ($printed -ne $fver) { throw "installed version mismatch: exe=$printed setup=$fver" }
+          & "$dir\AlbumBuilder.exe" --selftest
+          if ($LASTEXITCODE -ne 0) { throw "installed --selftest failed ($LASTEXITCODE)" }
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Album Builder.lnk")) {
+            throw "no Start menu entry"
+          }
+          # Uninstall keeps the user's settings and albums, which live outside it.
+          $keep = Join-Path $env:LOCALAPPDATA "album-builder\keep-me.txt"
+          New-Item -ItemType File -Force -Path $keep | Out-Null
+          & "$dir\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+          # The uninstaller hands off to a copy of itself and returns at once.
+          for ($i = 0; $i -lt 60 -and (Test-Path "$dir\AlbumBuilder.exe"); $i++) { Start-Sleep 1 }
+          if (Test-Path "$dir\AlbumBuilder.exe") { throw "uninstall left AlbumBuilder.exe" }
+          if (-not (Test-Path $keep)) { throw "uninstall removed the user's settings folder" }
+
       - name: Keep the zip for a manual test (non-tag runs)
         # A workflow_dispatch run on a branch publishes nothing; this keeps
         # the zip downloadable (gh run download) so a Windows fix can be
@@ -74,11 +105,15 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: windows-zip
-          path: dist/AlbumBuilder-*-windows-x64.zip
+          path: |
+            dist/AlbumBuilder-*-windows-x64.zip
+            dist/AlbumBuilder-*-windows-x64-setup.exe
           retention-days: 7
 
-      - name: Upload the zip to the Release
+      - name: Upload the zip and the installer to the Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
-          files: dist/AlbumBuilder-*-windows-x64.zip
+          files: |
+            dist/AlbumBuilder-*-windows-x64.zip
+            dist/AlbumBuilder-*-windows-x64-setup.exe

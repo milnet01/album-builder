@@ -11,6 +11,7 @@
  "Adding songs...": "Voeg snitte by...",
  "Album": "Album",
  "Album Builder cannot replace itself, because it cannot write to its folder:\n{folder}\n\nOpen the release page to download the new version yourself?": "Album Builder kan homself nie vervang nie, want dit kan nie na sy gids skryf nie:\n{folder}\n\nMaak die vrystellingsblad oop om die nuwe weergawe self af te laai?",
+ "Album Builder will close and reopen to finish updating.": "Album Builder sal toemaak en weer oopmaak om die bywerking af te handel.",
  "Album Builder {new} is available. You have {current}.": "Album Builder {new} is beskikbaar. Jy het {current}.",
  "Album Builder {version} is installed. Restart now to use it?": "Album Builder {version} is geïnstalleer. Herbegin nou om dit te gebruik?",
  "Album cover": "Albumomslag",
@@ -232,5 +233,6 @@
  "Couldn't rename the album folder: {error}": "Kon nie die albumvouer hernoem nie: {error}",
  "Couldn't read your music folder: {error}": "Kon nie jou musiekvouer lees nie: {error}",
  "LRC: waiting...": "LRC: wag...",
- "No singing was heard in this song, so the lyrics could not be timed.": "Geen sang is in hierdie liedjie gehoor nie, dus kon die lirieke nie gesinchroniseer word nie."
+ "No singing was heard in this song, so the lyrics could not be timed.": "Geen sang is in hierdie liedjie gehoor nie, dus kon die lirieke nie gesinchroniseer word nie.",
+ "The update could not finish. You are still on {version}.": "Die bywerking kon nie klaarmaak nie. Jy is steeds op {version}."
 }

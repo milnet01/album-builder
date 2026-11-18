@@ -45,15 +45,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag || github.ref_name }}
-        # The assets the build workflows upload. The Windows installer
-        # (AlbumBuilder-<V>-windows-x64-setup.exe) joins this list when
-        # MUSI-0406 ships it.
+        # The assets the build workflows upload (Spec 28 §4.3).
         run: |
           set -euo pipefail
           v="${TAG#v}"
           want=("AlbumBuilder-$v-x86_64.AppImage"
                 "AlbumBuilder-$v-x86_64.AppImage.zsync"
-                "AlbumBuilder-$v-windows-x64.zip")
+                "AlbumBuilder-$v-windows-x64.zip"
+                "AlbumBuilder-$v-windows-x64-setup.exe")
           for attempt in $(seq 1 120); do
             have=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
                      --jq '.assets[] | select(.state == "uploaded") | .name' 2>/dev/null || true)

@@ -167,6 +167,24 @@ def test_resolve_project_root_warns_on_installed_no_config(
     assert "settings.json" in err
 
 
+# Spec: TC-24-06
+def test_resolve_project_root_installed_windows_copy_uses_music(
+    xdg_config: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """A copy the Windows installer put in place keeps its albums in
+    Music\\Album Builder when no albums_folder is set, not in whatever folder
+    the Start menu shortcut starts it in (its install folder)."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ALBUM_BUILDER_DEV_MODE", raising=False)
+    monkeypatch.setattr(app, "_running_from_source_tree", lambda: False)
+    monkeypatch.setattr(app, "USER_MUSIC_DIR", tmp_path / "Music")
+    monkeypatch.setattr(app.updater, "install_kind", lambda: app.updater.InstallKind.WINDOWS)
+    assert app._resolve_project_root() == tmp_path / "Music" / "Album Builder"
+    # The portable zip keeps today's rule: the working folder.
+    monkeypatch.setattr(app.updater, "install_kind", lambda: app.updater.InstallKind.NONE)
+    assert app._resolve_project_root() == tmp_path
+
+
 # --- Single-instance lock + raise handshake ---------------------------------
 
 @pytest.fixture

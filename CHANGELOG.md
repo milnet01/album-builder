@@ -8,6 +8,18 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+### Added
+
+- **Windows installer, and Windows updates itself** (MUSI-0406)
+  A new Windows download, `AlbumBuilder-<version>-windows-x64-setup.exe`,
+  installs Album Builder like any other program: no admin password, a
+  Start menu entry, and an uninstaller in Windows Settings. Uninstalling
+  keeps your albums and settings. An installed copy keeps its albums in
+  `Music\Album Builder` unless you choose another folder.
+  Once installed, it checks for new versions once a day, asks you, and
+  installs the update itself, closing and reopening the app.
+  The zip download still works as before and does not update itself.
+
 ## [1.2.0] - 2026-11-18
 
 **Theme:** Self-update on Linux
