@@ -14,10 +14,11 @@ After this ships, a song can be hearted from the Player tab. Every song that is 
 
 ## 2. Problem
 
-Checked 2026-11-18: nothing in `src/` records a favourite, a rating, a play count or a play time. `state.json` keeps only the song to resume (`AppState.last_played_track_path`, Spec 26). The pieces this builds on:
+Checked 2026-11-18: nothing in `src/` records a favourite, a rating, a play count or a play time. `state.json` keeps the song to resume (`AppState.last_played_track_path`, Spec 26). The pieces this builds on:
 
 - `Player` (`services/player.py`) reports position (`position_changed`), user jumps (`seeked`), state (`state_changed`) and natural ends (`ended`). Nothing measures how long a song was actually heard, and no signal says a new source was loaded.
-- `PlaybackController._load_and_play` calls `Player.set_source` for every song start, including a repeat-one replay of the same song, but emits `current_changed` only when the song differs.
+- `PlaybackController._load_and_play` calls `Player.set_source` for every song it loads, including a repeat-one replay of the same song, but emits `current_changed` only when the song differs.
+- Play after Stop, or after the queue ends, replays the loaded song without `set_source` (`PlaybackController.toggle` and `play`).
 - Songs are identified by `Track.path`, an absolute resolved path. `Library.scan` reads one folder without recursion, and `Library.folder` is that folder, resolved.
 - `PlaylistsPane` (`ui/playlists_pane.py`) lists only `PlaylistStore` playlists, every one renamable and deletable.
 - `COLUMNS` in `ui/library_pane.py` has no heart or play-count column; `Glyphs` has no heart.
@@ -76,7 +77,7 @@ Author's calls, each open to the owner:
 | `plays` | int | `>= 0`; a bool is not an int | `0` |
 | `songs` | object | | an absent or non-object `songs` is a corrupt file |
 
-An entry that is not an object is dropped alone. An entry left with `favourited` `null` and `plays` `0` is not written. Spec 10 §Encoding rules apply in full: sorted keys, 2-space indent, `null` for empty fields, atomic writes.
+An entry that is not an object is dropped alone. An entry left with `favourited` `null` and `plays` `0` is not written. Spec 10 §Encoding rules apply (sorted keys, 2-space indent, `null` for empty fields), except §Paths: keys are relative (Keying, below). Writes are atomic.
 
 **Keying.** The key is `track.path.relative_to(library.folder).as_posix()`. `Library.scan` does not recurse, so today the key is the file name. A track whose path is not under `Library.folder` gets no key and is never recorded. To show a song's data, its key is joined to the current `Library.folder` and looked up with `Library.find`, so a library moved whole keeps its data.
 
@@ -89,9 +90,9 @@ An entry that is not an object is dropped alone. An entry left with `favourited`
 
 Constants in `domain/play_history.py`: `PLAY_MAX_THRESHOLD_S = 240.0`, `PLAY_MIN_SONG_S = 30.0`, `MAX_TICK_S = 2.0`.
 
-A **listen** starts at every `Player.source_changed` and ends at the next one. Within a listen:
+A **listen** starts at every `Player.source_changed` and at every `state_changed` to `STOPPED` (a Stop, or a song's end). So a song replayed after Stop, or after it ended, is a new listen. Within a listen:
 
-- **Heard time** grows by `p - last` for each `position_changed(p)` received while `Player.state()` is `PLAYING`, but only when `0 < p - last <= MAX_TICK_S`. Every `position_changed` and every `seeked(p)` sets `last = p`, whatever the state. So a seek, a resume point applied while stopped (Spec 26), or a backward jump adds nothing. The keyboard seeks 5 or 30 s (`MainWindow._seek_relative`), so the cap alone stops them; the `seeked` reset covers a small scrubber or MPRIS jump, except when the backend's `position_changed` for it arrives before `seeked`, which adds under 2 s. The backend reports position about every 100 ms (measured 2026-11-18 on Linux with Qt's FFmpeg backend: a 6 s wav, 40 ticks, largest gap 102 ms), so `MAX_TICK_S` is twenty times the normal gap.
+- **Heard time** grows by `p - last` for each `position_changed(p)` received while `Player.state()` is `PLAYING`, but only when `0 < p - last <= MAX_TICK_S`. Every `position_changed` and every `seeked(p)` sets `last = p`, whatever the state. So a seek, a resume point applied while stopped (Spec 26), or a backward jump adds nothing. The keyboard seeks 5 or 30 s (`MainWindow._seek_relative`), so the cap alone stops them; the `seeked` reset covers a small scrubber or MPRIS jump, except when the backend's `position_changed` for it arrives before `seeked`, which adds under 2 s. The backend reports position about every 100 ms (measured 2026-11-18 on Linux with Qt's FFmpeg backend: a 6 s wav, largest gap 102 ms), so `MAX_TICK_S` is twenty times the normal gap.
 - **Threshold**, from `d = Player.duration()` at the moment of the check:
   - `d > 0` and `d <= PLAY_MIN_SONG_S`: never counts.
   - `d > PLAY_MIN_SONG_S`: `min(d / 2, PLAY_MAX_THRESHOLD_S)`.
@@ -152,7 +153,7 @@ class PlayHistory(QObject):
 
 ### 4.4 The three lists
 
-`favourites`, `recently_played` and `most_played` return keys; `PlayHistory.smart_list` maps them to `Track`s in the current library and drops keys with no track. The limit applies after the drop, so a missing song does not shorten the list. Missing songs stay in the file and come back if the file returns.
+`favourites`, `recently_played` and `most_played` return keys. `PlayHistory.smart_list` passes them only the entries whose key has a track in the current library, then maps the keys to `Track`s, so a missing song does not shorten a limited list. Missing songs stay in the file and come back if the file returns.
 
 - **Favourites:** `favourited` not `null`, newest `favourited` first.
 - **Recently played:** `last_played` not `null`, newest first, at most 50.
@@ -170,7 +171,7 @@ The rows carry a `SmartList` under their own item role, never a `PlaylistStore` 
 
 **Song list (player mode only).** `COLUMNS` gains `("♥", "_fav")` third, after `_toggle`, and `(N_("Plays"), "_plays")` after `duration_seconds`; `_used` stays last (TC-13-09a) and `_toggle` second (TC-04-26). Both new columns are hidden when `player_mode` is false.
 
-- `_fav` shows `Glyphs.HEART` for a favourite and `Glyphs.HEART_OUTLINE` otherwise. A click on the cell, or Enter with the cell current, toggles the heart and does not play. Sort key: favourite first, then title.
+- `_fav` shows `Glyphs.HEART` for a favourite and `Glyphs.HEART_OUTLINE` otherwise. A mouse click on the cell toggles the heart, and so does Enter with the cell current. Neither plays. A mouse activation of the cell (a double-click, or a single click on a style that activates on one, Spec 18 §`ui/library_pane.py` — player mode) adds no second toggle. Sort key: favourite first, then title.
 - `_plays` shows the count, blank for 0. Sort key: the count.
 - Both refresh on `PlayHistory.changed`, as `_used` does on `UsageIndex.changed`.
 - The right-click menu gains "Add to favourites", or "Remove from favourites" when the clicked song is one. It acts on the clicked song, as the menu's other actions do.
@@ -189,9 +190,9 @@ Each *Test:* names the rule its fixture isolates.
   *Test:* `tests/persistence/test_TC_29_play_history_io.py::test_round_trip`.
   *Breaks when:* a field is dropped, or a time is written in another form.
 
-- **INV-2** (TC-29-02) — A bad field heals alone: a non-int, negative or bool `plays` reads 0; an unparsable time reads `null`; a non-object entry is dropped; the other entries load.
-  *Test:* `tests/persistence/test_TC_29_play_history_io.py::test_field_heal`, one case per row of §4.1's table, each beside a valid entry asserted unchanged (isolates per-entry healing from whole-file failure).
-  *Breaks when:* one bad entry fails the whole load, or a bool passes as a count.
+- **INV-2** (TC-29-02) — A bad field heals alone: a non-int, negative or bool `plays` reads 0; an unparsable time, or one with no UTC offset, reads `null`; a non-object entry is dropped; the other entries load.
+  *Test:* `tests/persistence/test_TC_29_play_history_io.py::test_field_heal`, one case per bad value of `favourited`, `last_played` and `plays`, plus a non-object entry, each beside a valid entry asserted unchanged (isolates per-entry healing from whole-file failure).
+  *Breaks when:* one bad entry fails the whole load, a bool passes as a count, or a time with no offset is kept.
 
 - **INV-3** (TC-29-03) — A corrupt file starts the history empty with `load_failed`, and the first save leaves the original bytes in `play_history.json.corrupt.bak`. A file with a newer `schema_version` starts empty with `read_only`, and after a heart and a flush its bytes are unchanged.
   *Test:* `tests/services/test_TC_29_play_history.py::test_load_failures`.
@@ -209,9 +210,9 @@ Each *Test:* names the rule its fixture isolates.
   *Test:* `tests/domain/test_TC_29_listen_meter.py::test_only_playing_counts`: 0.1 s ticks from 0 to 60 with `playing=False` on a 100 s song do not count (isolates the playing rule; every delta is under the cap); then 0.1 s ticks with `playing=True` from 60 add only the played span.
   *Breaks when:* paused or stopped ticks are added.
 
-- **INV-7** (TC-29-07) — A listen counts at most once, and each `source_changed` starts a new one, the same path included.
-  *Test:* `tests/services/test_TC_29_play_history.py::test_once_per_listen`, driving a `Player` with `_set_state_for_test`, `_set_duration_for_test` and emitted ticks: one listen run past the threshold twice counts 1; a second `set_source` of the same path, run past the threshold, counts 2.
-  *Breaks when:* the meter restarts on `current_changed`, which a repeat-one replay does not emit.
+- **INV-7** (TC-29-07) — A listen counts at most once, and each `source_changed` or `state_changed` to `STOPPED` starts a new one, the same path included.
+  *Test:* `tests/services/test_TC_29_play_history.py::test_once_per_listen`, driving a `Player` with `_set_state_for_test`, `_set_duration_for_test` and emitted ticks: one listen run past the threshold twice counts 1; a second `set_source` of the same path, run past the threshold, counts 2; an emitted `state_changed(STOPPED)`, then ticks past the threshold, counts 3.
+  *Breaks when:* the meter restarts on `current_changed`, which a repeat-one replay does not emit, or only on `source_changed`, which Play after Stop does not emit.
 
 - **INV-8** (TC-29-08) — `Player.source_changed` fires on every `set_source`, with the path, or `None` for a clear.
   *Test:* `tests/services/test_TC_29_play_history.py::test_source_changed`.
@@ -237,7 +238,7 @@ Each *Test:* names the rule its fixture isolates.
   *Test:* `tests/ui/test_TC_29_playlists_smart_lists.py::test_live_refresh`.
   *Breaks when:* the pane renders only on selection.
 
-- **INV-14** (TC-29-14) — The player-mode song list shows `_fav` and `_plays`; the curation list hides both. Clicking a `_fav` cell toggles the heart and requests no playback; sorting by either column orders by §4.5's keys. `_toggle` stays second and `_used` last.
+- **INV-14** (TC-29-14) — The player-mode song list shows `_fav` and `_plays`; the curation list hides both. Clicking a `_fav` cell toggles the heart once and requests no playback, on a style that activates on a single click too; sorting by either column orders by §4.5's keys. `_toggle` stays second and `_used` last.
   *Test:* `tests/ui/test_TC_29_library_columns.py`, with `play_tracks_requested` and `preview_play_requested` spies asserting no emit on the heart click.
   *Breaks when:* the heart click falls through to play-from-here, or the column order shifts an existing contract.
 
@@ -323,7 +324,7 @@ Edited in the implementation commit, so no spec describes behaviour before it sh
 
 - **Spec 00** §Project on-disk layout — adds `play_history.json`.
 - **Spec 06** §Outputs — `Player.source_changed`.
-- **Spec 10** §Files we own — a `play_history.json` row naming this spec as the schema's owner.
+- **Spec 10** §Files we own — a `play_history.json` row naming this spec as the schema's owner; §Paths — `play_history.json`'s keys are relative, so its absolute-path rule does not apply to them.
 - **Spec 11** §Glyphs — `HEART`, `HEART_OUTLINE`, `AUTO_LIST`.
 - **Spec 17** §`ui/playlists_pane.py` and §UI surface — the built-in rows.
 - **Spec 18** §`ui/library_pane.py` — player mode (MP-2) and §`ui/player_pane.py` — `PlayerPane` — the two columns and the card heart.
