@@ -229,6 +229,10 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   the machine (passphrase pop-up); confirmation pending. Remaining: the
   next tagged release is the first signed one and proves Spec 28 §10's
   end-to-end row; the Windows half waits for MUSI-0406.
+  Backup confirmed (2026-11-18, claude-config): the release key is in
+  ~/.claude/key-backup/keys.tar.gpg (claude-config commit 10da997);
+  make-backup.sh decrypted it byte-identical. A replaced key needs the
+  backup re-run: message claude-config.
   **Layman:** The app tells you when a newer version is out and can install it for you, so you never have to download it by hand.
   Kind: feature.
   Source: user-request-2026-10-10.
