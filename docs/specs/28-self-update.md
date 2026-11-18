@@ -1,7 +1,7 @@
 <!-- ants-spec-format: 1 -->
 # 28 — The app updates itself to the newest release
 
-**Status:** spec draft (2026-11-18).
+**Status:** accepted (2026-11-18).
 **Kind:** feature.
 **Source:** ROADMAP MUSI-0389 (user request 2026-10-10; owner decisions 2026-11-04 and 2026-11-18).
 **Depends on:** 10, 22, 23, 24, 27. **Amends:** 00 (network use), 10 (`settings.json` schema), 23 (§9 out-of-scope line; update information in the build), 27 (INV-3's name map).
@@ -79,6 +79,8 @@ Three assets come from the existing build workflows: `AlbumBuilder-<V>-x86_64.Ap
 <64 lowercase hex><two spaces><asset name>\n
 ```
 
+The app's parser ignores names it does not use, so a later release may list more assets. It refuses a malformed line or a repeated name.
+
 `SHA256SUMS.sig` — one line:
 
 ```
@@ -131,9 +133,9 @@ The offer dialog names both versions and shows the release body as plain text (n
 2. renames `<install>` to `<install>.old`, deleting an older `<install>.old` first;
 3. moves `app\` to `<install>`;
 4. on a failure in step 3, renames `<install>.old` back;
-5. writes `result.txt` (`ok` or `failed <step>`) into the staging folder, then starts `AlbumBuilder.exe` from the install folder.
+5. writes `result.txt` (`ok` or `failed <step>`) into the staging folder, then starts `AlbumBuilder.exe` with `<install>` as its working directory.
 
-At the next start, a Windows copy deletes `<install>.old` and any staging folder with `result.txt` = `ok`. If it finds `failed`, it shows once "The update could not finish. You are still on X.Y.Z." and deletes the staging folder. Settings live in `%LOCALAPPDATA%` (Spec 22), so replacing the install folder loses none.
+At the next start, a Windows copy deletes `<install>.old` and any staging folder with `result.txt` = `ok`. If it finds `failed`, or a staging folder with no `result.txt` (the script never ran), it shows once "The update could not finish. You are still on X.Y.Z." and deletes the staging folder. Settings live in `%LOCALAPPDATA%` (Spec 22), so replacing the install folder loses none.
 
 ### 4.7 Publishing: zsync data and the signature
 
@@ -141,7 +143,7 @@ At the next start, a Windows copy deletes `<install>.old` and any staging folder
 
 `release-sign.yml` runs on `push: tags: ['v*']` with `permissions: contents: write`. Its one job:
 
-1. polls the tag's release every 60 seconds, for up to 120 minutes, until the three assets of §4.3 are all present (a failed build means it times out and fails, so nothing is signed);
+1. polls the tag's release every 60 seconds, for up to 120 minutes, until the three assets of §4.3 are all present with `state` `uploaded` (a failed build means it times out and fails, so nothing is signed);
 2. downloads them, writes `SHA256SUMS`, and runs `packaging/release-signing.py sign SHA256SUMS` with the secret in the environment variable `RELEASE_SIGNING_KEY`;
 3. runs `release-signing.py verify SHA256SUMS`, which checks the signature against `TRUSTED_KEYS` imported from `album_builder.domain.release_manifest`, so a secret that does not match the shipped key fails the job;
 4. uploads `SHA256SUMS` and `SHA256SUMS.sig` to the release.
@@ -195,7 +197,7 @@ The domain and services tests inject a fetcher, a clock and a test key pair; non
   *Breaks when:* the new file is written under the new versioned name, or the mode is not copied.
 
 - **INV-8** (TC-28-08) — Windows extraction refuses any zip entry whose path resolves outside the folder it extracts into, and `swap.cmd` restores the old folder when the move of the new one fails.
-  *Test:* `tests/services/test_TC_28_updater.py::test_zip_containment` (entries `../x`, `C:/x`, `/x` refused) and `::test_swap_script_steps`, which reads the generated script's text for the five steps of §4.6 in order. On the Windows test machine (`ssh wintest`), a manual recipe: update 1.x to a locally signed build (pointing at a test key), then repeat with a file inside the staged `app\` held open while the close-and-reopen message shows, so step 3 fails, and confirm the old folder is back and the next start shows the could-not-finish message.
+  *Test:* `tests/services/test_TC_28_updater.py::test_zip_containment` (entries `../x`, `C:/x`, `/x` refused) and `::test_swap_script_steps`, which reads the generated script's text for the five steps of §4.6 in order. On the Windows test machine (`ssh wintest`), a manual recipe on two test builds whose `TRUSTED_KEYS` and release URL are patched, before `build-windows.ps1` runs, to a test key and a test repository (release builds carry no such patch): update the older to the newer, then repeat with a file inside the staged `app\` held open while the close-and-reopen message shows, so step 3 fails, and confirm the old folder is back and the next start shows the could-not-finish message.
   *Breaks when:* extraction trusts entry names, or the script deletes the old folder before the new one is in place.
 
 - **INV-9** (TC-28-09) — Every update request is HTTPS on every redirect hop, and every response is read to a fixed cap: release JSON 1 MiB, `SHA256SUMS` 64 KiB, `.sig` 1 KiB, asset the smaller of its listed size and 1 GiB.
@@ -297,7 +299,7 @@ Applied after the review gate, before building, each with a labelled loop-log ro
 - **Spec 00**: the **Offline** bullet and the opening "no server" line: add the daily update check, on AppImage and Windows only, switchable off.
 - **Spec 10** `settings.json` schema: add the `updates` block (§4.8) to the example and the field table.
 - **Spec 23** §9: the auto-update line points here; §4 gains the `-u` flag and the `.zsync` upload.
-- **Spec 27** INV-3: the name map gains `cryptography`→`python3-cryptography` and `certifi`→`python3-certifi`; `album-builder.spec` gains the matching `Requires:` and `BuildRequires:` lines.
+- **Spec 27** INV-3: the name map gains `cryptography`→`python3-cryptography` and `certifi`→`python3-certifi`; `packaging/obs/album-builder.spec` gains the matching `Requires:` and `BuildRequires:` lines.
 - `docs/standards/dependency-currency.md`: the two new dependencies.
 - `README.md`: a short "Updates" paragraph. `CHANGELOG.md`: the release entry.
 
@@ -314,4 +316,9 @@ Rows live in `../reviews/28-self-update-loop-log.md`.
 
 ## 14. Open questions
 
-None that block building. The owner's go-ahead is needed for one step: running `release-signing.py generate`, then uploading the key with `gh secret set RELEASE_SIGNING_KEY`.
+Two design questions from the review gate wait for the owner:
+
+- A Windows copy with no `albums_folder` set keeps `Albums/` and `state.json` in its working directory (`app.py::_resolve_project_root`), so §4.6's check can refuse every such copy. Recommended: the swap replaces only `AlbumBuilder.exe` and `_internal\`, and the check goes.
+- A copy that misses the key-rotation release (§6) can never verify a later one. Recommended: `SHA256SUMS.sig` may carry one line per key, and is accepted when any line under a trusted key verifies.
+
+The owner's go-ahead is needed for one step: running `release-signing.py generate`, then uploading the key with `gh secret set RELEASE_SIGNING_KEY`.
