@@ -1,7 +1,7 @@
 <!-- ants-spec-format: 1 -->
 # 29 — Play history: favourites, play counts, recently and most played
 
-**Status:** spec draft (2026-11-18).
+**Status:** accepted (2026-11-18).
 **Kind:** implement.
 **Source:** ROADMAP MUSI-0356 Phase MP-4 (user request 2026-07-25; owner decisions 2026-11-18).
 **Depends on:** 01, 06, 10, 11, 15, 17, 18, 25, 26. **Amends:** 00, 06, 10, 11, 17, 18.
@@ -79,7 +79,7 @@ Author's calls, each open to the owner:
 
 An entry that is not an object is dropped alone. An entry left with `favourited` `null` and `plays` `0` is not written. Spec 10 §Encoding rules apply (sorted keys, 2-space indent, `null` for empty fields), except §Paths: keys are relative (Keying, below). Writes are atomic.
 
-**Keying.** The key is `track.path.relative_to(library.folder).as_posix()`. `Library.scan` does not recurse, so today the key is the file name. A track whose path is not under `Library.folder` gets no key and is never recorded. To show a song's data, its key is joined to the current `Library.folder` and looked up with `Library.find`, so a library moved whole keeps its data.
+**Keying.** The key is `track.path.relative_to(library.folder).as_posix()`. `Library.scan` does not recurse, so today the key is the file name. A track whose path is not under `Library.folder` gets no key and is never recorded; `Track.from_path` resolves symlinks, so this includes a song reached through a symlink to a file outside the folder. For a track with no key, the heart cell, the card heart and the menu action are disabled. To show a song's data, its key is joined to the current `Library.folder` and looked up with `Library.find`, so a library moved whole keeps its data. An entry counts only when the found track's own key equals it, so a key spelled another way (absolute, or through `..`) shows nothing.
 
 **Load.** Absent file: empty history. A file that does not parse, is not an object, lacks `schema_version`, or has a bad `songs`: `load_history` raises, as `load_playlists` does (Spec 17 §Persistence & schema). `PlayHistory` then:
 
@@ -96,7 +96,8 @@ A **listen** starts at every `Player.source_changed` and at every `state_changed
 - **Threshold**, from `d = Player.duration()` at the moment of the check:
   - `d > 0` and `d <= PLAY_MIN_SONG_S`: never counts.
   - `d > PLAY_MIN_SONG_S`: `min(d / 2, PLAY_MAX_THRESHOLD_S)`.
-  - `d <= 0` (not yet known): `PLAY_MAX_THRESHOLD_S`.
+  - `d <= 0`: `PLAY_MAX_THRESHOLD_S`.
+  - `d` comes from `Player.duration()` alone, never from a "duration known" flag: Qt sends no new duration when the same file is set again (measured 2026-11-18), so such a flag would stay false on a repeat-one replay. Until a different song's duration arrives, `d` is the previous song's.
 - The first time heard time reaches the threshold, the song's `plays` goes up by one and `last_played` becomes now (UTC). A listen counts at most once. A repeat-one replay is a new listen, because `_load_and_play` calls `set_source` again.
 
 Heard time is kept in memory only. A listen cut by quitting is lost; resuming the song after relaunch (Spec 26) starts a new listen at the resume point.
@@ -147,6 +148,10 @@ class PlayHistory(QObject):
     def set_favourite(self, track: Track, on: bool) -> None: ...
     def smart_list(self, which: SmartList) -> list[Track]: ...
     def flush(self) -> None: ...
+
+# ui/playlists_pane.py
+class PlaylistsPane:
+    smart_play_requested = pyqtSignal(object)  # Type: list[Track], the shown songs
 ```
 
 `PlayHistory` owns a `ListenMeter`, feeds it from `Player`, and maps the source path to a key through `library_watcher.library()`. Every change (a heart, a counted play) updates memory, emits `changed`, and schedules a write through a `DebouncedWriter` (250 ms, Spec 10 §Debounce). `MainWindow` builds it beside `PlaylistStore` and calls `flush()` in `closeEvent`.
@@ -164,14 +169,14 @@ class PlayHistory(QObject):
 **Playlists tab.** `PlaylistsPane` shows the three lists as its first rows, in the order above, each name prefixed with `Glyphs.AUTO_LIST` and above the user's playlists. Selecting one shows its songs in the tracks list. For these rows:
 
 - the name is not editable, and Delete, Up, Down and Remove are disabled;
-- Play plays the shown songs in the shown order through `PlaybackController.play_tracks`; an empty list toasts and leaves the queue alone, as an empty playlist does (Spec 17 §Errors & edge cases);
+- Play emits `smart_play_requested` with the shown songs in the shown order, and `MainWindow` plays them through `PlaybackController.play_tracks`; an empty list toasts and leaves the queue alone, as an empty playlist does (Spec 17 §Errors & edge cases);
 - the shown songs refresh on `PlayHistory.changed` and on a library change.
 
-The rows carry a `SmartList` under their own item role, never a `PlaylistStore` id, so no store call can receive one. "Add to playlist" menus keep listing only `PlaylistStore` playlists.
+The rows carry a `SmartList` under their own item role, never a `PlaylistStore` id, and the pane's id-carrying signals (`play_requested`, `rename_committed`, `delete_requested`, `move_track_requested`, `remove_track_requested`) never fire for them. "Add to playlist" menus keep listing only `PlaylistStore` playlists.
 
 **Song list (player mode only).** `COLUMNS` gains `("♥", "_fav")` third, after `_toggle`, and `(N_("Plays"), "_plays")` after `duration_seconds`; `_used` stays last (TC-13-09a) and `_toggle` second (TC-04-26). Both new columns are hidden when `player_mode` is false.
 
-- `_fav` shows `Glyphs.HEART` for a favourite and `Glyphs.HEART_OUTLINE` otherwise. A mouse click on the cell toggles the heart, and so does Enter with the cell current. Neither plays. A mouse activation of the cell (a double-click, or a single click on a style that activates on one, Spec 18 §`ui/library_pane.py` — player mode) adds no second toggle. Sort key: favourite first, then title.
+- `_fav` shows `Glyphs.HEART` for a favourite and `Glyphs.HEART_OUTLINE` otherwise. A mouse click on the cell toggles the heart, and so does Enter with the cell current. Neither plays. A mouse activation of the cell (a double-click, or a single click on a style that activates on one, Spec 18 §`ui/library_pane.py` — player mode) neither plays nor toggles a second time. Sort key: favourite first, then title.
 - `_plays` shows the count, blank for 0. Sort key: the count.
 - Both refresh on `PlayHistory.changed`, as `_used` does on `UsageIndex.changed`.
 - The right-click menu gains "Add to favourites", or "Remove from favourites" when the clicked song is one. It acts on the clicked song, as the menu's other actions do.
@@ -230,8 +235,8 @@ Each *Test:* names the rule its fixture isolates.
   *Test:* `tests/domain/test_TC_29_history_lists.py` for the order, ties and limit on keys; `tests/services/test_TC_29_play_history.py::test_smart_list_skips_missing` for 51 played songs with one missing returning 50 tracks.
   *Breaks when:* the limit is applied before the drop, or a tie is ordered by insertion.
 
-- **INV-12** (TC-29-12) — `PlaylistsPane` shows the three lists first, in §4.4's order. With one selected, the name cannot be edited, Delete, Up, Down and Remove are disabled, and Play emits a request that plays its shown tracks through `play_tracks`. No `PlaylistStore` method is called for it.
-  *Test:* `tests/ui/test_TC_29_playlists_smart_lists.py`, with a `PlaylistStore` whose mutators raise (isolates "built-ins never reach the store" from "the buttons look disabled").
+- **INV-12** (TC-29-12) — `PlaylistsPane` shows the three lists first, in §4.4's order. With one selected, the name cannot be edited, Delete, Up, Down and Remove are disabled, and Play emits `smart_play_requested` with its shown tracks. None of the pane's id-carrying signals fires for it.
+  *Test:* `tests/ui/test_TC_29_playlists_smart_lists.py`, with a spy on every id-carrying signal (isolates "built-ins never reach the store" from "the buttons look disabled").
   *Breaks when:* a built-in row carries a store id, or a disabled action still fires.
 
 - **INV-13** (TC-29-13) — A shown smart list refreshes when a play counts or a heart changes.
@@ -242,7 +247,7 @@ Each *Test:* names the rule its fixture isolates.
   *Test:* `tests/ui/test_TC_29_library_columns.py`, with `play_tracks_requested` and `preview_play_requested` spies asserting no emit on the heart click.
   *Breaks when:* the heart click falls through to play-from-here, or the column order shifts an existing contract.
 
-- **INV-15** (TC-29-15) — The Player tab's card heart shows and toggles the current track's heart, follows `current_changed` and `PlayHistory.changed`, and is disabled with no track; the Album Builder tab's card has none.
+- **INV-15** (TC-29-15) — The Player tab's card heart shows and toggles the current track's heart, follows `current_changed` and `PlayHistory.changed`, and is disabled with no track or a track with no key; the Album Builder tab's card has none.
   *Test:* `tests/ui/test_TC_29_card_heart.py`.
   *Breaks when:* the heart keeps the previous track's state after a track change.
 
@@ -250,7 +255,7 @@ Each *Test:* names the rule its fixture isolates.
   *Test:* `tests/ui/test_TC_29_library_columns.py::test_context_menu`, through `_build_context_menu`.
   *Breaks when:* the label ignores the song's state.
 
-Trust boundary: `play_history.json` is a file the user can edit. Its keys are only joined to `Library.folder` and looked up with `Library.find`, never opened, so a key such as `../x` matches no library track and shows nothing. Field values are healed by INV-2.
+Trust boundary: `play_history.json` is a file the user can edit. Its keys are never opened, and a key that is not the found track's own key shows nothing (§4.1 Keying). Field values are healed by INV-2.
 
 ## 6. Failure modes
 
@@ -316,7 +321,7 @@ Each test is seen failing against the code before its change. None needs real au
 | INV-16 (TC-29-16) | `tests/ui/test_TC_29_library_columns.py::test_context_menu` |
 | `MAX_TICK_S` against real tick spacing (§4.2) | **Partial:** measured by hand on Linux 2026-11-18; nothing re-measures it, and Windows is unmeasured |
 | Glyphs render (§4.5) | nothing; checked by eye on Linux and on Windows (`ssh wintest`) before release |
-| Trust boundary (§5) | `tests/services/test_TC_29_play_history.py::test_keying` includes a `../x` key that shows nothing |
+| Trust boundary (§5) | `tests/services/test_TC_29_play_history.py::test_keying` includes an absolute key and a `../<folder>/<file>` key that show nothing |
 
 ## 11. Cross-doc impact
 
