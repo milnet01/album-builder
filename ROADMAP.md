@@ -88,9 +88,7 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   found a bug: the maximised size was saved as the normal one, so
   un-maximising after a relaunch stayed full screen. Fixed in e07ddc6.
   Both now pass. Nothing is owed before the release that carries MP-1.
-  Waiting-on: user (release MP-1 now as 1.1.0? Recommendation: yes. It
-  is built, CI-green and checked by hand on KDE and Windows, and a
-  release publishes to users, so it waits for you, 2026-11-05).
+  MP-1 shipped in 1.1.0 (2026-11-13).
   Progress (2026-11-05), Phase MP-3: search and click-to-sort already
   existed (Spec 01). Added Ctrl+F to focus the current tab's search box
   (TC-01-25; Ctrl+F rather than the bullet's "/ or Ctrl+L", being the
@@ -101,13 +99,10 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   library table focused, typing a letter moves to the first title
   starting with it (Qt type-ahead; probed offscreen on the demo library:
   "s" -> Slow Tide, "w" -> Walking Home Late).
-  Waiting-on: user (MP-3's last two pieces need a design call,
-  2026-11-05). (a) Sort by date added: Linux reports no "added" date,
-  only the file's last-change time, which a tag edit resets; and a new
-  column crowds the table MUSI-0392 just made fit small screens.
-  Recommendation: skip it, or offer it as a sort option with no column.
-  (b) Group by artist or album. Recommendation: wait for MP-4
-  (favourites, play counts), then design browsing as one piece.
+  Decided (owner, 2026-11-18): (a) no sort by date added. Linux has
+  no real "added" date, only the file's last-change time, which a tag
+  edit resets. (b) Group by artist or album waits for MP-4 (favourites,
+  play counts); browsing is then designed as one piece.
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 
@@ -170,16 +165,15 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   always ask before installing; the AppImage uses its built-in zsync
   update information. Offline and verification answers are still open
   for the spec.
-  Waiting-on: user (the spec's two open questions, 2026-11-05).
-  (1) Offline: recommendation - the daily check fails quietly and tries
+  Decided (owner, 2026-11-18):
+  (1) Offline: the daily check fails quietly and tries
   again next day; only a "Check for updates" you start yourself says it
   could not reach GitHub. (2) Verifying a download before it replaces
-  the running copy: recommendation - each release publishes a checksum
+  the running copy: each release publishes a checksum
   file signed with a project key; the app carries the public key and
   refuses a download whose signature or checksum does not match. Also
   settled by Spec 27: a copy installed from the openSUSE package never
-  updates itself; zypper does that. The spec waits for these answers
-  because a wrong guess at a security boundary costs a full review loop.
+  updates itself; zypper does that. Next: write the spec.
   **Layman:** The app tells you when a newer version is out and can install it for you, so you never have to download it by hand.
   Kind: feature.
   Source: user-request-2026-10-10.
@@ -204,15 +198,9 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   accounts, so the owner does or approves that step.
   Order: Dist-4 (Flatpak/Flathub), then Dist-5 (OBS, reusing the
   OBS project the "finbreak" session set up).
-  Waiting-on: user (Flathub app ID, permanent once published.
-  Recommendation: io.github.milnet01.AlbumBuilder, the pattern perch,
-  finbreak and rusty-psn use; Flathub accepts io.github ids without a
-  domain check. za.co.antsprojectshub.AlbumBuilder, as OneUp and Ants
-  Terminal use, needs the website to host a verification token. Dist-4
-  work proceeds with the recommended id; renaming before the first
-  publish is a search-and-replace, 2026-11-05).
-  Waiting-on: user (pursue Flathub at all? Recommendation: pause
-  Dist-4, 2026-11-05). Found while researching Dist-4: Flathub's
+  Decided (owner, 2026-11-18): Dist-4 (Flathub) is paused. The app ID
+  question waits with it; io.github.milnet01.AlbumBuilder stays the
+  working id (no domain check needed). Found while researching Dist-4: Flathub's
   generative-AI policy (in force 2026-09-09) bars AI tools from opening
   or writing submission PRs and replies, penalty up to a permanent ban
   (quoted in Ants_Terminal/packaging/flatpak/FLATHUB.md). finbreak's
@@ -233,10 +221,9 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   makes a complete wheel; packaging/obs/ holds the RPM recipe, metainfo,
   obs-setup.sh, obs-submit.sh and rpm-smoke.sh (new CI job "rpm"). The
   package installs and runs on a clean Tumbleweed container.
-  Waiting-on: user (first publish to OBS: run packaging/obs/obs-setup.sh,
-  then packaging/obs/obs-submit.sh X.Y.Z after the next release; the tag
-  must contain packaging/obs/, so 1.0.0 cannot be submitted.
-  Recommendation: yes, with the MP-1 release, 2026-11-05).
+  First OBS publish (owner's go-ahead, 2026-11-18): obs-setup.sh
+  created home:milnet:album-builder; obs-submit.sh 1.1.0 committed
+  revision 1.
   **Layman:** List the app on Flathub and in openSUSE's package system, so people can install it from their app store.
   Kind: package.
   Source: user-decision-2026-11-04.
