@@ -8,6 +8,15 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ## [Unreleased]
 
+### Added
+
+- **The Linux AppImage can update itself** (MUSI-0389)
+  Once a day it asks GitHub whether a newer version is out, and asks you
+  before installing anything. It only installs a download it can prove
+  came from this project. You can also check by hand from the Help menu,
+  or switch the daily check off there. The Windows download does not
+  update itself yet.
+
 ## [1.1.0] - 2026-11-13
 
 **Theme:** The player picks up where you left off

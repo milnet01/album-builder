@@ -99,7 +99,8 @@ what "latest" resolved to at verification time.
 | weasyprint | 69.0 | | ruff | 0.15.20 |
 | Pillow | 12.3.0 | | Jinja2 | 3.1.6 |
 | mutagen | 1.48.1 | | actions/checkout | v7 |
-| | | | actions/setup-python | v6 |
+| cryptography | 50.0.2 | | actions/setup-python | v6 |
+| certifi | 2026.10.23 | | PyYAML | 6.0.3 |
 
 Notable this cycle: **pytest 8 -> 9 (major)** verified green; the previous
 `<9` cap was precautionary, not a real break, and was removed.

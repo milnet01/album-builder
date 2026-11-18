@@ -152,7 +152,7 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: doc.
   Source: in-session-2026-09-28.
 
-- 📋 [MUSI-0389] **The app can update itself to the newest release.**
+- 🚧 [MUSI-0389] **The app can update itself to the newest release.**
   Covers both shipped builds: the Linux AppImage and the Windows
   zip. Open questions for the design: check on start or only on
   request; ask before installing or install silently; how the
@@ -208,6 +208,17 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   key: the claude-config session backs up all keys; generate the key
   and hand the private half to claude-config for backup before
   uploading it as RELEASE_SIGNING_KEY.
+  Progress (2026-11-18): Linux half BUILT (commits 6fdc5fa, cf7a1a7;
+  build fix 0699c64). Specs 00/10/23/27 amended (eefdebe). Local
+  AppImage build: update info embedded, .zsync written, bundled Python
+  reaches GitHub over HTTPS via certifi. Real check against GitHub:
+  running 1.1.0 -> newest; running 1.0.0 -> not ready (v1.1.0 is not
+  signed). Remaining: (a) generate the key, back it up through the
+  claude-config session (msg 2222/2223, no reply yet), add it to
+  TRUSTED_KEYS, gh secret set RELEASE_SIGNING_KEY; until then
+  release-sign.yml fails at Sign and nothing is offered. (b) The first
+  signed release proves the end-to-end row of Spec 28 §10. (c) The
+  Windows half waits for MUSI-0406.
   **Layman:** The app tells you when a newer version is out and can install it for you, so you never have to download it by hand.
   Kind: feature.
   Source: user-request-2026-10-10.
@@ -332,6 +343,12 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   go in Music\Album Builder. The installer is Windows-only; Linux
   keeps the AppImage. Per-user install stays the design default
   (the owner did not pick between per-user and all-users).
+  For the Windows half of Spec 28 (2026-11-18): updater.py's
+  _UPDATING_KINDS gains WINDOWS; release-sign.yml's wait list gains
+  the setup.exe. --version imports cryptography and certifi, so a
+  bundle missing either fails CI, but nothing checks that certifi's
+  cacert.pem data file is bundled; a missing one makes every daily
+  check fail silently. Check it in the Windows --selftest or by hand.
   **Layman:** Windows users install Album Builder like any other program, with a Start menu entry and an uninstaller, and updates install themselves.
   Kind: package.
   Source: user-request-2026-11-18.

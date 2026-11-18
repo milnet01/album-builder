@@ -1,7 +1,7 @@
 <!-- ants-spec-format: 1 -->
 # 28 — The app updates itself to the newest release
 
-**Status:** accepted (2026-11-18).
+**Status:** accepted (2026-11-18). Linux half built 2026-11-18; the Windows half waits for MUSI-0406, and until then only the AppImage checks for updates.
 **Kind:** feature.
 **Source:** ROADMAP MUSI-0389 (user request 2026-10-10; owner decisions 2026-11-04 and 2026-11-18).
 **Depends on:** 10, 22, 23, 24, 27. **Blocked by:** MUSI-0406 (the Windows installer), for the Windows half only. **Amends:** 00 (network use), 10 (`settings.json` schema), 23 (§9 out-of-scope line; update information in the build), 27 (INV-3's name map).
@@ -139,7 +139,7 @@ The offer dialog names both versions and shows the release body as plain text (n
 
 `release-sign.yml` runs on `push: tags: ['v*']` with `permissions: contents: write`. Its one job:
 
-1. polls the tag's release every 60 seconds, for up to 120 minutes, until the four assets of §4.3 are all present with `state` `uploaded` (a failed build means it times out and fails, so nothing is signed);
+1. polls the tag's release every 60 seconds, for up to 120 minutes, until every build asset of §4.3 that exists yet is present with `state` `uploaded`: the AppImage, its `.zsync` and the zip, and the installer once MUSI-0406 ships it. `release-sign.yml` holds that list (a failed build means it times out and fails, so nothing is signed);
 2. downloads them, writes `SHA256SUMS`, and runs `packaging/release-signing.py sign SHA256SUMS` with the secret in the environment variable `RELEASE_SIGNING_KEY`;
 3. runs `release-signing.py verify SHA256SUMS`, which checks the signature against `TRUSTED_KEYS` imported from `album_builder.domain.release_manifest`, so a secret that does not match the shipped key fails the job;
 4. uploads `SHA256SUMS` and `SHA256SUMS.sig` to the release.

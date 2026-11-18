@@ -145,6 +145,23 @@ If something goes wrong:
 Automatic lyric alignment is not included in the AppImage, because it
 is very large. Use the full install below if you want it.
 
+### Updates
+
+Once a day the AppImage asks GitHub whether a newer version is out. It
+tells GitHub only which version you have. If there is a newer one, it
+asks you first:
+
+- **Install now** downloads it, checks that it really came from this
+  project, and replaces the file you started. Your shortcuts keep
+  working.
+- **Remind me tomorrow** asks again the next day.
+- **Skip this version** stops asking until an even newer version is out.
+
+**Help > Check for updates now** checks straight away. To stop the
+daily check, untick **Help > Check for updates automatically**.
+
+The Windows download and the full install do not update themselves.
+
 ## Download for Windows - nothing to install
 
 1. Download `AlbumBuilder-<version>-windows-x64.zip` from the
