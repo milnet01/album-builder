@@ -223,7 +223,9 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   package installs and runs on a clean Tumbleweed container.
   First OBS publish (owner's go-ahead, 2026-11-18): obs-setup.sh
   created home:milnet:album-builder; obs-submit.sh 1.1.0 committed
-  revision 1.
+  revision 1; the Tumbleweed x86_64 build succeeded
+  (album-builder-1.1.0-1.1.noarch.rpm). Dist-5 is done; Dist-4 stays
+  paused.
   **Layman:** List the app on Flathub and in openSUSE's package system, so people can install it from their app store.
   Kind: package.
   Source: user-decision-2026-11-04.
