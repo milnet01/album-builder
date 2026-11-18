@@ -447,7 +447,7 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Source: user-request-2026-11-18.
   Lanes: packaging, services, ui.
 
-- 📋 [MUSI-0408] **A playlists.json that is not valid UTF-8 crashes launch.**
+- ✅ [MUSI-0408] **A playlists.json that is not valid UTF-8 crashes launch.**
   persistence/playlist_io.py::load_playlists runs raw_bytes.decode("utf-8")
   before json.loads. PlaylistStore.__init__ catches (json.JSONDecodeError,
   UnreadableSchemaError, SchemaTooNewError, OSError), which does not
@@ -458,6 +458,8 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   UnicodeDecodeError as unreadable (decode inside load_playlists and raise
   UnreadableSchemaError, or add it to the tuple), with a regression test.
   Spec 29's PlayHistory must not copy the narrow tuple.
+  Done 2026-11-18: load_playlists raises UnreadableSchemaError on non-UTF-8
+  bytes; TC-17-09 and TC-17-26 amended and tested.
   **Layman:** If the saved playlists file gets garbled, the app refuses to start instead of starting with no playlists and keeping the bad file aside.
   Kind: review-fix.
   Source: review-contract-2026-11-18 (Spec 29 loop 2).

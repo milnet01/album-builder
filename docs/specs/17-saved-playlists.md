@@ -190,6 +190,9 @@ to the `.album-builder/` dir it imports from `state_io`:
   `load_playlists` does **not** catch-and-reset (that swallow-and-overwrite is
   `state_io.load_state`'s cosmetic-only behavior - Spec 10 TC-10-12): it lets the
   **raw** errors propagate: a `json.JSONDecodeError` on non-JSON; an
+  `UnreadableSchemaError` that `load_playlists` raises itself on bytes that are
+  not UTF-8 (in place of the `UnicodeDecodeError` the decode throws, which the
+  store's guard would not catch); an
   `UnreadableSchemaError` that `load_playlists` **raises itself** via an explicit
   `if not isinstance(raw, dict): raise UnreadableSchemaError(...)` guard *before*
   `migrate_forward` (a guard `load_playlists` owns - `migrate_forward` calls
@@ -560,7 +563,8 @@ tests build real widgets under the offscreen QPA and monkeypatch
   `UnreadableSchemaError`. So does a missing or non-list `playlists`, or an
   entry whose `id` / `name` is not a string or whose `track_paths` is not a list
   of strings; the message names the entry's position (amended 2026-11-05,
-  MUSI-0402).
+  MUSI-0402). A file whose bytes are not UTF-8 raises `UnreadableSchemaError`,
+  not `UnicodeDecodeError` (amended 2026-11-18, MUSI-0408).
 - **TC-17-10** - a playlist entry whose path does not exist on disk survives a
   `save_playlists`/`load_playlists` round-trip unchanged (dangling entries are
   not pruned by persistence).
@@ -635,7 +639,8 @@ tests build real widgets under the offscreen QPA and monkeypatch
   unchanged, and `_on_rename_playlist` re-renders the pane so the row shows the
   prior name.
 - **TC-17-26** - Startup degradation: `PlaylistStore(project_root)` on a
-  `playlists.json` that is corrupt (bad JSON), a top-level non-object (`[]`), too-new
+  `playlists.json` that is corrupt (bad JSON or bytes that are not UTF-8), a
+  top-level non-object (`[]`), too-new
   (`schema_version`), or unreadable (`OSError`) does not raise out of `__init__`;
   `playlists()` is `[]`, `load_failed` is `True`, and the on-disk file is left
   byte-for-byte unchanged at construction. On a clean or absent file `load_failed` is

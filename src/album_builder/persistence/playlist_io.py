@@ -42,17 +42,21 @@ def load_playlists(project_root: Path) -> list[Playlist]:
     """Load the playlist catalogue, or `[]` when the file is absent.
 
     Raises (does not swallow): `json.JSONDecodeError` on non-JSON,
-    `UnreadableSchemaError` on a non-object top level or a missing/non-int
-    `schema_version`, `SchemaTooNewError` on a too-new version, `OSError` if the
-    file cannot be read. Heals each stored path relative->absolute with
-    `Path.absolute()` (not `resolve()`, to preserve user symlinks), mirroring
-    `album_io`.
+    `UnreadableSchemaError` on bytes that are not UTF-8, a non-object top level
+    or a missing/non-int `schema_version`, `SchemaTooNewError` on a too-new
+    version, `OSError` if the file cannot be read. Heals each stored path
+    relative->absolute with `Path.absolute()` (not `resolve()`, to preserve
+    user symlinks), mirroring `album_io`.
     """
     path = _playlists_path(project_root)
     if not path.exists():
         return []
     raw_bytes = path.read_bytes()
-    raw = json.loads(raw_bytes.decode("utf-8"))
+    try:
+        text = raw_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise UnreadableSchemaError(f"playlists.json is not UTF-8: {exc}") from exc
+    raw = json.loads(text)
     from_version = raw.get("schema_version") if isinstance(raw, dict) else None
     data = migrate_forward(raw, current=CURRENT_SCHEMA_VERSION, migrations=MIGRATIONS)
     if isinstance(from_version, int) and data.get("schema_version") != from_version:

@@ -189,3 +189,21 @@ def test_startup_degradation_on_too_new_and_non_object(qapp, tmp_path: Path) -> 
 
     f.write_text(json.dumps([]))  # valid JSON, non-object
     assert PlaylistStore(tmp_path).load_failed is True
+
+
+# Spec: TC-17-26 - a file that is not UTF-8 starts empty instead of crashing
+# launch, and its bytes survive to .corrupt.bak (MUSI-0408).
+def test_startup_degradation_on_non_utf8_file(qapp, tmp_path: Path) -> None:
+    f = _file(tmp_path)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    original = b"\xff\xfe{\x00}\x00"
+    f.write_bytes(original)
+
+    store = PlaylistStore(tmp_path)
+    assert store.playlists() == []
+    assert store.load_failed is True
+    assert f.read_bytes() == original
+
+    store.create("Rescued")
+    store.flush()
+    assert _corrupt_bak(tmp_path).read_bytes() == original

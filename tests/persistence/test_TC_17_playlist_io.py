@@ -93,6 +93,17 @@ def test_corrupt_and_schema_errors_raise(tmp_path: Path) -> None:
         load_playlists(tmp_path)
 
 
+# Spec: TC-17-09 - bytes that are not UTF-8 (a UTF-16 byte-order mark) raise
+# UnreadableSchemaError, not a raw UnicodeDecodeError the store does not
+# catch (MUSI-0408).
+def test_non_utf8_file_raises_unreadable(tmp_path: Path) -> None:
+    f = _file(tmp_path)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(b"\xff\xfe{\x00}\x00")
+    with pytest.raises(UnreadableSchemaError, match="UTF-8"):
+        load_playlists(tmp_path)
+
+
 # Spec: TC-17-10
 def test_dangling_path_survives_round_trip(tmp_path: Path) -> None:
     ghost = Path("/does/not/exist.mp3")

@@ -75,6 +75,13 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Fixed
 
+- **A garbled playlists file no longer stops the app starting** (MUSI-0408)
+  If the saved playlists file was damaged in a certain way (for example,
+  saved by another program in the wrong text format), Album Builder
+  refused to open. Now it opens with no playlists and tells you. The
+  damaged file is kept aside as `playlists.json.corrupt.bak`, so it can
+  still be repaired by hand.
+
 - **Clearer wording in Spanish, Portuguese, Afrikaans and Arabic** (part of MUSI-0369)
   Four small fixes. In Afrikaans, the "Now playing" heading no longer
   reads like the command "play now". In Arabic, the "Used" column
