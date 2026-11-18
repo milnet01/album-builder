@@ -113,6 +113,10 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   in src/ yet; state.json keeps only last_played_track_path. Next:
   write the MP-4 spec (new saved data, so likely the review-contract
   gate).
+  2026-11-18: MP-4 spec docs/specs/29-play-history.md passed the
+  review-contract gate at its 2-loop cap (11 verified findings, all
+  fixed, 1 dismissed; calm cap). Status accepted; ready to build. Loop
+  log: docs/reviews/29-play-history-loop-log.md. No deferred tail.
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 
