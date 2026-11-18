@@ -101,6 +101,8 @@ BuildRequires:  python3-platformdirs >= 4.11
 BuildRequires:  python3-Jinja2 >= 3.1
 BuildRequires:  python3-weasyprint >= 68
 BuildRequires:  python3-Pillow >= 11
+BuildRequires:  python3-cryptography >= 42
+BuildRequires:  python3-certifi >= 2024.2.2
 BuildRequires:  dejavu-fonts
 
 Requires:       hicolor-icon-theme
@@ -112,6 +114,8 @@ Requires:       python3-platformdirs >= 4.11
 Requires:       python3-Jinja2 >= 3.1
 Requires:       python3-weasyprint >= 68
 Requires:       python3-Pillow >= 11
+Requires:       python3-cryptography >= 42
+Requires:       python3-certifi >= 2024.2.2
 ```
 
 - `%build`: `%pyproject_wheel`. `%install`: `%pyproject_install`, then `install -Dm644` the three files of §4.2, generating the desktop file with `sed`.

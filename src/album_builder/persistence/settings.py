@@ -6,11 +6,14 @@ import json
 import logging
 import os
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import platformdirs
 
+from album_builder.domain.release_manifest import parse_version
 from album_builder.i18n import SUPPORTED
+from album_builder.persistence.album_io import _from_iso, _to_iso
 from album_builder.persistence.atomic_io import atomic_write_text
 from album_builder.persistence.schema import (
     Migration,
@@ -92,6 +95,15 @@ class UiSettings:
     theme: str = "dark-colourful"
     # Spec 25: "system" or a code in i18n.SUPPORTED; takes effect on restart.
     language: str = "system"
+
+
+@dataclass(frozen=True)
+class UpdateSettings:
+    """Spec 28 §4.8: the daily update check's switch and memory."""
+
+    auto_check: bool = True
+    last_check: datetime | None = None
+    skipped_version: str | None = None
 
 
 def settings_dir() -> Path:
@@ -340,5 +352,44 @@ def write_ui(ui: UiSettings) -> None:
         "open_report_folder_on_approve": ui.open_report_folder_on_approve,
         "theme": ui.theme,
         "language": ui.language,
+    }
+    _write_settings(data)
+
+
+def read_updates() -> UpdateSettings:
+    """Return the updates block (Spec 28 §4.8); each malformed field reads as
+    its default, and so does a missing block."""
+    data = _read_settings_dict()
+    block = data.get("updates")
+    if not isinstance(block, dict):
+        return UpdateSettings()
+    raw_auto = block.get("auto_check", True)
+    auto = raw_auto if isinstance(raw_auto, bool) else True
+    last_check = None
+    raw_last = block.get("last_check")
+    if isinstance(raw_last, str):
+        try:
+            parsed = _from_iso(raw_last)
+        except ValueError:
+            parsed = None
+        # A naive stamp has no zone to compare against; read it as unset.
+        if parsed is not None and parsed.tzinfo is not None:
+            last_check = parsed
+    raw_skipped = block.get("skipped_version")
+    skipped = (
+        raw_skipped
+        if isinstance(raw_skipped, str) and parse_version(raw_skipped) is not None
+        else None
+    )
+    return UpdateSettings(auto_check=auto, last_check=last_check, skipped_version=skipped)
+
+
+def write_updates(updates: UpdateSettings) -> None:
+    """Write the updates block, preserving other top-level keys."""
+    data = _read_settings_dict()
+    data["updates"] = {
+        "auto_check": updates.auto_check,
+        "last_check": None if updates.last_check is None else _to_iso(updates.last_check),
+        "skipped_version": updates.skipped_version,
     }
     _write_settings(data)

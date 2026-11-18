@@ -11,3 +11,7 @@ platformdirs>=4.11
 Jinja2>=3.1
 weasyprint>=68
 Pillow>=11
+# Spec 28 self-update: Ed25519 signature check, and a CA bundle for HTTPS
+# (the AppImage's bundled Python has no usable system one)
+cryptography>=42
+certifi>=2024.2.2

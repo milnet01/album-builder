@@ -24,7 +24,7 @@ import os
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QLibraryInfo, QLocale, QSharedMemory, Qt, QTranslator
+from PyQt6.QtCore import QLibraryInfo, QLocale, QProcess, QSharedMemory, Qt, QTranslator
 from PyQt6.QtGui import QIcon
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QMainWindow
@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow
 from album_builder import i18n
 from album_builder.persistence import settings
 from album_builder.persistence.state_io import load_state
+from album_builder.services import updater
 from album_builder.services.album_store import AlbumStore
 from album_builder.services.library_watcher import LibraryWatcher
 from album_builder.ui.main_window import MainWindow
@@ -104,6 +105,14 @@ def run() -> int:
         # leak.
         server.close()
         lock.detach()
+    # Spec 28 §4.6: "Restart now" after an update starts the new AppImage only
+    # now, because a copy started while the lock was held would exit at once.
+    restart = updater.take_restart_request()
+    if restart is not None:
+        started, _pid = QProcess.startDetached(str(restart), [])
+        if not started:
+            print(f"album-builder: could not start the updated copy at {restart}",
+                  file=sys.stderr)
     return rc
 
 

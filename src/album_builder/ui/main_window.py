@@ -73,6 +73,7 @@ from album_builder.services.player import Player, PlayerState
 from album_builder.services.playlist_store import PlaylistStore
 from album_builder.services.replaygain import ReplayGainService
 from album_builder.services.report import list_warnings, report_paths_for
+from album_builder.services.updater import install_kind
 from album_builder.services.usage_index import UsageIndex
 from album_builder.ui.album_order_pane import AlbumOrderPane
 from album_builder.ui.duplicates_dialog import DuplicatesDialog
@@ -85,6 +86,7 @@ from album_builder.ui.theme import THEMES, Glyphs, palette_for, qt_stylesheet
 from album_builder.ui.toast import Toast
 from album_builder.ui.top_bar import TopBar
 from album_builder.ui.tray import TrayIcon
+from album_builder.ui.update_dialog import UpdateController
 from album_builder.ui.window_util import bring_to_front, fit_to_screen
 from album_builder.version import __version__
 
@@ -467,6 +469,9 @@ class MainWindow(QMainWindow):
         # the persisted theme through the same path a live switch uses (the two
         # palette-caching widgets and the menu radio now exist).
         self._current_theme = "dark-colourful"
+        # Spec 28: self-update; inert (no menu entries, no requests) unless
+        # this copy runs from an AppImage.
+        self._updates = UpdateController(self, install_kind())
         self._build_menu_bar()
         self._apply_theme(self._ui_settings.theme, persist=False)
 
@@ -562,6 +567,9 @@ class MainWindow(QMainWindow):
 
         help_menu = bar.addMenu(tr("Help"))
         help_menu.addAction(tr("Keyboard shortcuts"), lambda: self._show_help())
+        if self._updates.actions:
+            help_menu.addSeparator()
+            help_menu.addActions(self._updates.actions)
 
     def _apply_theme(self, theme_id: str, *, persist: bool) -> None:
         palette = palette_for(theme_id)
@@ -1586,6 +1594,7 @@ class MainWindow(QMainWindow):
         if self._restore_splitter_sizes:
             self.splitter.setSizes(self._restore_splitter_sizes)
             self._restore_splitter_sizes = []
+        self._updates.schedule_daily()  # Spec 28 §4.5; runs once per session
 
     def resizeEvent(self, e) -> None:
         super().resizeEvent(e)
@@ -1658,6 +1667,9 @@ class MainWindow(QMainWindow):
             # The scan only reads, so stop it rather than wait for every song.
             self._duplicate_worker.requestInterruption()
             self._duplicate_worker.wait()
+        # Spec 28 §6: stop an update check or download; it deletes its
+        # temporary file.
+        self._updates.shutdown()
         try:
             # Spec 20: drop the bus name (clean relaunch) + remove the cover-art
             # temp file, and hide the tray icon. Self-guarded on the no-op path.

@@ -33,6 +33,8 @@ RPM_NAMES = {
     "Jinja2": "python3-Jinja2",
     "weasyprint": "python3-weasyprint",
     "Pillow": "python3-Pillow",
+    "cryptography": "python3-cryptography",
+    "certifi": "python3-certifi",
 }
 
 

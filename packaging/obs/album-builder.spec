@@ -40,6 +40,8 @@ BuildRequires:  python3-platformdirs >= 4.11
 BuildRequires:  python3-Jinja2 >= 3.1
 BuildRequires:  python3-weasyprint >= 68
 BuildRequires:  python3-Pillow >= 11
+BuildRequires:  python3-cryptography >= 42
+BuildRequires:  python3-certifi >= 2024.2.2
 # A font for the PDF report. With no font installed, WeasyPrint 70 segfaults
 # drawing text (measured 2026-11-05 in a bare Tumbleweed container; a build
 # root is that bare). DejaVu Sans is in the report template's font list.
@@ -55,6 +57,8 @@ Requires:       python3-platformdirs >= 4.11
 Requires:       python3-Jinja2 >= 3.1
 Requires:       python3-weasyprint >= 68
 Requires:       python3-Pillow >= 11
+Requires:       python3-cryptography >= 42
+Requires:       python3-certifi >= 2024.2.2
 
 %description
 Album Builder helps you put an album together from a folder of songs.
