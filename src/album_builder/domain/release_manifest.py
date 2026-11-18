@@ -48,6 +48,7 @@ _KEY_ID = re.compile(r"^[0-9a-f]{16}$")
 _ASSET_SUFFIX = {
     "appimage": "x86_64.AppImage",
     "windows": "windows-x64-setup.exe",
+    "windows-msi": "windows-x64.msi",
 }
 
 
@@ -88,7 +89,7 @@ def offered_version(tag: str, running: str, *, skipped: str | None) -> Version |
 
 
 def asset_name(version: Version, kind: str) -> str:
-    """The file a `kind` ("appimage" or "windows") copy downloads (§4.4 item 3)."""
+    """The asset a `kind` ("appimage", "windows" or "windows-msi") copy wants (§4.4 item 3)."""
     return f"AlbumBuilder-{format_version(version)}-{_ASSET_SUFFIX[kind]}"
 
 

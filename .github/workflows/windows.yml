@@ -1,7 +1,7 @@
 name: Windows
 
-# Build the downloadable Windows bundle and installer (Spec 24 / Phase Dist-3,
-# MUSI-0406) on a version tag or on demand. It does NOT run on every push -
+# Build the downloadable Windows bundle, installer and MSI (Spec 24 / Phase
+# Dist-3, MUSI-0406, MUSI-0407) on a version tag or on demand. It does NOT run on every push -
 # ci.yml stays fast. The whole build lives in packaging/build-windows.ps1;
 # this workflow only invokes that script, smoke-tests the artifacts, verifies
 # the built folder, and uploads to the Release (INV-24-9: no build stages of
@@ -97,7 +97,38 @@ jobs:
           if (Test-Path "$dir\AlbumBuilder.exe") { throw "uninstall left AlbumBuilder.exe" }
           if (-not (Test-Path $keep)) { throw "uninstall removed the user's settings folder" }
 
-      - name: Keep the zip for a manual test (non-tag runs)
+      - name: Install, run and uninstall the MSI (INV-24-15)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $msi = Get-ChildItem dist -Filter 'AlbumBuilder-*-windows-x64.msi' | Select-Object -First 1
+          $fver = ($msi.Name -replace '^AlbumBuilder-(.*)-windows-x64\.msi$', '$1')
+          $log = Join-Path $env:RUNNER_TEMP "msi-install.log"
+          $p = Start-Process -Wait -PassThru msiexec.exe -ArgumentList `
+              "/i", "`"$($msi.FullName)`"", "/qn", "/norestart", "/l*v", "`"$log`""
+          if ($p.ExitCode -ne 0) { Get-Content $log -Tail 60; throw "msi install failed ($($p.ExitCode))" }
+          $dir = Join-Path $env:ProgramFiles "Album Builder"
+          # The marker Spec 28 reads, so this copy offers updates but never installs them.
+          if ((Get-Content "$dir\install-kind.txt" -Raw).Trim() -ne 'msi') {
+            throw "install-kind.txt does not read 'msi'"
+          }
+          $printed = (& "$dir\AlbumBuilder.exe" --version).Trim()
+          if ($printed -ne $fver) { throw "installed version mismatch: exe=$printed msi=$fver" }
+          & "$dir\AlbumBuilder.exe" --selftest
+          if ($LASTEXITCODE -ne 0) { throw "installed --selftest failed ($LASTEXITCODE)" }
+          if (-not (Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Album Builder.lnk")) {
+            throw "no all-users Start menu entry"
+          }
+          # Uninstall keeps the user's settings and albums, which live outside it.
+          $keep = Join-Path $env:LOCALAPPDATA "album-builder\keep-me.txt"
+          New-Item -ItemType File -Force -Path $keep | Out-Null
+          $p = Start-Process -Wait -PassThru msiexec.exe -ArgumentList `
+              "/x", "`"$($msi.FullName)`"", "/qn", "/norestart"
+          if ($p.ExitCode -ne 0) { throw "msi uninstall failed ($($p.ExitCode))" }
+          if (Test-Path "$dir\AlbumBuilder.exe") { throw "uninstall left AlbumBuilder.exe" }
+          if (-not (Test-Path $keep)) { throw "uninstall removed the user's settings folder" }
+
+      - name: Keep the Windows downloads for a manual test (non-tag runs)
         # A workflow_dispatch run on a branch publishes nothing; this keeps
         # the zip downloadable (gh run download) so a Windows fix can be
         # checked on a real machine before it is released.
@@ -108,12 +139,14 @@ jobs:
           path: |
             dist/AlbumBuilder-*-windows-x64.zip
             dist/AlbumBuilder-*-windows-x64-setup.exe
+            dist/AlbumBuilder-*-windows-x64.msi
           retention-days: 7
 
-      - name: Upload the zip and the installer to the Release
+      - name: Upload the zip, the installer and the MSI to the Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/AlbumBuilder-*-windows-x64.zip
             dist/AlbumBuilder-*-windows-x64-setup.exe
+            dist/AlbumBuilder-*-windows-x64.msi

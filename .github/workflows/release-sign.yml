@@ -52,7 +52,8 @@ jobs:
           want=("AlbumBuilder-$v-x86_64.AppImage"
                 "AlbumBuilder-$v-x86_64.AppImage.zsync"
                 "AlbumBuilder-$v-windows-x64.zip"
-                "AlbumBuilder-$v-windows-x64-setup.exe")
+                "AlbumBuilder-$v-windows-x64-setup.exe"
+                "AlbumBuilder-$v-windows-x64.msi")
           for attempt in $(seq 1 120); do
             have=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
                      --jq '.assets[] | select(.state == "uploaded") | .name' 2>/dev/null || true)

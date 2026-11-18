@@ -234,5 +234,6 @@
  "Couldn't read your music folder: {error}": "Kon nie jou musiekvouer lees nie: {error}",
  "LRC: waiting...": "LRC: wag...",
  "No singing was heard in this song, so the lyrics could not be timed.": "Geen sang is in hierdie liedjie gehoor nie, dus kon die lirieke nie gesinchroniseer word nie.",
- "The update could not finish. You are still on {version}.": "Die bywerking kon nie klaarmaak nie. Jy is steeds op {version}."
+ "The update could not finish. You are still on {version}.": "Die bywerking kon nie klaarmaak nie. Jy is steeds op {version}.",
+ "Open download page": "Maak aflaaibladsy oop"
 }

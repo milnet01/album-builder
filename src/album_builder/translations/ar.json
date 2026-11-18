@@ -234,5 +234,6 @@
  "Couldn't read your music folder: {error}": "تعذّرت قراءة مجلد الموسيقى: {error}",
  "LRC: waiting...": "‏LRC: في الانتظار...",
  "No singing was heard in this song, so the lyrics could not be timed.": "لم يُسمع أي غناء في هذه الأغنية، لذا تعذّرت مزامنة كلماتها.",
- "The update could not finish. You are still on {version}.": "تعذّر إكمال التحديث. ما زلت تستخدم الإصدار {version}."
+ "The update could not finish. You are still on {version}.": "تعذّر إكمال التحديث. ما زلت تستخدم الإصدار {version}.",
+ "Open download page": "فتح صفحة التنزيل"
 }

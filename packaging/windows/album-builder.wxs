@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Album Builder - Windows MSI (Spec 24 §4.8, MUSI-0407).
+
+  Built by packaging/build-windows.ps1 stage 9 with WiX Toolset 7. Not meant to
+  be built by hand; the build passes these defines:
+    Version    X.Y.Z, read from version.py (INV-24-3)
+    BundleDir  dist\AlbumBuilder (the PyInstaller output)
+    RepoRoot   the checkout
+
+  All-users install into Program Files, after one administrator approval.
+  A copy installed from here never installs its own updates: it tells the
+  user and opens the release page (Spec 28 §4.6). Uninstall keeps albums and
+  settings, which live in each user's profile.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!-- UpgradeCode is fixed for good: a new one would make the next MSI
+       install a second copy beside the first instead of upgrading it. -->
+  <Package Name="Album Builder"
+           Manufacturer="milnet01"
+           Version="$(var.Version)"
+           UpgradeCode="FE9BFD3E-3FCD-45FD-B691-6F0321461D0F"
+           Scope="perMachine"
+           Language="1033">
+    <!-- Each later MSI removes the earlier copy whole, so files an older
+         version shipped do not linger; an older MSI is refused. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Album Builder is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="AppIcon" SourceFile="$(var.RepoRoot)\packaging\album-builder.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/milnet01/album-builder" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/milnet01/album-builder/issues" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Album Builder">
+        <Files Include="$(var.BundleDir)\**" />
+        <Component Id="InstallKindMarker">
+          <File Id="InstallKindTxt" Source="$(var.RepoRoot)\packaging\windows\install-kind-msi.txt"
+                Name="install-kind.txt" KeyPath="yes" />
+        </Component>
+        <Directory Id="FontCacheFolder" Name="fontconfig-cache" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuEntry">
+        <Shortcut Id="AppShortcut" Name="Album Builder"
+                  Target="[INSTALLFOLDER]AlbumBuilder.exe" WorkingDirectory="INSTALLFOLDER" />
+        <!-- Anything the app wrote inside its install folder at run time,
+             as the setup .exe's uninstaller removes it (Spec 24 §4.7). -->
+        <RemoveFile Id="RemoveFontCacheFiles" Directory="FontCacheFolder" Name="*" On="uninstall" />
+        <RemoveFolder Id="RemoveFontCacheFolder" Directory="FontCacheFolder" On="uninstall" />
+        <RegistryValue Root="HKLM" Key="Software\milnet01\Album Builder"
+                       Name="StartMenuEntry" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+  </Package>
+</Wix>

@@ -58,9 +58,11 @@ class OfferChoice:
 
 class UpdateOfferDialog(QDialog):
     """Names both versions, shows the release notes as plain text, and offers
-    Install now / Remind me tomorrow / Skip this version (§4.6)."""
+    Install now / Remind me tomorrow / Skip this version (§4.6). An MSI copy
+    passes its own first button text, Open download page."""
 
-    def __init__(self, offer: Offer, running: str, parent: QWidget | None = None) -> None:
+    def __init__(self, offer: Offer, running: str, parent: QWidget | None = None,
+                 install_text: str | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Update available"))
         self.choice = OfferChoice.REMIND
@@ -84,7 +86,7 @@ class UpdateOfferDialog(QDialog):
         buttons = QDialogButtonBox(self)
         role = QDialogButtonBox.ButtonRole
         for text, choice, button_role in (
-            (tr("Install now"), OfferChoice.INSTALL, role.AcceptRole),
+            (install_text or tr("Install now"), OfferChoice.INSTALL, role.AcceptRole),
             (tr("Remind me tomorrow"), OfferChoice.REMIND, role.RejectRole),
             (tr("Skip this version"), OfferChoice.SKIP, role.DestructiveRole),
         ):
@@ -202,7 +204,9 @@ class UpdateController(QObject):
         QMessageBox.information(self._window, tr("Updates"), text)
 
     def _offer(self, offer: Offer, running: str) -> None:
-        dialog = UpdateOfferDialog(offer, running, self._window)
+        install_text = (tr("Open download page")
+                        if self._kind is InstallKind.WINDOWS_MSI else None)
+        dialog = UpdateOfferDialog(offer, running, self._window, install_text)
         dialog.exec()
         if dialog.choice == OfferChoice.SKIP:
             self._save(lambda u: replace(u, skipped_version=offer.version))
@@ -223,6 +227,12 @@ class UpdateController(QObject):
     # ---- Installing ---------------------------------------------------------
 
     def _install(self, offer: Offer) -> None:
+        if self._kind is InstallKind.WINDOWS_MSI:
+            # Installing an MSI needs an administrator, which the app is not:
+            # the user downloads it (Spec 28 §4.6 Windows MSI).
+            if offer.page_url:
+                QDesktopServices.openUrl(QUrl(offer.page_url))
+            return
         if self._kind is InstallKind.WINDOWS:
             job = partial(updater.install_windows, self._transport, offer,
                           updater.updates_dir(), pid=os.getpid())

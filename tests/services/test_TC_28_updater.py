@@ -136,6 +136,9 @@ def test_install_kind(tmp_path: Path) -> None:
     marker = exe.parent / "install-kind.txt"
     marker.write_text(" installer\n")
     assert kind(platform="win32", frozen=True, executable=exe) is InstallKind.WINDOWS
+    marker.write_text("msi\n")
+    assert kind(platform="win32", frozen=True, executable=exe) is InstallKind.WINDOWS_MSI
+    assert updater.updates_enabled(InstallKind.WINDOWS_MSI)
     marker.write_text("portable")
     assert kind(platform="win32", frozen=True, executable=exe) is InstallKind.NONE
     marker.unlink()
@@ -263,6 +266,21 @@ def test_appimage_replace(tmp_path: Path, key, monkeypatch: pytest.MonkeyPatch) 
     assert target.read_bytes() == NEW
     assert target.stat().st_mode & 0o777 == 0o755
     assert replaces == [(str(tmp_path / f".{target.name}.update"), str(target))]
+
+
+# Spec: TC-28-14
+def test_msi_check_wants_the_msi(key) -> None:
+    raw, trusted = key
+    # Signed and listing the .msi: on offer, naming the .msi.
+    result = _check(_release(raw, suffix="windows-x64.msi"), trusted,
+                    kind=InstallKind.WINDOWS_MSI)
+    assert result.status is CheckStatus.OFFER
+    assert result.offer.asset_name == "AlbumBuilder-1.2.0-windows-x64.msi"
+    assert result.offer.page_url == "https://example.invalid/r"
+    # A release listing only the setup .exe is not ready for an MSI copy.
+    result = _check(_release(raw, suffix="windows-x64-setup.exe"), trusted,
+                    kind=InstallKind.WINDOWS_MSI)
+    assert result.status is CheckStatus.NOT_READY
 
 
 # Spec: TC-28-08

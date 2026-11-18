@@ -338,8 +338,9 @@ def _resolve_project_root() -> Path:
        — the location the user configured. Used in production.
     2. The repository root if running from a source checkout (``pyproject.toml``
        sibling to the package OR ``ALBUM_BUILDER_DEV_MODE=1``) — the dev convention.
-    3. ``~/Music/Album Builder`` for a copy the Windows installer put in place
-       (Spec 24 §4.7), whose shortcut starts it in its install folder.
+    3. ``~/Music/Album Builder`` for a copy the Windows installer or MSI put
+       in place (Spec 24 §4.7, §4.8), whose shortcut starts it in its install
+       folder.
     4. ``Path.cwd()`` with a stderr warning — last-resort fallback. Without this,
        an installed launcher inheriting the Plasma session CWD silently writes
        Albums/ + state.json into ``~/`` (L8-C1 from the 2026-04-30 indie-review).
@@ -349,7 +350,7 @@ def _resolve_project_root() -> Path:
         return configured.parent
     if _in_dev_mode():
         return Path(__file__).resolve().parent.parent.parent
-    if updater.install_kind() is updater.InstallKind.WINDOWS:
+    if updater.install_kind() in (updater.InstallKind.WINDOWS, updater.InstallKind.WINDOWS_MSI):
         return USER_MUSIC_DIR / "Album Builder"
     print(
         "album-builder: no albums_folder configured in settings.json; using "

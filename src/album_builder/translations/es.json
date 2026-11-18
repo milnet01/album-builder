@@ -234,5 +234,6 @@
  "Couldn't read your music folder: {error}": "No se pudo leer tu carpeta de música: {error}",
  "LRC: waiting...": "LRC: en espera...",
  "No singing was heard in this song, so the lyrics could not be timed.": "No se oyó ningún canto en esta canción, así que no se pudo sincronizar la letra.",
- "The update could not finish. You are still on {version}.": "No se pudo terminar la actualización. Sigues en la versión {version}."
+ "The update could not finish. You are still on {version}.": "No se pudo terminar la actualización. Sigues en la versión {version}.",
+ "Open download page": "Abrir la página de descarga"
 }

@@ -180,6 +180,10 @@ def test_resolve_project_root_installed_windows_copy_uses_music(
     monkeypatch.setattr(app, "USER_MUSIC_DIR", tmp_path / "Music")
     monkeypatch.setattr(app.updater, "install_kind", lambda: app.updater.InstallKind.WINDOWS)
     assert app._resolve_project_root() == tmp_path / "Music" / "Album Builder"
+    # The MSI installs into Program Files, which a user cannot write (Spec 24 §4.8).
+    monkeypatch.setattr(app.updater, "install_kind",
+                        lambda: app.updater.InstallKind.WINDOWS_MSI)
+    assert app._resolve_project_root() == tmp_path / "Music" / "Album Builder"
     # The portable zip keeps today's rule: the working folder.
     monkeypatch.setattr(app.updater, "install_kind", lambda: app.updater.InstallKind.NONE)
     assert app._resolve_project_root() == tmp_path

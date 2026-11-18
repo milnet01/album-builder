@@ -9,7 +9,8 @@ GitHub's answers, redirects and asset bytes are untrusted until the signed
 SHA256SUMS check (domain/release_manifest.py) and the download's hash pass.
 
 On Windows only a copy the installer put in place updates; it downloads the
-signed installer and runs it in its quiet update mode (Spec 24 §4.7).
+signed installer and runs it in its quiet update mode (Spec 24 §4.7). A copy
+the MSI put in place checks and offers, but only opens the release page.
 """
 
 from __future__ import annotations
@@ -56,10 +57,14 @@ _CLOCK_SLACK = timedelta(hours=1)
 class InstallKind(StrEnum):
     APPIMAGE = "appimage"
     WINDOWS = "windows"
+    WINDOWS_MSI = "windows-msi"
     NONE = "none"
 
 
-_UPDATING_KINDS = frozenset({InstallKind.APPIMAGE, InstallKind.WINDOWS})
+_UPDATING_KINDS = frozenset({InstallKind.APPIMAGE, InstallKind.WINDOWS,
+                             InstallKind.WINDOWS_MSI})
+# What the Windows installers write into install-kind.txt (Spec 24 §4.7, §4.8).
+_WINDOWS_MARKERS = {"installer": InstallKind.WINDOWS, "msi": InstallKind.WINDOWS_MSI}
 
 # The installer's quiet update mode (Spec 24 §4.7): no questions, a progress
 # window, then the new version starts. /WAITPID=<pid> is added at launch.
@@ -101,8 +106,7 @@ def install_kind(
             marker = (executable.parent / "install-kind.txt").read_text(encoding="utf-8")
         except OSError:
             marker = ""
-        if marker.strip() == "installer":
-            return InstallKind.WINDOWS
+        return _WINDOWS_MARKERS.get(marker.strip(), InstallKind.NONE)
     return InstallKind.NONE
 
 

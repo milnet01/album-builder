@@ -8,7 +8,7 @@ import urllib.error
 from pathlib import Path
 
 import pytest
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QDialogButtonBox, QWidget
 
 from album_builder.services import updater
 from album_builder.services.updater import InstallKind
@@ -76,3 +76,56 @@ def test_help_entries_only_when_updating(qtbot, xdg_config) -> None:
         "Check for updates now", "Check for updates automatically",
     ]
     assert appimage.actions[1].isChecked()
+
+
+class RecordingTransport:
+    """Records every request; an MSI copy's offer must make none."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def get(self, url: str, cap: int) -> bytes:
+        self.calls.append(url)
+        raise urllib.error.URLError("no network in this test")
+
+    def stream(self, url: str):
+        self.calls.append(url)
+        raise AssertionError("an MSI copy downloads nothing")
+
+
+# Spec: TC-28-14
+def test_msi_offer_opens_release_page(qtbot, xdg_config, monkeypatch) -> None:
+    window = QWidget()
+    qtbot.addWidget(window)
+    transport = RecordingTransport()
+    offer = updater.Offer(
+        version="9.0.0", notes="What's new", page_url="https://example.invalid/r",
+        asset_name="AlbumBuilder-9.0.0-windows-x64.msi",
+        asset_url="https://example.invalid/AlbumBuilder-9.0.0-windows-x64.msi",
+        asset_size=10, sha256="0" * 64,
+    )
+    monkeypatch.setattr(updater, "check_release", lambda *a, **k: updater.CheckResult(
+        updater.CheckStatus.OFFER, "1.2.0", offer))
+    opened: list[str] = []
+    monkeypatch.setattr(update_dialog.QDesktopServices, "openUrl",
+                        staticmethod(lambda url: opened.append(url.toString()) or True))
+    labels: list[str] = []
+
+    def click_first(dialog) -> int:
+        box = dialog.findChild(QDialogButtonBox)
+        accept = [b for b in box.buttons()
+                  if box.buttonRole(b) is QDialogButtonBox.ButtonRole.AcceptRole]
+        labels.extend(b.text() for b in accept)
+        accept[0].click()
+        return 1
+
+    monkeypatch.setattr(update_dialog.UpdateOfferDialog, "exec", click_first)
+    controller = UpdateController(window, InstallKind.WINDOWS_MSI, transport)
+    assert controller.enabled
+    with qtbot.waitSignal(controller.check_finished, timeout=5000):
+        controller.check_now()
+    assert labels == ["Open download page"]
+    assert opened == ["https://example.invalid/r"]
+    assert transport.calls == []
+    assert controller._install_worker is None
+    controller.shutdown()

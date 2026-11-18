@@ -1,5 +1,6 @@
 #requires -Version 5.1
-# Album Builder - Windows one-folder bundle and installer (Spec 24 / Phase Dist-3, MUSI-0406).
+# Album Builder - Windows one-folder bundle, installer and MSI (Spec 24 / Phase Dist-3,
+# MUSI-0406, MUSI-0407).
 #
 # One script, the single source of truth for the Windows build (INV-24-9).
 # .github/workflows/windows.yml calls it unchanged; it assembles the whole
@@ -9,9 +10,10 @@
 # it runs on, so this runs on a `windows-latest` runner and is verified by CI
 # `--selftest` + a manual Windows run (Spec 24 Section 3), never on Linux.
 #
-# Output: dist\AlbumBuilder-<version>-windows-x64.zip (the portable copy) and
+# Output: dist\AlbumBuilder-<version>-windows-x64.zip (the portable copy),
 #         dist\AlbumBuilder-<version>-windows-x64-setup.exe (the installer,
-#         Spec 24 Section 4.7)
+#         Spec 24 Section 4.7) and dist\AlbumBuilder-<version>-windows-x64.msi
+#         (the all-users MSI, Spec 24 Section 4.8)
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
@@ -23,6 +25,11 @@ $PyInstallerVersion = "6.21.0"          # PyInstaller latest stable
 # hash is the one GitHub lists for innosetup-7.1.1-x64.exe.
 $InnoSetupVersion   = "7.1.1"
 $InnoSetupSha256    = "8a5a6711c3766a6e5fb74f280ba0e3551e719ce94538d901fdbd1f8f9920b3f0"
+# WiX Toolset, the `wix` .NET tool package from nuget.org; the hash is of
+# wix.7.0.1.nupkg as nuget.org serves it. Using it accepts its OSMF licence
+# (owner, 2026-11-18; Spec 24 Section 3).
+$WixVersion         = "7.0.1"
+$WixSha256          = "25209a1f73b20106621f11abe5e1a4e87c1d9f5c596795d246de7bb64446df17"
 $MsysRoot           = "C:\msys64"       # preinstalled on windows-latest
 $MsysBin            = "$MsysRoot\mingw64\bin"
 
@@ -134,4 +141,24 @@ if (-not (Test-Path $Iscc)) { throw "stage 8: ISCC.exe not found in $InnoDir" }
 if ($LASTEXITCODE -ne 0) { throw "stage 8: ISCC failed ($LASTEXITCODE)" }
 $Setup = Join-Path $Dist "AlbumBuilder-$Version-windows-x64-setup.exe"
 if (-not (Test-Path $Setup)) { throw "stage 8: $Setup was not written" }
-Write-Host "done: $Zip and $Setup"
+
+# --- Stage 9: the MSI (Spec 24 Section 4.8). ------------------------------------
+# WiX is fetched at a pinned version and checked against its hash before it
+# runs, unpacked into the stage folder, and run on the runner's own dotnet.
+Write-Host "stage 9: WiX $WixVersion + MSI"
+$WixPkg = Join-Path $Stage "wix.$WixVersion.zip"   # a .nupkg is a zip
+$WixDir = Join-Path $Stage "wix"
+Invoke-WebRequest -UseBasicParsing -OutFile $WixPkg `
+    "https://api.nuget.org/v3-flatcontainer/wix/$WixVersion/wix.$WixVersion.nupkg"
+$got = (Get-FileHash -Algorithm SHA256 $WixPkg).Hash.ToLowerInvariant()
+if ($got -ne $WixSha256) { throw "stage 9: WiX hash mismatch: $got" }
+Expand-Archive -Force -Path $WixPkg -DestinationPath $WixDir
+$WixDll = Join-Path $WixDir "tools\net8.0\any\wix.dll"
+if (-not (Test-Path $WixDll)) { throw "stage 9: wix.dll not found in $WixDir" }
+$Msi = Join-Path $Dist "AlbumBuilder-$Version-windows-x64.msi"
+& dotnet $WixDll build -acceptEula wix7 -arch x64 `
+    -d "Version=$Version" -d "BundleDir=$(Join-Path $Dist 'AlbumBuilder')" -d "RepoRoot=$RepoRoot" `
+    -o $Msi "$RepoRoot\packaging\windows\album-builder.wxs"
+if ($LASTEXITCODE -ne 0) { throw "stage 9: wix build failed ($LASTEXITCODE)" }
+if (-not (Test-Path $Msi)) { throw "stage 9: $Msi was not written" }
+Write-Host "done: $Zip, $Setup and $Msi"

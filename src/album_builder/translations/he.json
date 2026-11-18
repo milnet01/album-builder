@@ -234,5 +234,6 @@
  "Couldn't read your music folder: {error}": "לא ניתן היה לקרוא את תיקיית המוזיקה: {error}",
  "LRC: waiting...": "‏LRC: ממתין...",
  "No singing was heard in this song, so the lyrics could not be timed.": "לא נשמעה שירה בשיר הזה, ולכן לא ניתן היה לסנכרן את המילים.",
- "The update could not finish. You are still on {version}.": "לא ניתן היה להשלים את העדכון. אתם עדיין בגרסה {version}."
+ "The update could not finish. You are still on {version}.": "לא ניתן היה להשלים את העדכון. אתם עדיין בגרסה {version}.",
+ "Open download page": "פתיחת דף ההורדה"
 }
