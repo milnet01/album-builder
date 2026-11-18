@@ -239,6 +239,14 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   signed by a manual run). v1.1.0 has no updater, so Spec 28 §10's end
   to end row is proven only when a v1.2.0 AppImage updates itself to the
   next release.
+  Windows half built 2026-11-18 with the installer (MUSI-0406,
+  09339c0): TC-28-08 locked; the quiet update mode checked on the
+  Windows test machine with a same-version test build. Owed at the
+  next release: README's "Updates" section gains Windows and the
+  Windows download section gains the installer; then Spec 28 §10's
+  end-to-end row on both halves (a v1.2.0 AppImage, and a copy
+  installed from the next release's installer updating to the one
+  after, since v1.2.0 has no installer).
   **Layman:** The app tells you when a newer version is out and can install it for you, so you never have to download it by hand.
   Kind: feature.
   Source: user-request-2026-10-10.
@@ -340,7 +348,7 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   Kind: fix.
   Source: found-2026-11-05-fixing-MUSI-0395.
 
-- 🚧 [MUSI-0406] **A Windows installer for Album Builder.**
+- ✅ [MUSI-0406] **A Windows installer for Album Builder.**
   Owner, 2026-11-18: build an installer before Windows self-update
   (MUSI-0389); Windows updates then download and quietly run the
   signed installer. The zip stays as a portable download that does
@@ -383,6 +391,17 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   machine (install, Start menu launch, albums folder, uninstall).
   The README's Windows and Updates sections change in the release
   that ships the installer.
+  Checked on the Windows test machine (2026-11-18, test build from
+  windows.yml run 44326364386): silent install to
+  %LOCALAPPDATA%\Programs\Album Builder with install-kind.txt, Start
+  menu entry and uninstall entry; launched from the Start menu, it
+  kept albums in Music\Album Builder and wrote nothing into its
+  install folder. The quiet update mode waited while the app ran,
+  left its files alone, installed once the app closed, and started
+  it again. Uninstall removed the program, shortcut and uninstall
+  entry, and kept settings and Music\Album Builder. Test leftovers
+  removed. The README sections and the real update to the next
+  release are MUSI-0389's.
   **Layman:** Windows users install Album Builder like any other program, with a Start menu entry and an uninstaller, and updates install themselves.
   Kind: package.
   Source: user-request-2026-11-18.
