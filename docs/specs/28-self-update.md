@@ -137,10 +137,10 @@ The offer dialog names both versions and shows the release body as plain text (n
 
 `build-appimage.sh` passes appimagetool `-u "gh-releases-zsync|milnet01|album-builder|latest|AlbumBuilder-*x86_64.AppImage.zsync"`, and keeps the `.zsync` file it writes beside the AppImage. `appimage.yml` uploads both.
 
-`release-sign.yml` runs on `push: tags: ['v*']` with `permissions: contents: write`. Its one job:
+`release-sign.yml` runs on `push: tags: ['v*']`, and by hand (`workflow_dispatch`) with a required `tag` input naming the release to sign, with `permissions: contents: write`. Its one job:
 
 1. polls the tag's release every 60 seconds, for up to 120 minutes, until every build asset of §4.3 that exists yet is present with `state` `uploaded`: the AppImage, its `.zsync` and the zip, and the installer once MUSI-0406 ships it. `release-sign.yml` holds that list (a failed build means it times out and fails, so nothing is signed);
-2. downloads them, writes `SHA256SUMS`, and runs `packaging/release-signing.py sign SHA256SUMS` with the secret in the environment variable `RELEASE_SIGNING_KEY`;
+2. downloads them into a folder under `$RUNNER_TEMP`, outside the checkout, writes `SHA256SUMS`, and runs `packaging/release-signing.py sign SHA256SUMS` with the secret in the environment variable `RELEASE_SIGNING_KEY`;
 3. runs `release-signing.py verify SHA256SUMS`, which checks the signature against `TRUSTED_KEYS` imported from `album_builder.domain.release_manifest`, so a secret that does not match the shipped key fails the job;
 4. uploads `SHA256SUMS` and `SHA256SUMS.sig` to the release.
 
@@ -224,6 +224,7 @@ The domain and services tests inject a fetcher, a clock and a test key pair; non
 | GitHub rate limit (HTTP 403/429) | As offline. One request a day is far inside the unauthenticated limit. |
 | Release published before signing finished | Not ready (§4.4): daily silent, manual says try later. |
 | `release-sign.yml` times out (a build failed) | No signature; no copy offers the release. Re-run the workflow after fixing the build. |
+| `release-sign.yml` itself fails | No signature; no copy offers the release. A re-run uses the tag's copy of the workflow, so fix it on `main`, then run it by hand with that tag. |
 | Signing secret missing or not matching `TRUSTED_KEYS` | Step 3 fails the job; nothing is uploaded. |
 | Private key lost | Copies in the field can never verify a later release. Users must download one release by hand, and that release carries a new key. The owner keeps an offline copy of the key file. |
 | Private key leaked | An attacker who can also publish a release on the repository could ship a signed update. Put a new key beside the old one in `RELEASE_SIGNING_KEY`, so each release carries two signature lines, and ship `TRUSTED_KEYS` holding only the new key. Copies that skip that release still verify a later one by its old-key line. Drop the old key from the secret once few copies can still need it; copies that never updated by then must update by hand once. |

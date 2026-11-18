@@ -103,3 +103,28 @@ def test_workflow_shape() -> None:
     assert index("release-signing.py verify") < upload
     assert steps[upload]["run"].split()[4:6] == ["SHA256SUMS", "SHA256SUMS.sig"]
     assert steps[upload]["run"].count("SHA256") == 2
+
+
+# Spec: TC-28-11
+def test_workflow_downloads_outside_the_checkout() -> None:
+    # v1.2.0's signing failed on `mkdir assets`: the repository tracks an
+    # assets/ folder, and hashing it would have listed the logos too.
+    steps = yaml.safe_load(WORKFLOW.read_text())["jobs"]["sign"]["steps"]
+    runs = [s.get("run", "") for s in steps]
+    download = next(r for r in runs if "gh release download" in r)
+    sums = next(r for r in runs if "sha256sum" in r)
+    assert 'mkdir "$RUNNER_TEMP/release-assets"' in download
+    assert '--dir "$RUNNER_TEMP/release-assets"' in download
+    assert 'cd "$RUNNER_TEMP/release-assets"' in sums
+
+
+# Spec: TC-28-11
+def test_workflow_can_sign_an_existing_tag_by_hand() -> None:
+    # A re-run uses the tag's own copy of the workflow, so a fixed workflow
+    # can only sign an already-published release through a manual run.
+    workflow = yaml.safe_load(WORKFLOW.read_text())
+    triggers = workflow[True]  # PyYAML reads the bare key `on` as True
+    assert triggers["push"]["tags"] == ["v*"]
+    assert triggers["workflow_dispatch"]["inputs"]["tag"]["required"] is True
+    runs = yaml.safe_dump(workflow["jobs"]["sign"]["steps"])
+    assert "github.ref_name" not in runs.replace("inputs.tag || github.ref_name", "")

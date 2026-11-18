@@ -5,16 +5,24 @@ name: Release signing
 # installs only a download listed in a SHA256SUMS whose signature it trusts.
 # Polls rather than restructuring appimage.yml / windows.yml (Spec 28 §8); a
 # failed build means the poll times out and nothing is signed.
+# A re-run uses the tag's own copy of this file, so after fixing this file,
+# sign a published release with a manual run on main, naming its tag.
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to sign, e.g. v1.2.0'
+        required: true
+        type: string
 
 permissions:
   contents: write   # upload SHA256SUMS and SHA256SUMS.sig to the Release
 
 concurrency:
-  group: release-sign-${{ github.ref }}
+  group: release-sign-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -36,7 +44,7 @@ jobs:
       - name: Wait for the build assets, then download them
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         # The assets the build workflows upload. The Windows installer
         # (AlbumBuilder-<V>-windows-x64-setup.exe) joins this list when
         # MUSI-0406 ships it.
@@ -59,15 +67,16 @@ jobs:
             fi
             sleep 60
           done
-          mkdir assets
+          # Outside the checkout: the repository tracks its own assets/ folder.
+          mkdir "$RUNNER_TEMP/release-assets"
           for name in "${want[@]}"; do
-            gh release download "$TAG" --pattern "$name" --dir assets
+            gh release download "$TAG" --pattern "$name" --dir "$RUNNER_TEMP/release-assets"
           done
 
       - name: Write SHA256SUMS
         run: |
           set -euo pipefail
-          (cd assets && sha256sum -- *) | LC_ALL=C sort -k2 > SHA256SUMS
+          (cd "$RUNNER_TEMP/release-assets" && sha256sum -- *) | LC_ALL=C sort -k2 > SHA256SUMS
           cat SHA256SUMS
 
       - name: Sign
@@ -81,5 +90,5 @@ jobs:
       - name: Upload SHA256SUMS and SHA256SUMS.sig
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: gh release upload "$TAG" SHA256SUMS SHA256SUMS.sig --clobber
