@@ -233,6 +233,12 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   ~/.claude/key-backup/keys.tar.gpg (claude-config commit 10da997);
   make-backup.sh decrypted it byte-identical. A replaced key needs the
   backup re-run: message claude-config.
+  2026-11-18: v1.2.0 shipped the Linux updater and is the first signed
+  release (SHA256SUMS.sig verified locally against TRUSTED_KEYS; its
+  first tag-triggered signing run failed and was fixed in 372e0b0, then
+  signed by a manual run). v1.1.0 has no updater, so Spec 28 §10's end
+  to end row is proven only when a v1.2.0 AppImage updates itself to the
+  next release.
   **Layman:** The app tells you when a newer version is out and can install it for you, so you never have to download it by hand.
   Kind: feature.
   Source: user-request-2026-10-10.
