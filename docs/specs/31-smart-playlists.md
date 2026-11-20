@@ -28,6 +28,7 @@ Owner answers, 2026-11-20, in this session:
 
 - **"Date added" is the song file's modified date.** It works at once for every song. A tag editor that re-saves a file makes it look newly added.
 - **Genre and year are read from the songs**, so rules can use them.
+- **A song with several genres matches a genre rule on any one of them**: "Genre is Jazz" matches a song tagged Rock and Jazz.
 - **Rules combine by one switch per playlist: all of them, or any of them.** No nested groups.
 - **"Never played" and "Recently added" are editable starters**, not fixed built-ins. They can be renamed, edited or deleted.
 
@@ -112,6 +113,7 @@ def songs(pl: SmartPlaylist, candidates: Iterable[tuple[Track, SongStats]],
 | favourite | is | `true` or `false` | not hearted is `false` |
 
 - **Text** compares `casefold()` of both sides, as `Library.search` does. Plain substring and prefix tests; no pattern syntax.
+- **Genre** is tested one value at a time: `genre.split("; ")`, or `[""]` when the genre is empty. `contains`, `is` and `starts with` match when any value does; `not contains` and `is not` match when no value does.
 - **Duration** compares `int(track.duration_seconds)`.
 - **Dates:** `in last days` with `n` matches a date at or after `now - n days`; `not in last days` is its exact opposite, so a song with no date (never played, or no file date) matches it.
 - **Plays and last played** come from `PlayHistory.stats_for`; a song with no history has 0 plays and no last played.
@@ -232,9 +234,9 @@ Each *Test:* names the rule its fixture isolates.
   *Test:* `tests/domain/test_TC_31_track_tags.py::test_modified`, setting the mtime with `os.utime` to a known instant (isolates the field from "now").
   *Breaks when:* the time is naive, local, or taken from somewhere other than the file.
 
-- **INV-3** (TC-31-03) — `matches` follows §4.2's table for every field and operator: text casefolded (`"JAZZ"` contains `"jazz"`); a song with no year matches `year is_not 1990` and no other year rule; a never-played song matches `last_played not_in_last_days 30` and not `in_last_days 30`; a date exactly `n` days before `now` is in the last `n` days.
+- **INV-3** (TC-31-03) — `matches` follows §4.2's table for every field and operator: text casefolded (`"JAZZ"` contains `"jazz"`); a song with genre `Rock; Jazz` matches `genre is Jazz` and not `genre is_not Jazz`, while a title `Rock; Jazz` does not match `title is Jazz`; a song with no year matches `year is_not 1990` and no other year rule; a never-played song matches `last_played not_in_last_days 30` and not `in_last_days 30`; a date exactly `n` days before `now` is in the last `n` days.
   *Test:* `tests/domain/test_TC_31_rules.py`, table-driven, with a fixed `now`.
-  *Breaks when:* a comparison is case-sensitive, a missing value matches a comparison, or the day boundary is off by one.
+  *Breaks when:* a comparison is case-sensitive, genre `is` tests the joined text instead of each value, a missing value matches a comparison, or the day boundary is off by one.
 
 - **INV-4** (TC-31-04) — `songs` with `match_all` keeps songs matching every rule; with any, songs matching one; with no rules, every candidate.
   *Test:* `tests/domain/test_TC_31_rules.py::test_match`, two rules each matched by a different song (isolates all-vs-any from the rules themselves).
