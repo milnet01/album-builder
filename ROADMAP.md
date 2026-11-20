@@ -146,6 +146,11 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   KWin scripts were run once in a private kwin_wayland --virtual
   session: move, keep-above on/off and the position read all worked.
   Next: the full rule-based MP-5.
+  MP-5 spec: docs/specs/31-smart-playlists.md, accepted 2026-11-20 after
+  review-contract (2 loops, cap; 15 verified findings, all fixed; calm
+  cap). Loop log: docs/reviews/31-smart-playlists-loop-log.md. No
+  deferred tail; the last loop's 4 fixes are read by no lane, so the
+  build is their reader.
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 
