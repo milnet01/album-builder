@@ -132,6 +132,14 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   TC-01-26..28. The choice is not saved between launches. MP-3 is
   complete. Next: Phase MP-5 (smart playlists) or MP-6 (mini
   player), the owner's pick.
+  Decided (owner, 2026-11-20): build all of MP-5 and MP-6, order the
+  author's call: MP-6 first, then the full rule-based MP-5, with
+  "Never played" and "Recently added" as ready-made examples in it.
+  MP-6 choices: swap (the mini player replaces the full window), shows
+  cover, title, artist, Back/Play/Next, progress, volume and heart;
+  on top by default with a pin to turn it off; closing in mini mode
+  reopens as mini in the same spot. Spec: docs/specs/30-mini-player.md
+  (accepted 2026-11-20; no review-contract run, judged cheap to redo).
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 
