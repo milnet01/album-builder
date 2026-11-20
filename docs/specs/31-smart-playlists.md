@@ -1,7 +1,7 @@
 <!-- ants-spec-format: 1 -->
 # 31 — Smart playlists
 
-**Status:** spec draft (2026-11-20).
+**Status:** accepted (2026-11-20).
 **Kind:** implement.
 **Source:** ROADMAP MUSI-0356 Phase MP-5 (user request 2026-07-25; owner decisions 2026-11-20).
 **Depends on:** 01, 10, 15, 17, 25, 29. **Amends:** 01, 10, 17.
@@ -106,7 +106,7 @@ def songs(pl: SmartPlaylist, candidates: Iterable[tuple[Track, SongStats]],
 
 | Fields | Operators | Value | A song with no value |
 |---|---|---|---|
-| title, artist, album artist, album, composer, genre | contains, not contains, is, is not, starts with | text | its text is `""` and is compared as such |
+| title, artist, album artist, album, composer, genre | contains, not contains, is, is not, starts with | text | the value `Track` holds: title falls back to the file name, artist to "Unknown artist", album artist to the artist; the others are `""` |
 | year, duration (seconds), plays | is, is not, gt, lt | whole number `>= 0` | year `None` matches `is not` only |
 | date added, last played | in last days, not in last days | whole number of days, 1 to 36500 | matches `not in last days` only |
 | favourite | is | `true` or `false` | not hearted is `false` |
@@ -171,7 +171,7 @@ class SmartPlaylistStore(QObject):
     def flush(self) -> None: ...
 ```
 
-`songs_for` passes `smart_playlist.songs` every track in `library_watcher.library()` with its `history.stats_for`, and `datetime.now(UTC)`. `songs(id)` is `songs_for` on the stored entry; an unreadable entry gives `[]`. `update` and `rename` on an unreadable entry raise `ValueError`.
+`songs_for` passes `smart_playlist.songs` every track in `library_watcher.library()` with its `history.stats_for`, and `datetime.now(UTC)`. `songs(id)` is `songs_for` on the stored entry; an unreadable entry gives `[]`. `update` and `rename` on an unreadable entry raise `ValueError`, as `rename` does on a name empty after strip.
 
 **Starters.** When the file was absent at load, the store creates, in this order, and schedules a write:
 
@@ -189,7 +189,7 @@ Rows, top to bottom: Spec 29's three lists; the smart playlists in file order, e
 For a smart row:
 
 - Selecting it shows its songs (`SmartPlaylistStore.songs`) in the tracks list.
-- Double-click renames, as for an ordinary playlist. Delete asks first, as Spec 17 does.
+- Double-click renames, as for an ordinary playlist; `MainWindow` catches a `ValueError` and re-renders, as Spec 17 does. The edit starts from the stored name without the glyph, and `rename_smart_committed` carries the name without it. Delete asks first, as Spec 17 does.
 - Up, Down and Remove are disabled: the rules set the order.
 - **Play** works the songs out again (`SmartPlaylistStore.songs`), shows them, and emits `smart_play_requested` with them, the same signal Spec 29's lists use; an empty list toasts and leaves the queue alone.
 - The shown songs refresh on `SmartPlaylistStore.changed`, `PlayHistory.changed`, a library change and each time the row is selected.
@@ -248,7 +248,7 @@ Each *Test:* names the rule its fixture isolates.
   *Test:* `tests/persistence/test_TC_31_smart_io.py::test_round_trip`.
   *Breaks when:* a field is lost or renamed on the way through.
 
-- **INV-7** (TC-31-07) — An entry with an unknown key, an unknown field, an unknown operator, an operator that does not fit its field, a value of the wrong type or range, a rule value or `limit` of `true`, or a missing `id` loads as `UnreadableSmartPlaylist`; it is written back equal to its raw JSON on the next save, while a readable neighbour edited in the same run is saved with its edit.
+- **INV-7** (TC-31-07) — An entry with an unknown key, an unknown field, an unknown operator, an operator that does not fit its field, a value of the wrong type or range, a numeric rule value or `limit` of `true`, or a missing `id` loads as `UnreadableSmartPlaylist`; it is written back equal to its raw JSON on the next save, while a readable neighbour edited in the same run is saved with its edit.
   *Test:* `tests/persistence/test_TC_31_smart_io.py::test_unreadable_kept`, one case per bad value beside one valid entry.
   *Breaks when:* a bad entry is dropped, partly kept, or rewritten.
 
