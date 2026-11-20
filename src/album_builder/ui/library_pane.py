@@ -21,10 +21,14 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QFrame,
+    QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMenu,
     QPushButton,
     QStyledItemDelegate,
@@ -438,6 +442,14 @@ class TrackFilterProxy(QSortFilterProxyModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._needle: str = ""
+        # Spec 01 TC-01-27: the side list's pick - a Track field and the
+        # casefolded value a row must carry. None field means no group filter.
+        self._group_field: str | None = None
+        self._group_key: str = ""
+
+    def set_group(self, field: str | None, key: str = "") -> None:
+        self._group_field, self._group_key = field, key
+        self.invalidateFilter()
 
     def set_needle(self, text: str) -> None:
         # L6-M5 (Theme G closure): casefold instead of lower so search
@@ -448,12 +460,17 @@ class TrackFilterProxy(QSortFilterProxyModel):
         self.invalidateFilter()
 
     def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
-        if not self._needle:
-            return True
         model = self.sourceModel()
         if not isinstance(model, TrackTableModel):
             return True
         track = model.track_at(source_row)
+        if (
+            self._group_field is not None
+            and getattr(track, self._group_field).casefold() != self._group_key
+        ):
+            return False
+        if not self._needle:
+            return True
         for field in SEARCH_FIELDS:
             if self._needle in str(getattr(track, field, "")).casefold():
                 return True
@@ -632,7 +649,17 @@ class LibraryPane(QFrame):
             ),
         )
         self.search_box.textChanged.connect(self._on_search_changed)
-        layout.addWidget(self.search_box)
+        # Spec 01 TC-01-26: group the library by artist or album in a side list.
+        self.group_box = QComboBox()
+        self.group_box.addItem(tr("No grouping"), "none")
+        self.group_box.addItem(tr("By artist"), "artist")
+        self.group_box.addItem(tr("By album"), "album")
+        self.group_box.setAccessibleName(tr("Group songs"))
+        self.group_box.currentIndexChanged.connect(self._rebuild_groups)
+        search_row = QHBoxLayout()
+        search_row.addWidget(self.search_box, 1)
+        search_row.addWidget(self.group_box)
+        layout.addLayout(search_row)
 
         self._model = TrackTableModel([])
         self._proxy = TrackFilterProxy()
@@ -726,7 +753,15 @@ class LibraryPane(QFrame):
                     "second column toggles inclusion in the current album.",
                 ),
             )
-        layout.addWidget(self.table)
+        self.group_list = QListWidget()
+        self.group_list.setAccessibleName(tr("Artists or albums"))
+        self.group_list.setMaximumWidth(200)
+        self.group_list.setVisible(False)
+        self.group_list.currentRowChanged.connect(self._on_group_picked)
+        body = QHBoxLayout()
+        body.addWidget(self.group_list)
+        body.addWidget(self.table, 1)
+        layout.addLayout(body, 1)
 
         # Spec 01: shown instead of the table when the folder holds no music -
         # the first-run welcome and the "wrong folder" hint in one.
@@ -753,6 +788,8 @@ class LibraryPane(QFrame):
         self.empty_state.setVisible(empty)
         self.table.setVisible(not empty)
         self.search_box.setVisible(not empty)
+        self.group_box.setVisible(not empty)
+        self._rebuild_groups()
 
     def set_palette(self, palette: Palette) -> None:
         """Spec 19: adopt a new theme palette. The usage-badge fill is painted
@@ -1011,3 +1048,44 @@ class LibraryPane(QFrame):
 
     def _on_search_changed(self, text: str) -> None:
         self._proxy.set_needle(text)
+
+    def _rebuild_groups(self) -> None:
+        """Spec 01 TC-01-26/28: refill the side list for the Group choice,
+        keeping the picked entry while any song still carries it."""
+        field = self.group_box.currentData()
+        tracks = self._model.tracks()
+        show = field != "none" and bool(tracks)
+        self.group_list.setVisible(show)
+        current = self.group_list.currentItem()
+        kept = current.data(Qt.ItemDataRole.UserRole) if current is not None else None
+        self.group_list.blockSignals(True)
+        self.group_list.clear()
+        labels: dict[str, str] = {}
+        if field != "none":
+            for t in tracks:
+                value = getattr(t, field)
+                labels.setdefault(value.casefold(), value)
+        all_item = QListWidgetItem(tr("All songs ({count})", count=len(tracks)))
+        all_item.setData(Qt.ItemDataRole.UserRole, None)
+        self.group_list.addItem(all_item)
+        pick = 0
+        # Only an album can be empty: Track reads a missing artist tag as
+        # "Unknown artist". The empty entry sorts last.
+        for key in sorted(labels, key=lambda k: (k == "", k)):
+            item = QListWidgetItem(labels[key] or tr("Unknown album"))
+            item.setData(Qt.ItemDataRole.UserRole, key)
+            self.group_list.addItem(item)
+            if key == kept:
+                pick = self.group_list.count() - 1
+        self.group_list.setCurrentRow(pick)
+        self.group_list.blockSignals(False)
+        self._on_group_picked(pick)
+
+    def _on_group_picked(self, row: int) -> None:
+        field = self.group_box.currentData()
+        item = self.group_list.item(row)
+        key = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        if field == "none" or key is None:
+            self._proxy.set_group(None)
+        else:
+            self._proxy.set_group(field, key)

@@ -250,5 +250,12 @@
  "play_history.json was unreadable; started with no hearts or play counts. Your original file is preserved as play_history.json.corrupt.bak.": "No se pudo leer play_history.json; se empezó sin corazones ni recuentos de reproducción. Tu archivo original se conserva como play_history.json.corrupt.bak.",
  "{icon} Favourites": "{icon} Favoritos",
  "{icon} Recently played": "{icon} Reproducidos recientemente",
- "{icon} Most played": "{icon} Más reproducidos"
+ "{icon} Most played": "{icon} Más reproducidos",
+ "No grouping": "Sin agrupar",
+ "By artist": "Por artista",
+ "By album": "Por álbum",
+ "Group songs": "Agrupar canciones",
+ "Artists or albums": "Artistas o álbumes",
+ "All songs ({count})": "Todas las canciones ({count})",
+ "Unknown album": "Álbum desconocido"
 }

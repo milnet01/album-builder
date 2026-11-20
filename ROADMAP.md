@@ -123,6 +123,15 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   06, 10, 11, 17, 18 amended. MP-3's play-count sort is delivered by
   the Player tab's Plays column. MP-3 (held by the owner until MP-4
   shipped) is next.
+  Decided (owner, 2026-11-20) for MP-3: group by artist or album
+  as a side list that filters the songs (foobar2000 style), not
+  fold-out headings, which would rebuild the table as a tree.
+  2026-11-20: Phase MP-3 BUILT. A Group drop-down beside the search
+  box (No grouping / By artist / By album) shows the side list in
+  both tabs; the search narrows within the pick. Spec 01 amended,
+  TC-01-26..28. The choice is not saved between launches. MP-3 is
+  complete. Next: Phase MP-5 (smart playlists) or MP-6 (mini
+  player), the owner's pick.
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 

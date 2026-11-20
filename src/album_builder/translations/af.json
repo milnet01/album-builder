@@ -250,5 +250,12 @@
  "play_history.json was unreadable; started with no hearts or play counts. Your original file is preserved as play_history.json.corrupt.bak.": "play_history.json was onleesbaar; begin sonder harte of speeltellings. Jou oorspronklike lêer word bewaar as play_history.json.corrupt.bak.",
  "{icon} Favourites": "{icon} Gunstelinge",
  "{icon} Recently played": "{icon} Onlangs gespeel",
- "{icon} Most played": "{icon} Meeste gespeel"
+ "{icon} Most played": "{icon} Meeste gespeel",
+ "No grouping": "Geen groepering",
+ "By artist": "Volgens kunstenaar",
+ "By album": "Volgens album",
+ "Group songs": "Groepeer liedjies",
+ "Artists or albums": "Kunstenaars of albums",
+ "All songs ({count})": "Alle liedjies ({count})",
+ "Unknown album": "Onbekende album"
 }

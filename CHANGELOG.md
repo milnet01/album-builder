@@ -10,6 +10,12 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Added
 
+- **Browse your library by artist or album** (MUSI-0356)
+  A new Group menu next to the search box. Pick "By artist" or
+  "By album" and a list of names appears beside your songs. Click
+  a name to see only those songs; the search box still works within
+  them. "All songs" brings everything back.
+
 - **Favourite hearts, play counts, and three lists that fill themselves** (MUSI-0356)
   In the Player tab, click the heart beside a song, or on the
   now-playing card, to mark it as a favourite. Right-click a song to

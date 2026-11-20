@@ -250,5 +250,12 @@
  "play_history.json was unreadable; started with no hearts or play counts. Your original file is preserved as play_history.json.corrupt.bak.": "לא ניתן היה לקרוא את play_history.json; האפליקציה התחילה בלי לבבות ומוני השמעה. הקובץ המקורי נשמר בשם play_history.json.corrupt.bak.",
  "{icon} Favourites": "{icon} מועדפים",
  "{icon} Recently played": "{icon} הושמעו לאחרונה",
- "{icon} Most played": "{icon} הכי מושמעים"
+ "{icon} Most played": "{icon} הכי מושמעים",
+ "No grouping": "ללא קיבוץ",
+ "By artist": "לפי אמן",
+ "By album": "לפי אלבום",
+ "Group songs": "קיבוץ שירים",
+ "Artists or albums": "אמנים או אלבומים",
+ "All songs ({count})": "כל השירים ({count})",
+ "Unknown album": "אלבום לא ידוע"
 }

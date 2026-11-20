@@ -250,5 +250,12 @@
  "play_history.json was unreadable; started with no hearts or play counts. Your original file is preserved as play_history.json.corrupt.bak.": "تعذّرت قراءة play_history.json؛ بدأ التطبيق بلا قلوب ولا أعداد تشغيل. ملفك الأصلي محفوظ باسم play_history.json.corrupt.bak.",
  "{icon} Favourites": "{icon} المفضلة",
  "{icon} Recently played": "{icon} المشغّلة مؤخرًا",
- "{icon} Most played": "{icon} الأكثر تشغيلًا"
+ "{icon} Most played": "{icon} الأكثر تشغيلًا",
+ "No grouping": "بلا تجميع",
+ "By artist": "حسب الفنان",
+ "By album": "حسب الألبوم",
+ "Group songs": "تجميع الأغاني",
+ "Artists or albums": "الفنانون أو الألبومات",
+ "All songs ({count})": "كل الأغاني ({count})",
+ "Unknown album": "ألبوم غير معروف"
 }
