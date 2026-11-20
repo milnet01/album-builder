@@ -143,7 +143,7 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 
-- 📋 [MUSI-0369] **Native-speaker check of the seven translation catalogs.**
+- 🚫 [MUSI-0369] **Native-speaker check of the seven translation catalogs.**
   The af/ar/he/es/fr/de/pt catalogs in src/album_builder/translations/
   were machine-drafted (Spec 25 §Out of scope; README says so). A
   native speaker per language should read them in the running app.
@@ -185,6 +185,11 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   2026-11-13, owner: Afrikaans "gelykmaking" stays as the word for
   levelling. The Arabic suggestions for "Levelling reference" and
   "symlink folder" are not applied; they wait for the native speaker.
+  2026-11-20, owner: closed; the app is not held up for a
+  native-speaker check. Instead README "Languages" and the new
+  CONTRIBUTING.md ask native speakers to report wording fixes as
+  GitHub issues; the website gets the same ask. An email contact may
+  be added once the owner sets one up.
   **Layman:** Have a fluent speaker of each language check the app's wording.
   Kind: doc.
   Source: in-session-2026-09-28.

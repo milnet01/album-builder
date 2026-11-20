@@ -89,7 +89,13 @@ under **View > Language**; the change applies the next time you open the
 app. Arabic and Hebrew lay the whole window out right to left.
 
 The translations were drafted by an AI and have not yet been checked by
-native speakers, so some wording may be off. Corrections are welcome.
+native speakers, so some wording may be off.
+
+**Do you speak one of these languages? Please help.** If a word or
+sentence in the app reads wrongly, tell us on
+[GitHub issues](https://github.com/milnet01/album-builder/issues): say
+the language, what the app shows and what it should say. A screenshot
+helps. [`CONTRIBUTING.md`](CONTRIBUTING.md) has the details.
 
 ## How we know it works
 

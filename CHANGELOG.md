@@ -50,6 +50,14 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
   installs the update itself, closing and reopening the app.
   The zip download still works as before and does not update itself.
 
+### Changed
+
+- **Help wanted: native speakers to check the translations** (MUSI-0369)
+  The README now asks speakers of Afrikaans, Arabic, Hebrew,
+  Spanish, French, German and Portuguese to report wording that
+  reads wrongly, on GitHub. A new CONTRIBUTING.md explains how,
+  step by step.
+
 ### Fixed
 
 - **A playlist change made just before closing the app is now kept** (MUSI-0409)
