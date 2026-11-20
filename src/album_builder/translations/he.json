@@ -257,5 +257,9 @@
  "Group songs": "קיבוץ שירים",
  "Artists or albums": "אמנים או אלבומים",
  "All songs ({count})": "כל השירים ({count})",
- "Unknown album": "אלבום לא ידוע"
+ "Unknown album": "אלבום לא ידוע",
+ "Mini player": "נגן מוקטן",
+ "mini player": "נגן מוקטן",
+ "Full window": "חלון מלא",
+ "Keep on top": "השאר מעל"
 }

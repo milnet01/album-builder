@@ -228,6 +228,13 @@ Spec 03 owns the *meaning* of `current_album_id` (album switcher state); Spec 06
   "current_album_id": "8a36b2e0-7d4f-4d0c-9b27-1c5f1e8a44ca",
   "last_played_track_path": "/abs/path/to/track.mpeg",
   "last_tab": "player",
+  "mini_player": {
+    "active": false,
+    "on_top": true,
+    "width": 420,
+    "x": null,
+    "y": null
+  },
   "playback": {
     "position_seconds": 83.4,
     "queue": {
@@ -261,11 +268,16 @@ Spec 03 owns the *meaning* of `current_album_id` (album switcher state); Spec 06
 | `window.maximized` | bool | When `true`, `width` / `height` / `x` / `y` hold the normal (un-maximised) geometry |
 | `last_tab` | string | `"builder"` or `"player"` |
 | `playback.position_seconds` | number | `>= 0`, one decimal place on write |
+| `mini_player.active` / `mini_player.on_top` | bool | the mini player was showing at close / its pin is on |
+| `mini_player.width` | int | `>= 360` (clamped on load) |
+| `mini_player.x` / `mini_player.y` | int \| null | both or neither; `null` lets the compositor place it |
 | `playback.shuffle` | bool | |
 | `playback.repeat` | string | `"off"`, `"one"` or `"all"` |
 | `playback.queue` | object \| null | `entries` (absolute paths, duplicates allowed), `play_order` (a permutation of `range(len(entries))`), `current` (a slot in `play_order`); `null` for an empty queue |
 
 **The listening session** (`last_tab`, `playback`, `window.maximized`) is Spec 26's. Every field is optional and self-heals alone, except `playback.queue`, which is discarded whole when any of its fields is invalid; Spec 26 §4.1 holds the rules. They need no schema bump (Spec 26 §14).
+
+**The mini player** (`mini_player`) is Spec 30's. Each field heals alone; an `x` without a `y`, or the reverse, loads as both `null` (Spec 30 §4.1). No schema bump.
 
 Self-heal on load: any field of the wrong type → fall back to the default for that field; log warning. Corrupt JSON → fall back to the entire default `AppState()`. (See Spec 03 for switcher fallback rules when `current_album_id` references a deleted album.)
 

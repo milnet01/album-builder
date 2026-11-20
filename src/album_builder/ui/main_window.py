@@ -4,11 +4,12 @@ AlbumStore + LibraryWatcher + AppState (Phase 2) + Player (Phase 3A)."""
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import replace
 from pathlib import Path
 from uuid import UUID
 
-from PyQt6.QtCore import QEvent, QRect, Qt, QTimer, QUrl
+from PyQt6.QtCore import QEvent, QRect, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import (
     QAction,
     QActionGroup,
@@ -76,9 +77,11 @@ from album_builder.services.replaygain import ReplayGainService
 from album_builder.services.report import list_warnings, report_paths_for
 from album_builder.services.updater import install_kind
 from album_builder.services.usage_index import UsageIndex
+from album_builder.services.window_placement import Placement, placement_for
 from album_builder.ui.album_order_pane import AlbumOrderPane
 from album_builder.ui.duplicates_dialog import DuplicatesDialog
 from album_builder.ui.library_pane import LibraryPane
+from album_builder.ui.mini_player import MiniPlayer
 from album_builder.ui.now_playing_pane import NowPlayingPane
 from album_builder.ui.player_pane import PlayerPane
 from album_builder.ui.playlists_pane import PlaylistsPane
@@ -153,12 +156,17 @@ def _hamilton_ratios(pixels: list[int], total: int) -> list[int]:
 
 
 class MainWindow(QMainWindow):
+    # Spec 30 §4.4: a blocking read_position answers from a worker thread.
+    _mini_spot_read = pyqtSignal(object)
+
     def __init__(
         self,
         store: AlbumStore,
         library_watcher: LibraryWatcher,
         state: AppState,
         project_root: Path,
+        *,
+        placement: Placement | None = None,
     ):
         super().__init__()
         # Spec 26 INV-15: the last two normal (not maximised) geometries; see
@@ -443,11 +451,13 @@ class MainWindow(QMainWindow):
         # bus or no system tray degrades to a silent no-op. Parented to self so
         # they live and die with MainWindow.
         self._mpris = MprisService(
-            self._player, self._controller, lambda: bring_to_front(self), parent=self
+            self._player, self._controller, self._raise_active, parent=self
         )
         self._tray = TrayIcon(
-            self._player, self._controller, self, self.windowIcon(), parent=self
+            self._player, self._controller, self, self.windowIcon(), parent=self,
+            surface=self.active_surface,
         )
+        self._build_mini_player(placement)
 
         # Spec 21 (Phase F): ReplayGain volume normalization. Built before the
         # session restore below (whose current_changed levels the restored song)
@@ -566,6 +576,12 @@ class MainWindow(QMainWindow):
             act.triggered.connect(
                 lambda _checked=False, c=code, name=label: self._on_language_chosen(c, name)
             )
+
+        # Spec 30: View -> Mini player.
+        view_menu.addSeparator()
+        self._mini_action = view_menu.addAction(tr("Mini player"))
+        self._mini_action.setShortcut(QKeySequence("Ctrl+Shift+M"))
+        self._mini_action.triggered.connect(self.enter_mini)
 
         # Spec 21: Playback -> Volume Levelling, after View and before Help.
         playback_menu = bar.addMenu(tr("Playback"))
@@ -1616,6 +1632,103 @@ class MainWindow(QMainWindow):
         m = msg.lower()
         return any(s in m for s in ("decoder", "codec", "gstreamer", "plugin"))
 
+    # ---- Mini player (Spec 30) -------------------------------------------
+
+    def _build_mini_player(self, placement: Placement | None) -> None:
+        self._placement = placement or placement_for(QGuiApplication.instance())
+        self._mini_active = False
+        self._mini_leaving = False
+        # No parent: a child window is transient for MainWindow, which KWin's
+        # script skips and the compositor may hide with it.
+        self._mini = MiniPlayer(self._player, self._controller, self._play_history)
+        self.destroyed.connect(self._mini.deleteLater)
+        self._mini.set_on_top_supported(self._placement.supported)
+        self._mini.set_on_top(self._state.mini_player.on_top)
+        self._mini.expand_requested.connect(self.leave_mini)
+        self._mini.close_requested.connect(self._on_mini_close)
+        self._mini.on_top_toggled.connect(self._on_mini_pin)
+        self._mini_spot_read.connect(self._finish_leave_mini)
+        self._tray.watch(self._mini)
+        for surface in self._surfaces:
+            surface.transport.mini_requested.connect(self.enter_mini)
+
+    def show_initial(self) -> None:
+        """Show the window the last session closed in, then schedule the
+        update check (Spec 28 §4.5) - whichever window shows."""
+        if self._state.mini_player.active:
+            self._mini_active = True
+            self._show_mini()
+        else:
+            self.show()
+        self._updates.schedule_daily()  # later calls do nothing
+
+    def active_surface(self) -> QWidget:
+        """The window in use: tray Show/Hide and MPRIS Raise act on it."""
+        return self._mini if self._mini_active else self
+
+    def _raise_active(self) -> None:
+        bring_to_front(self.active_surface())
+
+    def enter_mini(self) -> None:
+        if self._mini_active:
+            return
+        self._mini_active = True
+        self._state.mini_player.active = True
+        self._save_state_now()
+        self.hide()
+        self._show_mini()
+
+    def _show_mini(self) -> None:
+        saved = self._state.mini_player
+        self._mini.resize(saved.width, self._mini.height())
+        self._mini.show()
+        self._placement.apply(self._mini, x=saved.x, y=saved.y, on_top=saved.on_top)
+
+    def leave_mini(self) -> None:
+        if not self._mini_active or self._mini_leaving:
+            return
+        self._mini_leaving = True
+        if self._placement.blocks:
+            # KWin answers through the journal, up to 1.5 s: off the GUI thread.
+            threading.Thread(
+                target=lambda: self._mini_spot_read.emit(
+                    self._placement.read_position(self._mini)),
+                daemon=True,
+            ).start()
+        else:
+            self._finish_leave_mini(self._placement.read_position(self._mini))
+
+    def _finish_leave_mini(self, spot: tuple[int, int] | None) -> None:
+        self._remember_mini(spot)
+        self._mini_leaving = False
+        self._mini_active = False
+        self._state.mini_player.active = False
+        self._mini.hide()
+        bring_to_front(self)
+        self._save_state_now()
+
+    def _remember_mini(self, spot: tuple[int, int] | None) -> None:
+        """Keep the width and, when the placement answered, the spot."""
+        self._state.mini_player.width = self._mini.width()
+        if spot is not None:
+            self._state.mini_player.x, self._state.mini_player.y = spot
+
+    def _note_mini_closing(self) -> None:
+        self._state.mini_player.active = self._mini_active
+        if self._mini_active and self._mini.isVisible():
+            self._remember_mini(self._placement.read_position(self._mini))
+        self._mini.hide()
+
+    def _on_mini_close(self) -> None:
+        # Closing the mini player quits, as closing the full window does (§3).
+        if self.close():
+            QApplication.quit()
+
+    def _on_mini_pin(self, on: bool) -> None:
+        self._state.mini_player.on_top = on
+        self._placement.apply(self._mini, x=None, y=None, on_top=on)
+        self._save_state_now()
+
     def showEvent(self, e) -> None:
         super().showEvent(e)
         # L8-H1: apply the restored splitter ratios now that the splitter
@@ -1625,7 +1738,6 @@ class MainWindow(QMainWindow):
         if self._restore_splitter_sizes:
             self.splitter.setSizes(self._restore_splitter_sizes)
             self._restore_splitter_sizes = []
-        self._updates.schedule_daily()  # Spec 28 §4.5; runs once per session
 
     def resizeEvent(self, e) -> None:
         super().resizeEvent(e)
@@ -1675,6 +1787,9 @@ class MainWindow(QMainWindow):
         self._state_save_timer.start()
 
     def closeEvent(self, e) -> None:
+        # Spec 30 §4.3: read the mini player's spot while it still shows (KWin
+        # lists only shown windows); the next launch reopens it there.
+        self._note_mini_closing()
         # L8-M2: stop the debounced state-save timer first thing so a 250
         # ms tick mid-teardown can't race the synchronous _save_state_now
         # below (and write a stale partial state into state.json).

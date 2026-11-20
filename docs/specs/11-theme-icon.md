@@ -93,6 +93,9 @@ The single-source `theme.Glyphs` namespace publishes one named constant per row 
 | `Glyphs.HEART` | `U+2665` (`♥`) | literal codepoint |
 | `Glyphs.HEART_OUTLINE` | `U+2661` (`♡`) | literal codepoint |
 | `Glyphs.AUTO_LIST` | `U+21BB` (`↻`) | literal codepoint |
+| `Glyphs.PIN` | `U+1F4CC` | `"\U0001F4CC"` escape (Spec 30 keep-on-top) |
+| `Glyphs.MINI_PLAYER` | `U+2921` (`⤡`) | literal codepoint (Spec 30) |
+| `Glyphs.FULL_WINDOW` | `U+2922` (`⤢`) | literal codepoint (Spec 30) |
 
 A consumer that wants the codepoint imports the name; a consumer that wants the rendered glyph reads the same name via the `theme.Glyphs` namespace. There is no other source of truth for these symbols anywhere in the codebase. (Names match the existing `theme.Glyphs` class verbatim — forward-only convention per CLAUDE.md, no retroactive rename.)
 

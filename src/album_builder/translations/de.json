@@ -257,5 +257,9 @@
  "Group songs": "Songs gruppieren",
  "Artists or albums": "Interpreten oder Alben",
  "All songs ({count})": "Alle Songs ({count})",
- "Unknown album": "Unbekanntes Album"
+ "Unknown album": "Unbekanntes Album",
+ "Mini player": "Mini-Player",
+ "mini player": "Mini-Player",
+ "Full window": "Ganzes Fenster",
+ "Keep on top": "Immer im Vordergrund"
 }

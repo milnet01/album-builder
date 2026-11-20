@@ -1,7 +1,7 @@
 <!-- ants-spec-format: 1 -->
 # 30 — Mini player
 
-**Status:** accepted (2026-11-20).
+**Status:** implemented (2026-11-20).
 **Kind:** implement.
 **Source:** ROADMAP MUSI-0356 Phase MP-6 (user request 2026-07-25; owner decisions 2026-11-20).
 **Depends on:** 06, 10, 15, 16, 20, 25, 26, 29. **Amends:** 10, 16, 20.
@@ -92,7 +92,7 @@ class MiniPlayer(QWidget):
     def set_on_top(self, on: bool) -> None: ...                    # no signal
 ```
 
-A top-level window titled `MINI_TITLE = "Album Builder - mini player"` (translated). Layout, left to right: a 64 px cover; a column of title, artist and the progress bar; Back / Play / Next; volume; heart; pin; full window. Spec 25's rule holds: the playback buttons and the progress bar stay left to right under a right-to-left language.
+A top-level window with no parent (a child window would be transient for `MainWindow`, which the KWin script skips), titled `CAPTION_PREFIX + tr("mini player")`, where `services/window_placement.py` holds `CAPTION_PREFIX = "Album Builder - "`. Layout, left to right: a 64 px cover; a column of title, artist and the progress bar; Back / Play / Next; volume; heart; pin; full window. Spec 25's rule holds: the playback buttons and the progress bar stay left to right under a right-to-left language.
 
 It connects straight to `Player`, `PlaybackController` and `PlayHistory`; there is no second pipeline. The progress bar seeks on `sliderReleased`, as `TransportBar` does. The heart follows `PlayHistory.changed` and is disabled when nothing is loaded, as `PlayerPane._sync_heart` does. The cover reuses the scaling `NowPlayingCard._set_cover` uses. The close button emits `close_requested` and ignores the event; `MainWindow` decides.
 
@@ -101,14 +101,15 @@ It connects straight to `Player`, `PlaybackController` and `PlayHistory`; there 
 - **Enter:** a Mini player button at the right end of `TransportBar` (Spec 16), a View menu action and `Ctrl+Shift+M` call `MainWindow.enter_mini()`. It saves state, hides `MainWindow`, shows `MiniPlayer` at the saved width and spot, then applies on-top.
 - **Leave:** `expand_requested` calls `MainWindow.leave_mini()`. It reads the mini player's spot (§4.4), hides it, brings `MainWindow` to front and saves state.
 - **Close:** `close_requested` calls `MainWindow.close()`, whose `closeEvent` reads the mini player's spot first and saves `mini_player.active: true`.
-- **Launch:** `app.py` shows `MiniPlayer` instead of `MainWindow` when `mini_player.active` is true. `schedule_daily()` moves out of `showEvent` into a once-only call made after either window first shows.
-- **Active surface:** `MainWindow.active_surface()` returns whichever window is in use. The tray's Show/Hide and left click, and the MPRIS raise, act on it (Spec 20).
+- **Launch:** `app.py` calls `MainWindow.show_initial()`, which shows `MiniPlayer` instead of `MainWindow` when `mini_player.active` is true, then calls `schedule_daily()`. That call moves out of `showEvent`.
+- **Active surface:** `MainWindow.active_surface()` returns whichever window is in use. The tray's Show/Hide and left click, the MPRIS raise and the single-instance raise (`app.py`) act on it (Spec 20).
 
 ### 4.4 On top and position (`services/window_placement.py`)
 
 ```python
 class Placement(Protocol):
     supported: bool
+    blocks: bool        # read_position waits on the compositor (KWin only)
     def apply(self, window: QWidget, *, x: int | None, y: int | None,
               on_top: bool) -> None: ...
     def read_position(self, window: QWidget) -> tuple[int, int] | None: ...
@@ -122,13 +123,15 @@ def placement_for(app: QGuiApplication) -> Placement: ...
 - **KWin** — `wayland` with the `org.kde.KWin` service on the session bus. `apply` loads a one-shot KWin script that finds the window by PID and caption and sets `keepAbove` and, when both are given, `frameGeometry`'s x and y, clamped to the screen. It runs 300 ms after the window first shows. `read_position` loads a script that `print`s the frame behind a unique marker and polls the user journal for up to 1.5 s. Each script stays loaded until its answer is in, or 3 s for a move. Every call passes `--reply-timeout` to `dbus-send`. The details are the know-how note's.
 - **None** — any other Wayland desktop. `supported` is false, `apply` does nothing, `read_position` returns `None`.
 
-`leave_mini` waits for `read_position` without blocking the event loop, so the swap back takes at most 1.5 s. A `None` answer keeps the last saved spot.
+`fit_to_screen` moves from `ui/window_util.py` into this module, which re-exports it there, because `services/` may not import `ui/`.
 
-**Trust boundary.** The scripts run inside the compositor. Only `int()`-converted numbers, `os.getpid()` and the constant `MINI_TITLE` go into a script; the translated title is matched by `caption.startsWith` on a fixed ASCII prefix, never interpolated. Script files go in a private `tempfile.mkdtemp()` directory and are deleted after unload.
+`leave_mini` waits for `read_position` without blocking the event loop (on a worker thread when `blocks` is true), so the swap back takes at most 1.5 s. A `None` answer keeps the last saved spot.
+
+**Trust boundary.** The scripts run inside the compositor. Only real integers (`_int` refuses a string, float or bool), `os.getpid()`, a random integer token and the constant `CAPTION_PREFIX` go into a script; the translated title is matched by its fixed ASCII prefix `CAPTION_PREFIX`, never interpolated. `MainWindow`'s title (`Album Builder v...`) does not match it. Script files go in a private `tempfile.mkdtemp()` directory and are deleted after unload.
 
 ## 5. Invariants
 
-Each *Test:* names the rule its fixture isolates. All are new code; none can run yet.
+Each *Test:* names the rule its fixture isolates.
 
 - **INV-1** (TC-30-01) — `save_state` then `load_state` round-trips every `mini_player` field; a missing `mini_player` loads the defaults.
   *Test:* `tests/persistence/test_TC_30_mini_state.py::test_round_trip`.

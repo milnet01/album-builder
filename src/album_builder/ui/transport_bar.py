@@ -8,7 +8,7 @@ writes via ``player.set_volume``.
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSlider, QWidget
 
 from album_builder.domain.play_queue import RepeatMode
@@ -28,6 +28,9 @@ _NEXT_REPEAT = {
 
 
 class TransportBar(QWidget):
+    # Spec 30: the Mini player button; MainWindow does the swap.
+    mini_requested = pyqtSignal()
+
     def __init__(
         self,
         player: Player,
@@ -99,9 +102,15 @@ class TransportBar(QWidget):
         self.volume_slider = QSlider(Qt.Orientation.Horizontal, objectName="TransportVolume")
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setValue(player.volume())
-        self.volume_slider.setFixedWidth(90)  # fits a 1280 px screen (MUSI-0381)
+        self.volume_slider.setFixedWidth(70)  # fits a 1280 px screen (MUSI-0381, Spec 30)
         self.volume_slider.setAccessibleName(tr("Volume"))
         self.volume_slider.valueChanged.connect(player.set_volume)
+
+        self.btn_mini = QPushButton(Glyphs.MINI_PLAYER, objectName="TransportMini")
+        self.btn_mini.setAccessibleName(tr("Mini player"))
+        self.btn_mini.setToolTip(tr("Mini player"))
+        self.btn_mini.setFixedWidth(36)
+        self.btn_mini.clicked.connect(self.mini_requested)
 
         self.buffering_label = QLabel(tr("Buffering..."), objectName="TransportBuffering")
         self.buffering_label.setVisible(False)
@@ -121,6 +130,7 @@ class TransportBar(QWidget):
         layout.addSpacing(12)
         layout.addWidget(self.btn_mute)
         layout.addWidget(self.volume_slider)
+        layout.addWidget(self.btn_mini)
 
         # Reflect player state.
         player.position_changed.connect(self._on_position_changed)

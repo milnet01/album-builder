@@ -380,6 +380,9 @@ no shadow state of its own. Property reads pull live from those.
   or minimised; hide if visible and *just active*). `Context` (right-click) shows the
   menu (Qt default).
 - *Just active* means active now, or deactivated less than `RECENT_FOCUS_S` (2 s) ago.
+- **Spec 30:** Show/Hide, the left-click, MPRIS `Raise()` and the single-instance
+  raise act on `MainWindow.active_surface()` — the mini player while it is in use,
+  else the main window. `TrayIcon` takes it as `surface=`; `start_raise_server` too.
   The tray watches the window's `WindowDeactivate` events to know when. Reason: on
   Windows the click takes focus from the app before `activated` fires, and with the
   icon in the hidden-icons pop-up the `^` click before it does, so a plain

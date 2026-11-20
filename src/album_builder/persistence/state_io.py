@@ -45,6 +45,22 @@ class WindowState:
     maximized: bool = False
 
 
+# Spec 30 §4.1: the mini player's width floor and default.
+MINI_MIN_WIDTH = 360
+MINI_DEFAULT_WIDTH = 420
+
+
+@dataclass
+class MiniPlayerState:
+    """Spec 30 §4.1. x and y are both set or both None (compositor places it)."""
+
+    active: bool = False
+    on_top: bool = True
+    width: int = MINI_DEFAULT_WIDTH
+    x: int | None = None
+    y: int | None = None
+
+
 # Spec 26 §4.1: the tab names state.json may hold; the first is the default.
 TAB_NAMES = ("builder", "player")
 
@@ -62,6 +78,7 @@ class AppState:
     last_tab: str = TAB_NAMES[0]
     playback: QueueSnapshot = EMPTY_QUEUE
     position_seconds: float = 0.0
+    mini_player: MiniPlayerState = field(default_factory=MiniPlayerState)
 
 
 MIGRATIONS: dict[int, Callable[[dict], dict]] = {}
@@ -143,6 +160,35 @@ def _coerce_window(value: object) -> WindowState:
 
 def _is_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _coerce_mini_player(value: object) -> MiniPlayerState:
+    """Spec 30 §4.1: each field heals alone; x and y heal as a pair."""
+    out = MiniPlayerState()
+    if value is None:
+        return out
+    if not isinstance(value, dict):
+        logger.warning("state.json: mini_player=%r is not an object; defaulting", value)
+        return out
+    for name in ("active", "on_top"):
+        if name in value:
+            if isinstance(value[name], bool):
+                setattr(out, name, value[name])
+            else:
+                logger.warning("state.json: mini_player.%s=%r is not bool; defaulting",
+                               name, value[name])
+    if "width" in value:
+        if _is_int(value["width"]):
+            out.width = max(MINI_MIN_WIDTH, value["width"])
+        else:
+            logger.warning("state.json: mini_player.width=%r is not int; defaulting",
+                           value["width"])
+    x, y = value.get("x"), value.get("y")
+    if _is_int(x) and _is_int(y):
+        out.x, out.y = x, y
+    elif x is not None or y is not None:
+        logger.warning("state.json: mini_player x=%r y=%r not an int pair; dropping both", x, y)
+    return out
 
 
 def _coerce_last_tab(value: object) -> str:
@@ -268,6 +314,7 @@ def load_state(project_root: Path) -> AppState:
         last_tab=_coerce_last_tab(data.get("last_tab")),
         playback=playback,
         position_seconds=position,
+        mini_player=_coerce_mini_player(data.get("mini_player")),
     )
 
     # L2-H3: Spec 10 §79 mandates `<file>.v<old>.bak` on schema migration.
@@ -305,6 +352,7 @@ def save_state(project_root: Path, state: AppState) -> None:
             "window": asdict(state.window),
             "last_tab": state.last_tab,
             "playback": _playback_json(state),
+            "mini_player": asdict(state.mini_player),
         },
         indent=2,
         sort_keys=True,

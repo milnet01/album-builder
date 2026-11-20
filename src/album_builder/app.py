@@ -22,12 +22,13 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from PyQt6.QtCore import QLibraryInfo, QLocale, QProcess, QSharedMemory, Qt, QTranslator
 from PyQt6.QtGui import QIcon
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
-from PyQt6.QtWidgets import QApplication, QMainWindow
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget
 
 from album_builder import i18n
 from album_builder.persistence import settings
@@ -92,8 +93,9 @@ def run() -> int:
     library_watcher = LibraryWatcher(tracks_dir)
     store = AlbumStore(project_root / "Albums")
     window = MainWindow(store, library_watcher, state, project_root)
-    server = start_raise_server(window, lock=lock)
-    window.show()
+    server = start_raise_server(window, lock=lock, surface=window.active_surface)
+    # Spec 30: the full window, or the mini player if the last session closed in it.
+    window.show_initial()
 
     try:
         rc = app.exec()
@@ -286,10 +288,13 @@ def start_raise_server(
     window: QMainWindow,
     *,
     lock: QSharedMemory | None = None,
+    surface: Callable[[], QWidget] | None = None,
 ) -> QLocalServer:
     """Start a ``QLocalServer`` that brings ``window`` to the foreground when
-    a peer sends :data:`RAISE_MESSAGE`. Returns the server so callers can
-    keep it alive for the application lifetime.
+    a peer sends :data:`RAISE_MESSAGE` - or, given ``surface``, the window it
+    names at that moment (Spec 30: the mini player when it is in use).
+    Returns the server so callers can keep it alive for the application
+    lifetime.
 
     PRECONDITION: only the SHM-lock holder reaches this function — the
     unconditional ``removeServer(SHARED_KEY)`` below would otherwise nuke
@@ -304,11 +309,12 @@ def start_raise_server(
     QLocalServer.removeServer(SHARED_KEY)
     server = QLocalServer()
     server.listen(SHARED_KEY)
-    server.newConnection.connect(lambda: _accept_raise(server, window))
+    target = surface or (lambda: window)
+    server.newConnection.connect(lambda: _accept_raise(server, target))
     return server
 
 
-def _accept_raise(server: QLocalServer, window: QMainWindow) -> None:
+def _accept_raise(server: QLocalServer, target: Callable[[], QWidget]) -> None:
     sock = server.nextPendingConnection()
     if sock is None:
         return
@@ -322,7 +328,7 @@ def _accept_raise(server: QLocalServer, window: QMainWindow) -> None:
         if b"\n" not in buffer and len(buffer) < len(RAISE_MESSAGE):
             return
         if buffer.strip() == RAISE_MESSAGE.strip():
-            bring_to_front(window)
+            bring_to_front(target())
         sock.disconnectFromServer()
 
     sock.readyRead.connect(on_ready_read)

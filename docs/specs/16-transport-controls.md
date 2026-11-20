@@ -324,8 +324,12 @@ repeat modes flank the transport triad, the time/scrubber/volume block is
 unchanged):
 
 ```
-[shuffle] [prev] [play/pause] [next] [repeat]  Buffering...  0:00 ==scrubber== 3:00   [mute] [volume]
+[shuffle] [prev] [play/pause] [next] [repeat]  Buffering...  0:00 ==scrubber== 3:00   [mute] [volume] [mini]
 ```
+
+- **Spec 30 adds** `btn_mini` at the right end. It emits `TransportBar.mini_requested`;
+  `MainWindow` swaps to the mini player. The volume slider is 70 px wide so the
+  Album Builder tab still fits a 1280 px screen (MUSI-0381).
 
 - The three transport-triad buttons (`prev`, `play`, `next`) sit together; `play`
   keeps its existing `TransportPlay` styling (14pt, wider). `prev`/`next` use the

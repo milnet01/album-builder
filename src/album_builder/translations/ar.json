@@ -257,5 +257,9 @@
  "Group songs": "تجميع الأغاني",
  "Artists or albums": "الفنانون أو الألبومات",
  "All songs ({count})": "كل الأغاني ({count})",
- "Unknown album": "ألبوم غير معروف"
+ "Unknown album": "ألبوم غير معروف",
+ "Mini player": "المشغّل المصغّر",
+ "mini player": "المشغّل المصغّر",
+ "Full window": "النافذة الكاملة",
+ "Keep on top": "إبقاء في المقدمة"
 }

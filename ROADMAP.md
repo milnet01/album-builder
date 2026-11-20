@@ -140,6 +140,12 @@ Ideas not yet filed as items (carried from the old Future / deferred list):
   on top by default with a pin to turn it off; closing in mini mode
   reopens as mini in the same spot. Spec: docs/specs/30-mini-player.md
   (accepted 2026-11-20; no review-contract run, judged cheap to redo).
+  MP-6 built 2026-11-20 to docs/specs/30-mini-player.md (TC-30-01..12
+  pass). Owed before release: on-top and position checked by hand on the
+  real KDE Wayland desktop and on Windows; the new glyphs by eye. The
+  KWin scripts were run once in a private kwin_wayland --virtual
+  session: move, keep-above on/off and the position read all worked.
+  Next: the full rule-based MP-5.
   **Layman:** Give the player tab the everyday features people expect from Spotify or WinAmp, such as resuming where you left off and favourites.
   Kind: implement.
 

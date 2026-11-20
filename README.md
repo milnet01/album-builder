@@ -51,6 +51,8 @@ See [`CHANGELOG.md`](CHANGELOG.md) for what changed in each release.
   really listen to each song, and its Playlists list starts with three
   lists that fill themselves: Favourites, Recently played and Most
   played.
+  For background listening, *View → Mini player* shrinks the app into
+  a small window that stays above your other windows.
 - **Shows lyrics in time with the song.** Lyrics files (`.lrc`) scroll
   along as the song plays. The app can also line up plain lyrics with
   the song automatically; that part is an optional extra (see below).

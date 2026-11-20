@@ -257,5 +257,9 @@
  "Group songs": "Agrupar canciones",
  "Artists or albums": "Artistas o álbumes",
  "All songs ({count})": "Todas las canciones ({count})",
- "Unknown album": "Álbum desconocido"
+ "Unknown album": "Álbum desconocido",
+ "Mini player": "Minirreproductor",
+ "mini player": "minirreproductor",
+ "Full window": "Ventana completa",
+ "Keep on top": "Mantener encima"
 }

@@ -60,3 +60,6 @@ class Glyphs:
     HEART = "♥"                 # U+2665 - favourite
     HEART_OUTLINE = "♡"         # U+2661 - not a favourite
     AUTO_LIST = "↻"             # U+21BB - "refreshes itself"
+    PIN = "\U0001f4cc"          # U+1F4CC - Spec 30 mini player keep-on-top
+    MINI_PLAYER = "⤡"           # U+2921 - Spec 30 shrink to the mini player
+    FULL_WINDOW = "⤢"           # U+2922 - Spec 30 back to the full window

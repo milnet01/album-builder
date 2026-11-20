@@ -257,5 +257,9 @@
  "Group songs": "Agrupar músicas",
  "Artists or albums": "Artistas ou álbuns",
  "All songs ({count})": "Todas as músicas ({count})",
- "Unknown album": "Álbum desconhecido"
+ "Unknown album": "Álbum desconhecido",
+ "Mini player": "Miniplayer",
+ "mini player": "miniplayer",
+ "Full window": "Janela completa",
+ "Keep on top": "Manter no topo"
 }

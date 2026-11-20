@@ -28,7 +28,9 @@ RECENT_FOCUS_S = 2.0
 
 
 class TrayIcon(QSystemTrayIcon):
-    def __init__(self, player: Player, controller, window, icon: QIcon, parent=None) -> None:
+    def __init__(
+        self, player: Player, controller, window, icon: QIcon, parent=None, *, surface=None,
+    ) -> None:
         super().__init__(parent)
         self.available = QSystemTrayIcon.isSystemTrayAvailable()
         if not self.available:
@@ -37,7 +39,8 @@ class TrayIcon(QSystemTrayIcon):
 
         self._player = player
         self._controller = controller
-        self._window = window
+        # Spec 30: Show/Hide acts on whichever window is in use.
+        self._surface = surface or (lambda: window)
 
         # resolve_app_icon already tried the theme and the dev asset; when
         # both failed, a built-in icon keeps the tray entry visible.
@@ -83,20 +86,25 @@ class TrayIcon(QSystemTrayIcon):
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
             self._toggle_window()
 
+    def watch(self, widget) -> None:
+        """Track focus on another window Show/Hide can act on (Spec 30)."""
+        if self.available:
+            widget.installEventFilter(self)
+
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
-        if obj is self._window and event.type() == QEvent.Type.WindowDeactivate:
+        if obj is self._surface() and event.type() == QEvent.Type.WindowDeactivate:
             self._deactivated_at = time.monotonic()
         return False
 
     def _was_just_active(self) -> bool:
         """Active now, or until less than RECENT_FOCUS_S ago (MUSI-0405)."""
-        if self._window.isActiveWindow():
+        if self._surface().isActiveWindow():
             return True
         t = self._deactivated_at
         return t is not None and time.monotonic() - t < RECENT_FOCUS_S
 
     def _toggle_window(self) -> None:
-        w = self._window
+        w = self._surface()
         if w.isVisible() and not w.isMinimized() and self._was_just_active():
             w.hide()
         else:

@@ -10,6 +10,15 @@ Releases before 0.8.0 are recorded in `ROADMAP.md`.
 
 ### Added
 
+- **A mini player.**
+  The new ⤡ button beside the volume slider (or View → Mini player, or
+  Ctrl+Shift+M) shrinks Album Builder into a small window. It shows the
+  cover, song and artist, Back / Play / Next, a progress bar, volume and
+  the heart, and stays above your other windows; the 📌 pin turns that
+  off. The ⤢ button brings the full window back. If you close the app
+  from the mini player, it opens as the mini player next time, in the
+  same spot.
+
 - **Browse your library by artist or album** (MUSI-0356)
   A new Group menu next to the search box. Pick "By artist" or
   "By album" and a list of names appears beside your songs. Click
