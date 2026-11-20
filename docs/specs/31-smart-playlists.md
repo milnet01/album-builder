@@ -34,7 +34,7 @@ Owner answers, 2026-11-20, in this session:
 Author's calls, each open to the owner:
 
 - **Smart playlists live in their own file**, `.album-builder/smart_playlists.json`. `playlists.json` keeps schema 1, so an older build still reads the ordinary playlists.
-- **A smart playlist this build cannot read is kept, never dropped or rewritten.** It shows greyed, plays nothing and cannot be edited, only deleted. This covers a hand edit and a file written by a newer build.
+- **A smart playlist this build cannot read is kept, never dropped or rewritten.** It shows greyed, plays nothing and cannot be edited, only deleted. This covers a hand edit and an entry a newer build wrote without raising `schema_version`; a newer `schema_version` is §4.3's case.
 - **"Recently added" means the last 30 days**, newest first. **"Never played"** is in title order. Neither has a limit.
 - **Starters are created only when `smart_playlists.json` does not exist.** Deleting them sticks; a corrupt file does not bring them back.
 - **Smart playlists show in the Player tab's Playlists list only.** "Add to playlist" menus never list them: their songs come from rules.
@@ -59,7 +59,7 @@ modified: datetime | None = None     # UTC-aware, from the stat() already made
 | MP4 | `\xa9gen` | `\xa9day` |
 | ASF | `WM/Genre` | `WM/Year` |
 
-`year` is the first run of four digits in the tag's text, kept when it is between 1000 and 9999; anything else is `None`. So `1994-05-01` and `1994` both give 1994. MP4's numeric `gnre` atom is not read (§9). A missing track (`Track._missing`) has `genre ""`, `year None`, `modified None`.
+Each genre value is stripped of spaces and a leading `/`: mutagen reads an ID3v2.3 `(17)/Jazz` as `Rock`, `/Jazz`. `year` is the first run of four digits in the tag's text, kept when it is between 1000 and 9999; anything else is `None`. So `1994-05-01` and `1994` both give 1994. MP4's numeric `gnre` atom is not read (§9). A missing track (`Track._missing`) has `genre ""`, `year None`, `modified None`.
 
 ### 4.2 The rule model (`domain/smart_playlist.py`, pure, no Qt)
 
@@ -141,14 +141,14 @@ def songs(pl: SmartPlaylist, candidates: Iterable[tuple[Track, SongStats]],
 | `id` | string | non-empty, unique in the file |
 | `name` | string | non-empty after strip |
 | `match` | string | `"all"` or `"any"` |
-| `rules` | array of objects | each `field`/`op`/`value` per the §4.2 table |
+| `rules` | array of objects | each `field`/`op`/`value` per the §4.2 table; a bool is not a whole number |
 | `order.by` | string | a `Field` value other than `favourite` |
 | `order.descending` | bool | |
 | `limit` | int or `null` | 1 to 9999; a bool is not an int |
 
 Spec 10 §Encoding rules apply (sorted keys, 2-space indent). Writes are atomic, through a `DebouncedWriter` (250 ms).
 
-**An entry that breaks any constraint is unreadable.** It is kept as its raw JSON value, in place, and written back unchanged on every save. In memory it is an `UnreadableSmartPlaylist(raw, id)` with a session-only id. It matches no songs. Rules are never dropped one by one, because with `match: "all"` a dropped rule would quietly widen the list.
+**An entry that breaks any constraint, or holds a key the table does not name, is unreadable.** It is kept as its raw JSON value, in place, and written back unchanged on every save. In memory it is an `UnreadableSmartPlaylist(raw, id)` with a session-only id. It matches no songs. Rules are never dropped one by one, because with `match: "all"` a dropped rule would quietly widen the list.
 
 **Load.** Absent file: no smart playlists, plus the starters (§4.4). A file that does not parse, is not an object, lacks `schema_version` or has a non-array `smart_playlists`: `load_smart_playlists` raises. A newer `schema_version` raises `SchemaTooNewError`. The store handles both as `PlayHistory` does (Spec 29 §4.1 Load): corrupt sets `load_failed` and the first save renames the file to `smart_playlists.json.corrupt.bak`; too new sets `read_only` and the file is never written that run. `MainWindow` shows a toast for each.
 
@@ -163,14 +163,15 @@ class SmartPlaylistStore(QObject):
                  history: PlayHistory, parent: QObject | None = None): ...
     def playlists(self) -> list[SmartPlaylist | UnreadableSmartPlaylist]: ...
     def create(self, pl: SmartPlaylist) -> None: ...
-    def update(self, pl: SmartPlaylist) -> None: ...   # by id; name, rules, order, limit
+    def update(self, pl: SmartPlaylist) -> None: ...   # replaces the entry with pl.id
     def rename(self, playlist_id: str, name: str) -> None: ...
     def delete(self, playlist_id: str) -> None: ...
     def songs(self, playlist_id: str) -> list[Track]: ...
+    def songs_for(self, pl: SmartPlaylist) -> list[Track]: ...  # saved or not
     def flush(self) -> None: ...
 ```
 
-`songs` passes `smart_playlist.songs` every track in `library_watcher.library()` with its `history.stats_for`, and `datetime.now(UTC)`. An unreadable entry gives `[]`. `update` and `rename` on an unreadable entry raise `ValueError`.
+`songs_for` passes `smart_playlist.songs` every track in `library_watcher.library()` with its `history.stats_for`, and `datetime.now(UTC)`. `songs(id)` is `songs_for` on the stored entry; an unreadable entry gives `[]`. `update` and `rename` on an unreadable entry raise `ValueError`.
 
 **Starters.** When the file was absent at load, the store creates, in this order, and schedules a write:
 
@@ -183,14 +184,14 @@ The names are translated once, when created, and stored as text.
 
 ### 4.5 Playlists list (amends Spec 17 §UI surface)
 
-Rows, top to bottom: Spec 29's three lists; the smart playlists in file order, each prefixed with `Glyphs.AUTO_LIST`; then the ordinary playlists. A smart row carries its id under a new `_SMART_ID_ROLE`; it never carries `_ID_ROLE` or `_SMART_ROLE`.
+Rows, top to bottom: Spec 29's three lists; the smart playlists in file order, each prefixed with `Glyphs.AUTO_LIST`; then the ordinary playlists. A smart row carries its id under a new `_SMART_ID_ROLE`; it never carries `_ID_ROLE` or `_SMART_ROLE`. `MainWindow` hands the pane the store with a new `set_smart_store(store: SmartPlaylistStore)`, as it does `set_play_history`.
 
 For a smart row:
 
 - Selecting it shows its songs (`SmartPlaylistStore.songs`) in the tracks list.
 - Double-click renames, as for an ordinary playlist. Delete asks first, as Spec 17 does.
 - Up, Down and Remove are disabled: the rules set the order.
-- **Play** emits `smart_play_requested` with the shown songs, the same signal Spec 29's lists use; an empty list toasts and leaves the queue alone.
+- **Play** works the songs out again (`SmartPlaylistStore.songs`), shows them, and emits `smart_play_requested` with them, the same signal Spec 29's lists use; an empty list toasts and leaves the queue alone.
 - The shown songs refresh on `SmartPlaylistStore.changed`, `PlayHistory.changed`, a library change and each time the row is selected.
 - An unreadable row shows greyed, with the tooltip "This smart playlist can't be read by this version"; it shows no songs, and only Delete is enabled.
 
@@ -205,7 +206,7 @@ class SmartPlaylistDialog(QDialog):
     def result_playlist(self) -> SmartPlaylist: ...   # after accept
 ```
 
-Contents, top to bottom: a name box; "Match [all | any] of these rules"; one row per rule (field, operator, value, a remove button); **Add rule**; "Order by [field] [descending]"; "Limit to [n] songs" with a check box; a live "N songs match" line from `count`; OK and Cancel.
+Contents, top to bottom: a name box; "Match [all | any] of these rules"; one row per rule (field, operator, value, a remove button); **Add rule**; "Order by [field] [descending]"; "Limit to [n] songs" with a check box and a number box, 1 to 9999; a live "N songs match" line from `count`; OK and Cancel.
 
 - The operator list follows the field, per the §4.2 table. Changing the field resets the operator and value when the old ones do not fit.
 - The value editor follows the field: a text box, a number box, a days box (1 to 36500), "minutes : seconds" boxes for duration, or Yes/No for favourite.
@@ -213,7 +214,7 @@ Contents, top to bottom: a name box; "Match [all | any] of these rules"; one row
 - Opening an existing playlist and pressing OK with no change returns an equal `SmartPlaylist`, id included.
 - Every control is reachable by keyboard and has an accessible name. Every string goes through `tr()` and into each shipped catalog (Spec 25, TC-25-03).
 
-`MainWindow` opens it for **New smart playlist** (then `store.create`) and **Edit rules** (then `store.update`).
+`MainWindow` opens it for **New smart playlist** (then `store.create`) and **Edit rules** (then `store.update`), passing `count` as `len(store.songs_for(pl))`.
 
 ### 4.7 Trust boundary
 
@@ -223,9 +224,9 @@ Contents, top to bottom: a name box; "Match [all | any] of these rules"; one row
 
 Each *Test:* names the rule its fixture isolates.
 
-- **INV-1** (TC-31-01) — `Track.from_path` reads genre and year from ID3, Vorbis (FLAC), MP4 and ASF files per §4.1's table; several genre values join with `"; "`; a year tag of `1994-05-01` gives 1994, and `abcd` gives `None`; a file with neither tag gives `""` and `None`.
+- **INV-1** (TC-31-01) — `Track.from_path` reads genre and year from ID3, Vorbis (FLAC), MP4 and ASF files per §4.1's table; several genre values join with `"; "`; an ID3v2.3 `(17)/Jazz` gives `Rock; Jazz`; a year tag of `1994-05-01` gives 1994, and `abcd` gives `None`; a file with neither tag gives `""` and `None`.
   *Test:* `tests/domain/test_TC_31_track_tags.py`, one tagged file per container, written with mutagen in `tmp_path`.
-  *Breaks when:* a container's genre or year key is wrong, or the year is not cut to four digits.
+  *Breaks when:* a container's genre or year key is wrong, a genre value keeps its `/`, or the year is not cut to four digits.
 
 - **INV-2** (TC-31-02) — `Track.modified` equals the file's `st_mtime` as a UTC-aware datetime; a missing track has `None`.
   *Test:* `tests/domain/test_TC_31_track_tags.py::test_modified`, setting the mtime with `os.utime` to a known instant (isolates the field from "now").
@@ -247,7 +248,7 @@ Each *Test:* names the rule its fixture isolates.
   *Test:* `tests/persistence/test_TC_31_smart_io.py::test_round_trip`.
   *Breaks when:* a field is lost or renamed on the way through.
 
-- **INV-7** (TC-31-07) — An entry with an unknown field, an unknown operator, an operator that does not fit its field, a value of the wrong type or range, a `limit` of `true`, or a missing `id` loads as `UnreadableSmartPlaylist`; it is written back equal to its raw JSON on the next save, while a readable neighbour edited in the same run is saved with its edit.
+- **INV-7** (TC-31-07) — An entry with an unknown key, an unknown field, an unknown operator, an operator that does not fit its field, a value of the wrong type or range, a rule value or `limit` of `true`, or a missing `id` loads as `UnreadableSmartPlaylist`; it is written back equal to its raw JSON on the next save, while a readable neighbour edited in the same run is saved with its edit.
   *Test:* `tests/persistence/test_TC_31_smart_io.py::test_unreadable_kept`, one case per bad value beside one valid entry.
   *Breaks when:* a bad entry is dropped, partly kept, or rewritten.
 
@@ -263,7 +264,7 @@ Each *Test:* names the rule its fixture isolates.
   *Test:* `tests/services/test_TC_31_smart_store.py::test_songs`, with a hearted song and a `favourite is true` rule.
   *Breaks when:* the store reads stale stats or a song that left the library.
 
-- **INV-11** (TC-31-11) — In `PlaylistsPane`, smart rows sit after Spec 29's three and before the ordinary playlists; on a smart row Up, Down and Remove are disabled and Edit rules is enabled; Play emits `smart_play_requested` with the shown songs; `play_requested`, `rename_committed` and `delete_requested` never fire for it; an unreadable row enables Delete only.
+- **INV-11** (TC-31-11) — In `PlaylistsPane`, smart rows sit after Spec 29's three and before the ordinary playlists; on a smart row Up, Down and Remove are disabled and Edit rules is enabled; Play emits `smart_play_requested` with the store's songs at that moment; `play_requested`, `rename_committed` and `delete_requested` never fire for it; an unreadable row enables Delete only.
   *Test:* `tests/ui/test_TC_31_playlists_pane.py`, with signal spies.
   *Breaks when:* a smart row reaches `PlaylistStore` through an id signal, or is reorderable.
 
@@ -272,8 +273,8 @@ Each *Test:* names the rule its fixture isolates.
   *Breaks when:* an operator that does not fit can be chosen, or the dialog changes a playlist nobody edited.
 
 - **INV-13** (TC-31-13) — "Add to playlist" menus list only `PlaylistStore` playlists, never a smart playlist.
-  *Test:* `tests/ui/test_TC_31_playlists_pane.py::test_add_menu`.
-  *Breaks when:* a smart playlist appears as a target a song could be added to.
+  *Test:* `tests/ui/test_TC_31_add_menu.py`, an offscreen `MainWindow` with one smart playlist in the store, reading the library pane's menu (the menu lists what `MainWindow` passes it).
+  *Breaks when:* `MainWindow` passes a smart playlist to the menu, so it appears as a target a song could be added to.
 
 ## 6. Failure modes
 
@@ -281,7 +282,7 @@ Each *Test:* names the rule its fixture isolates.
 - **A copy tool keeps old file dates** (`cp -p`, `rsync -a`): newly copied songs do not show in "Recently added". Accepted (§3).
 - **A rule matches no songs:** the list shows empty; Play toasts and leaves the queue alone.
 - **The library folder is unreadable:** every smart playlist is empty until the next good scan, as the library itself is (Spec 01).
-- **The file is written by a newer build:** this build shows its playlists, cannot save changes, and says so in a toast.
+- **The file is written by a newer build:** this build shows no smart playlists, never writes the file, and says so in a toast (§4.3).
 
 ## 7. Tests
 
@@ -289,7 +290,8 @@ Each *Test:* names the rule its fixture isolates.
 - `tests/domain/test_TC_31_rules.py` — INV-3, INV-4, INV-5.
 - `tests/persistence/test_TC_31_smart_io.py` — INV-6, INV-7.
 - `tests/services/test_TC_31_smart_store.py` — INV-8, INV-9, INV-10.
-- `tests/ui/test_TC_31_playlists_pane.py` — INV-11, INV-13.
+- `tests/ui/test_TC_31_playlists_pane.py` — INV-11.
+- `tests/ui/test_TC_31_add_menu.py` — INV-13.
 - `tests/ui/test_TC_31_smart_dialog.py` — INV-12.
 
 Each is written and seen failing before its code. UI tests run offscreen.
@@ -326,7 +328,7 @@ Each is written and seen failing before its code. UI tests run offscreen.
 | INV-10 (TC-31-10) | `tests/services/test_TC_31_smart_store.py::test_songs` |
 | INV-11 (TC-31-11) | `tests/ui/test_TC_31_playlists_pane.py` |
 | INV-12 (TC-31-12) | `tests/ui/test_TC_31_smart_dialog.py` |
-| INV-13 (TC-31-13) | `tests/ui/test_TC_31_playlists_pane.py::test_add_menu` |
+| INV-13 (TC-31-13) | `tests/ui/test_TC_31_add_menu.py` |
 | Trust boundary (§4.7) | **Partial:** INV-7 shows out-of-range values never load; that no value is used as a pattern is checked only by reading `domain/smart_playlist.py` |
 | The editor fits and reads well in every language (§4.6) | nothing; checked by eye in English and one right-to-left language |
 
